@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>출석 체크 - Sportition</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000;
+      color: #fff;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    @keyframes fade-in {
+      0% { opacity: 0; transform: scale(0.95); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes success-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    .animate-fade-in {
+      animation: fade-in 0.3s ease-out;
+    }
+
+    .success-animation {
+      animation: success-pulse 0.6s ease-out;
+    }
+
+    .keypad-button {
+      transition: all 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .keypad-button:active {
+      transform: scale(0.95);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // 회원 데이터 (실제로는 API에서 가져와야 함)
+    const sampleMembers = [
+      { id: 1, name: '김철수', phone: '1234', birthDate: '1990-05-15', membershipType: '프리미엄', profileImg: '👤' },
+      { id: 2, name: '이영희', phone: '1234', birthDate: '1992-08-22', membershipType: '스탠다드', profileImg: '👤' },
+      { id: 3, name: '박민수', phone: '5678', birthDate: '1988-03-10', membershipType: '프리미엄', profileImg: '👤' },
+      { id: 4, name: '최서연', phone: '9012', birthDate: '1995-11-30', membershipType: '베이직', profileImg: '👤' },
+      { id: 5, name: '정지훈', phone: '3456', birthDate: '1993-07-18', membershipType: '프리미엄', profileImg: '👤' },
+    ];
+
+    function AttendanceKiosk() {
+      const [phoneInput, setPhoneInput] = useState('');
+      const [searchResults, setSearchResults] = useState([]);
+      const [selectedMember, setSelectedMember] = useState(null);
+      const [currentTime, setCurrentTime] = useState(new Date());
+      const [showSuccess, setShowSuccess] = useState(false);
+
+      // 시간 업데이트
+      useEffect(() => {
+        const timer = setInterval(() => {
+          setCurrentTime(new Date());
+        }, 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      // 키보드 입력 처리
+      useEffect(() => {
+        const handleKeyPress = (e) => {
+          // 숫자 키
+          if (e.key >= '0' && e.key <= '9' && phoneInput.length < 4) {
+            setPhoneInput(phoneInput + e.key);
+          }
+          // Backspace
+          else if (e.key === 'Backspace') {
+            setPhoneInput(phoneInput.slice(0, -1));
+          }
+          // Enter
+          else if (e.key === 'Enter' && phoneInput.length === 4) {
+            handleCheckIn();
+          }
+          // ESC - 전체화면 종료 또는 초기화
+          else if (e.key === 'Escape') {
+            if (document.fullscreenElement) {
+              document.exitFullscreen();
+            } else {
+              handleReset();
+            }
+          }
+        };
+
+        window.addEventListener('keydown', handleKeyPress);
+        return () => window.removeEventListener('keydown', handleKeyPress);
+      }, [phoneInput]);
+
+      // 숫자 버튼 클릭
+      const handleNumberClick = (num) => {
+        if (phoneInput.length < 4) {
+          setPhoneInput(phoneInput + num);
+        }
+      };
+
+      // 뒤로가기 버튼
+      const handleBackspace = () => {
+        setPhoneInput(phoneInput.slice(0, -1));
+      };
+
+      // 초기화
+      const handleReset = () => {
+        setPhoneInput('');
+        setSearchResults([]);
+        setSelectedMember(null);
+        setShowSuccess(false);
+      };
+
+      // 체크인
+      const handleCheckIn = () => {
+        if (phoneInput.length === 4) {
+          const results = sampleMembers.filter(member => member.phone === phoneInput);
+          
+          if (results.length === 0) {
+            alert('등록된 회원 정보가 없습니다.');
+            handleReset();
+          } else if (results.length === 1) {
+            // 1명만 찾았을 때 바로 출석 처리
+            processAttendance(results[0]);
+          } else {
+            // 여러 명일 때 선택 화면으로
+            setSearchResults(results);
+          }
+        }
+      };
+
+      // 출석 처리
+      const processAttendance = (member) => {
+        setSelectedMember(member);
+        setShowSuccess(true);
+        
+        // 3초 후 초기화
+        setTimeout(() => {
+          handleReset();
+        }, 3000);
+      };
+
+      // 시간 포맷
+      const formatTime = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        
+        return `${year}년 ${month}월 ${day}일 ${hours}:${minutes}:${seconds}`;
+      };
+
+      // 성공 화면
+      if (showSuccess && selectedMember) {
+        return (
+          <div className="h-screen flex items-center justify-center bg-gradient-to-br from-emerald-900 via-black to-black relative">
+            {/* 우측 상단: 컨트롤 버튼 */}
+            <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+              <button
+                onClick={() => document.documentElement.requestFullscreen()}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-all flex items-center gap-2"
+                title="전체화면"
+              >
+                <span>⛶</span>
+                <span>전체화면</span>
+              </button>
+              <button
+                onClick={() => window.close()}
+                className="w-10 h-10 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-red-400 hover:text-red-300 text-xl transition-all"
+                title="닫기"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="text-center success-animation">
+              <div className="w-40 h-40 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center mx-auto mb-8 shadow-2xl">
+                <span className="text-8xl">✓</span>
+              </div>
+              <h2 className="text-6xl font-bold text-white mb-4">출석 완료!</h2>
+              <p className="text-3xl text-emerald-400 mb-6">{selectedMember.name}님</p>
+              <p className="text-2xl text-gray-400">오늘도 화이팅하세요! 💪</p>
+            </div>
+          </div>
+        );
+      }
+
+      // 회원 선택 화면
+      if (searchResults.length > 1) {
+        return (
+          <div className="h-screen flex bg-black relative">
+            {/* 우측 상단: 컨트롤 버튼 */}
+            <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+              <button
+                onClick={() => document.documentElement.requestFullscreen()}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-all flex items-center gap-2"
+                title="전체화면"
+              >
+                <span>⛶</span>
+                <span>전체화면</span>
+              </button>
+              <button
+                onClick={() => window.close()}
+                className="w-10 h-10 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-red-400 hover:text-red-300 text-xl transition-all"
+                title="닫기"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 좌측: 이미지 */}
+            <div className="w-1/2 relative overflow-hidden">
+              <img 
+                src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80"
+                alt="Gym"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/50" />
+              
+              {/* 로고 */}
+              <div className="absolute top-8 left-8">
+                <h1 className="text-4xl font-bold text-white mb-2">Sportition</h1>
+                <p className="text-lg text-gray-300">회원 출석 시스템</p>
+              </div>
+            </div>
+
+            {/* 우측: 회원 선택 */}
+            <div className="w-1/2 flex flex-col p-12 bg-gradient-to-br from-black to-gray-900">
+              <div className="flex-1 flex flex-col justify-center">
+                <h2 className="text-4xl font-bold text-white mb-3 text-center">본인을 선택해주세요</h2>
+                <p className="text-xl text-gray-400 mb-12 text-center">동일한 번호의 회원이 {searchResults.length}명 있습니다</p>
+                
+                <div className="space-y-4 max-w-2xl mx-auto w-full">
+                  {searchResults.map((member) => (
+                    <button
+                      key={member.id}
+                      onClick={() => processAttendance(member)}
+                      className="w-full p-6 bg-white/10 hover:bg-white/20 border-2 border-white/20 hover:border-blue-500 rounded-2xl transition-all flex items-center gap-6"
+                    >
+                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-4xl">
+                        {member.profileImg}
+                      </div>
+                      <div className="flex-1 text-left">
+                        <h3 className="text-3xl font-bold text-white mb-1">{member.name}</h3>
+                        <p className="text-xl text-gray-400">{member.birthDate} • {member.membershipType}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={handleReset}
+                  className="mt-8 mx-auto px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xl transition-all"
+                >
+                  ← 다시 입력하기
+                </button>
+              </div>
+
+              {/* 하단 시간 */}
+              <div className="text-center text-gray-500 text-lg">
+                {formatTime(currentTime)}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // 메인 출석 화면
+      return (
+        <div className="h-screen flex bg-black relative">
+          {/* 우측 상단: 컨트롤 버튼 */}
+          <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+            <button
+              onClick={() => document.documentElement.requestFullscreen()}
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-all flex items-center gap-2"
+              title="전체화면"
+            >
+              <span>⛶</span>
+              <span>전체화면</span>
+            </button>
+            <button
+              onClick={() => window.close()}
+              className="w-10 h-10 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-red-400 hover:text-red-300 text-xl transition-all"
+              title="닫기"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* 좌측: 이미지 영역 */}
+          <div className="w-1/2 relative overflow-hidden">
+            <img 
+              src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80"
+              alt="Gym"
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/50" />
+            
+            {/* 로고 및 제목 */}
+            <div className="absolute top-8 left-8">
+              <h1 className="text-4xl font-bold text-white mb-2">Sportition</h1>
+              <p className="text-lg text-gray-300">회원 출석 시스템</p>
+            </div>
+
+            {/* 환영 메시지 */}
+            <div className="absolute bottom-12 left-8 right-8">
+              <p className="text-3xl font-bold text-white mb-2">오늘도 800kcal 태워보자구요!!</p>
+              <p className="text-xl text-gray-300">건강한 하루의 시작을 응원합니다 💪</p>
+            </div>
+          </div>
+
+          {/* 우측: 입력 영역 */}
+          <div className="w-1/2 flex flex-col p-12 bg-gradient-to-br from-black to-gray-900">
+            <div className="flex-1 flex flex-col justify-center max-w-lg mx-auto w-full">
+              {/* 제목 */}
+              <div className="text-center mb-12">
+                <h2 className="text-4xl font-bold text-white mb-4">후대전화의 마지막 4자리를 입력</h2>
+                
+                {/* 입력 표시 */}
+                <div className="flex justify-center gap-4 mb-8">
+                  {[0, 1, 2, 3].map((idx) => (
+                    <div
+                      key={idx}
+                      className={`w-20 h-24 rounded-2xl border-4 flex items-center justify-center text-5xl font-bold transition-all ${
+                        phoneInput[idx]
+                          ? 'border-blue-500 bg-blue-500/20 text-white'
+                          : 'border-white/20 bg-white/5 text-gray-600'
+                      }`}
+                    >
+                      {phoneInput[idx] || ''}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 숫자 키패드 */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => handleNumberClick(num.toString())}
+                    className="keypad-button aspect-square rounded-2xl bg-white/10 hover:bg-white/20 border-2 border-white/20 hover:border-blue-500 text-4xl font-bold text-white transition-all"
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  onClick={() => handleNumberClick('0')}
+                  className="keypad-button aspect-square rounded-2xl bg-white/10 hover:bg-white/20 border-2 border-white/20 hover:border-blue-500 text-4xl font-bold text-white transition-all col-start-2"
+                >
+                  0
+                </button>
+                <button
+                  onClick={handleBackspace}
+                  className="keypad-button aspect-square rounded-2xl bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50 hover:border-red-500 text-3xl font-bold text-red-400 transition-all"
+                >
+                  ←
+                </button>
+              </div>
+
+              {/* 체크인 버튼 */}
+              <button
+                onClick={handleCheckIn}
+                disabled={phoneInput.length !== 4}
+                className={`w-full py-6 rounded-2xl text-2xl font-bold transition-all ${
+                  phoneInput.length === 4
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-2xl hover:scale-105'
+                    : 'bg-white/10 text-gray-600 cursor-not-allowed'
+                }`}
+              >
+                체크인
+              </button>
+            </div>
+
+            {/* 하단: 시간 표시 */}
+            <div className="text-center text-gray-500 text-lg mt-8">
+              ⏰ {formatTime(currentTime)}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 렌더링
+    ReactDOM.render(<AttendanceKiosk />, document.getElementById('root'));
+  </script>
+</body>
+</html>
