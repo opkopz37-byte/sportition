@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
+import { getAllAthletes } from '@/lib/supabase';
 // 코치 뷰들
+const AVATAR_POOL = ['🥊', '🥋', '⚡', '💪', '🔥', '⭐', '🛡️', '🎯'];
 
 const CoachInsightsView = ({ t = (key) => key, setActiveTab, skillRequests, updateSkillRequestStatus }) => (
   <div className="animate-fade-in-up">
@@ -1289,16 +1291,49 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [rscWinner, setRscWinner] = useState(null); // RSC 승자 ('blue' | 'red' | null)
   const [finishMethod, setFinishMethod] = useState(null); // 'decision' | 'rsc'
   const [currentScoreInput, setCurrentScoreInput] = useState({ blue: null, red: null, dominant: null }); // 현재 라운드 점수 입력
+  const [attendedMembers, setAttendedMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState('');
   
-  // 출석한 선수 리스트 (체급순)
-  const attendedMembers = [
-    { id: 1, name: '김철수', weight: 54, record: '12승 3패', winRate: 80, avatar: '🥊' },
-    { id: 2, name: '이영희', weight: 54, record: '10승 5패', winRate: 67, avatar: '🥋' },
-    { id: 3, name: '박민수', weight: 58, record: '15승 2패', winRate: 88, avatar: '⚡' },
-    { id: 4, name: '정수진', weight: 58, record: '8승 4패', winRate: 67, avatar: '💪' },
-    { id: 5, name: '최동욱', weight: 63, record: '20승 5패', winRate: 80, avatar: '🔥' },
-    { id: 6, name: '강예린', weight: 63, record: '14승 8패', winRate: 64, avatar: '⭐' },
-  ];
+  const loadMatchRoomMembers = useCallback(async () => {
+    setMembersLoading(true);
+    const { data, error } = await getAllAthletes();
+
+    if (error) {
+      console.error('[MatchRoom] 선수 목록 로드 실패:', error);
+      setMembersError('회원 목록을 불러오지 못했습니다.');
+      setAttendedMembers([]);
+      setMembersLoading(false);
+      return;
+    }
+
+    const normalizedMembers = (data || []).map((member, index) => {
+      const stats = Array.isArray(member.statistics) ? member.statistics[0] : member.statistics;
+      const wins = stats?.wins || 0;
+      const losses = stats?.losses || 0;
+      const totalMatches = stats?.total_matches || wins + losses;
+      return {
+        id: member.id,
+        name: member.nickname || member.name || '사용자',
+        weight: member.weight || '-',
+        record: `${wins}승 ${losses}패`,
+        winRate: totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0,
+        avatar: AVATAR_POOL[index % AVATAR_POOL.length],
+      };
+    }).sort((a, b) => {
+      const aWeight = typeof a.weight === 'number' ? a.weight : Number.MAX_SAFE_INTEGER;
+      const bWeight = typeof b.weight === 'number' ? b.weight : Number.MAX_SAFE_INTEGER;
+      return aWeight - bWeight;
+    });
+
+    setAttendedMembers(normalizedMembers);
+    setMembersError('');
+    setMembersLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadMatchRoomMembers();
+  }, [loadMatchRoomMembers]);
 
   // 타이머 로직
   useEffect(() => {
@@ -1492,6 +1527,26 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               </div>
             </SpotlightCard>
           </div>
+
+          {(membersLoading || membersError || attendedMembers.length === 0) && (
+            <SpotlightCard className="p-3 sm:p-4 mb-3 sm:mb-5 border border-white/10">
+              {membersLoading && <p className="text-sm text-gray-400">회원 목록을 불러오는 중입니다...</p>}
+              {!membersLoading && membersError && (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-red-300">{membersError}</p>
+                  <button
+                    onClick={loadMatchRoomMembers}
+                    className="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 transition-colors"
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              )}
+              {!membersLoading && !membersError && attendedMembers.length === 0 && (
+                <p className="text-sm text-gray-400">표시할 회원이 없습니다. 회원가입된 선수가 있어야 매치룸에서 선택할 수 있습니다.</p>
+              )}
+            </SpotlightCard>
+          )}
 
           {/* 코너 선택 영역 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-5">
