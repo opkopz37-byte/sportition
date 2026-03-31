@@ -111,7 +111,7 @@ DROP POLICY IF EXISTS "Users can update own matches" ON public.matches;
 DROP POLICY IF EXISTS "Users can delete own matches" ON public.matches;
 CREATE POLICY "Users can view own matches"
   ON public.matches FOR SELECT TO authenticated
-  USING (auth.uid() = user_id);
+  USING (auth.uid() = user_id OR auth.uid() = opponent_id);
 CREATE POLICY "Users can insert own matches"
   ON public.matches FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = user_id);

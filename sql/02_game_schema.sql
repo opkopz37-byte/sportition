@@ -160,3 +160,40 @@ CREATE TABLE public.user_collection_progress (
 );
 
 CREATE INDEX idx_user_collection ON public.user_collection_progress(user_id, is_completed);
+
+-- ============================================================
+-- Matches schema migration (legacy opponent_name -> opponent_id)
+-- 01_core_schema.sql creates the base table; this block aligns columns/indexes
+-- with the current match data model used by app code.
+-- ============================================================
+
+ALTER TABLE public.matches
+  ADD COLUMN IF NOT EXISTS match_id UUID,
+  ADD COLUMN IF NOT EXISTS opponent_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS score_for INTEGER,
+  ADD COLUMN IF NOT EXISTS score_against INTEGER,
+  ADD COLUMN IF NOT EXISTS played_at TIMESTAMPTZ DEFAULT NOW();
+
+UPDATE public.matches
+SET played_at = COALESCE(played_at, match_date::timestamptz)
+WHERE played_at IS NULL;
+
+ALTER TABLE public.matches
+  ALTER COLUMN played_at SET NOT NULL,
+  DROP CONSTRAINT IF EXISTS matches_result_check,
+  ADD CONSTRAINT matches_result_check CHECK (result IN ('win', 'loss', 'draw'));
+
+ALTER TABLE public.matches
+  DROP COLUMN IF EXISTS opponent_name,
+  DROP COLUMN IF EXISTS round,
+  DROP COLUMN IF EXISTS event_name,
+  DROP COLUMN IF EXISTS location,
+  DROP COLUMN IF EXISTS weight_class,
+  DROP COLUMN IF EXISTS notes,
+  DROP COLUMN IF EXISTS match_date;
+
+CREATE INDEX IF NOT EXISTS idx_matches_user_opponent_played_at
+  ON public.matches(user_id, opponent_id, played_at DESC);
+CREATE INDEX IF NOT EXISTS idx_matches_match_id
+  ON public.matches(match_id);
+
