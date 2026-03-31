@@ -1289,16 +1289,57 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [rscWinner, setRscWinner] = useState(null); // RSC 승자 ('blue' | 'red' | null)
   const [finishMethod, setFinishMethod] = useState(null); // 'decision' | 'rsc'
   const [currentScoreInput, setCurrentScoreInput] = useState({ blue: null, red: null, dominant: null }); // 현재 라운드 점수 입력
-  
-  // 출석한 선수 리스트 (체급순)
-  const attendedMembers = [
-    { id: 1, name: '김철수', weight: 54, record: '12승 3패', winRate: 80, avatar: '🥊' },
-    { id: 2, name: '이영희', weight: 54, record: '10승 5패', winRate: 67, avatar: '🥋' },
-    { id: 3, name: '박민수', weight: 58, record: '15승 2패', winRate: 88, avatar: '⚡' },
-    { id: 4, name: '정수진', weight: 58, record: '8승 4패', winRate: 67, avatar: '💪' },
-    { id: 5, name: '최동욱', weight: 63, record: '20승 5패', winRate: 80, avatar: '🔥' },
-    { id: 6, name: '강예린', weight: 63, record: '14승 8패', winRate: 64, avatar: '⭐' },
-  ];
+  const [attendedMembers, setAttendedMembers] = useState([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(true);
+  const [memberLoadError, setMemberLoadError] = useState(null);
+
+  // 실제 DB 기준 회원가입 회원 로드 (일반 회원 + 선수, 체육관 회원 제외)
+  useEffect(() => {
+    const loadRegisteredMembers = async () => {
+      setIsLoadingMembers(true);
+      setMemberLoadError(null);
+
+      try {
+        const { supabase } = await import('@/lib/supabase');
+
+        const { data: users, error: usersError } = await supabase
+          .from('users')
+          .select('id, name, nickname, weight, role, created_at')
+          .in('role', ['player_common', 'player_athlete', 'athlete', 'coach'])
+          .order('created_at', { ascending: false });
+
+        if (usersError) throw usersError;
+
+        const avatarPool = ['🥊', '🥋', '⚡', '💪', '🔥', '⭐', '🏅', '🛡️'];
+        const mappedMembers = (users || [])
+          .map((user, index) => ({
+            id: user.id,
+            name: user.name || user.nickname || '이름 미등록',
+            weight: Number.isFinite(Number(user.weight)) ? Number(user.weight) : null,
+            record: '기록 준비중',
+            winRate: 0,
+            avatar: avatarPool[index % avatarPool.length],
+          }))
+          .sort((a, b) => {
+            if (a.weight === null && b.weight === null) return a.name.localeCompare(b.name, 'ko');
+            if (a.weight === null) return 1;
+            if (b.weight === null) return -1;
+            if (a.weight !== b.weight) return a.weight - b.weight;
+            return a.name.localeCompare(b.name, 'ko');
+          });
+
+        setAttendedMembers(mappedMembers);
+      } catch (error) {
+        console.error('[MatchRoomView] 회원 로드 실패:', error);
+        setMemberLoadError(error.message || '회원 정보를 불러오지 못했습니다.');
+        setAttendedMembers([]);
+      } finally {
+        setIsLoadingMembers(false);
+      }
+    };
+
+    loadRegisteredMembers();
+  }, []);
 
   // 타이머 로직
   useEffect(() => {
@@ -1509,7 +1550,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg text-center">
                   <div className="text-xl sm:text-2xl mb-1">{blueCorner.avatar}</div>
                   <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{blueCorner.name}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{blueCorner.weight}kg • {blueCorner.record}</div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'} • {blueCorner.record}</div>
                   <div className="flex gap-1.5 sm:gap-2 mt-2">
                     <button 
                       onClick={() => setSelectingCorner('blue')}
@@ -1553,7 +1594,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 <div className="p-2 sm:p-3 bg-red-500/20 rounded-lg text-center">
                   <div className="text-xl sm:text-2xl mb-1">{redCorner.avatar}</div>
                   <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{redCorner.name}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{redCorner.weight}kg • {redCorner.record}</div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'} • {redCorner.record}</div>
                   <div className="flex gap-1.5 sm:gap-2 mt-2">
                     <button 
                       onClick={() => setSelectingCorner('red')}
@@ -1640,7 +1681,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                         <h3 className={`text-2xl font-bold ${selectingCorner === 'blue' ? 'text-blue-400' : 'text-red-400'}`}>
                           {selectingCorner === 'blue' ? '청코너' : '홍코너'} 선수 선택
                         </h3>
-                        <p className="text-sm text-gray-400">출석 회원을 선택하세요 (체급순)</p>
+                        <p className="text-sm text-gray-400">회원가입한 회원을 선택하세요 (체급순)</p>
                       </div>
                     </div>
                     <button 
@@ -1654,56 +1695,64 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
                 {/* 회원 리스트 */}
                 <div className="p-6 overflow-y-auto max-h-[60vh]">
-                  <div className="space-y-3">
-                    {attendedMembers.map((member) => {
-                      const isDisabled = (selectingCorner === 'blue' && redCorner?.id === member.id) || 
-                                       (selectingCorner === 'red' && blueCorner?.id === member.id);
-                      
-                      return (
-                        <button
-                          key={member.id}
-                          onClick={() => {
-                            if (selectingCorner === 'blue') {
-                              setBlueCorner(member);
-                              setSelectingCorner(null);
-                              // 청코너 선택 후 자동으로 홍코너 선택 모달 열기
-                              setTimeout(() => {
-                                if (!redCorner) setSelectingCorner('red');
-                              }, 300);
-                            } else {
-                              setRedCorner(member);
-                              setSelectingCorner(null);
-                            }
-                          }}
-                          disabled={isDisabled}
-                          className={`w-full p-5 rounded-xl border transition-all text-left ${
-                            isDisabled
-                              ? 'bg-white/5 border-white/20 opacity-40 cursor-not-allowed'
-                              : 'bg-gradient-to-r from-white/5 to-white/[0.02] border-white/10 hover:bg-white/10 hover:scale-[1.02] hover:border-white/30'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="text-4xl">{member.avatar}</div>
-                              <div>
-                                <div className="font-bold text-white text-xl mb-1">{member.name}</div>
-                                <div className="text-sm text-gray-400">{member.weight}kg • {member.record}</div>
+                  {isLoadingMembers ? (
+                    <div className="py-12 text-center text-gray-400">회원 정보를 불러오는 중...</div>
+                  ) : memberLoadError ? (
+                    <div className="py-12 text-center text-red-400">{memberLoadError}</div>
+                  ) : attendedMembers.length === 0 ? (
+                    <div className="py-12 text-center text-gray-400">회원가입한 일반 회원/선수 데이터가 없습니다.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {attendedMembers.map((member) => {
+                        const isDisabled = (selectingCorner === 'blue' && redCorner?.id === member.id) || 
+                                         (selectingCorner === 'red' && blueCorner?.id === member.id);
+                        
+                        return (
+                          <button
+                            key={member.id}
+                            onClick={() => {
+                              if (selectingCorner === 'blue') {
+                                setBlueCorner(member);
+                                setSelectingCorner(null);
+                                // 청코너 선택 후 자동으로 홍코너 선택 모달 열기
+                                setTimeout(() => {
+                                  if (!redCorner) setSelectingCorner('red');
+                                }, 300);
+                              } else {
+                                setRedCorner(member);
+                                setSelectingCorner(null);
+                              }
+                            }}
+                            disabled={isDisabled}
+                            className={`w-full p-5 rounded-xl border transition-all text-left ${
+                              isDisabled
+                                ? 'bg-white/5 border-white/20 opacity-40 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-white/5 to-white/[0.02] border-white/10 hover:bg-white/10 hover:scale-[1.02] hover:border-white/30'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="text-4xl">{member.avatar}</div>
+                                <div>
+                                  <div className="font-bold text-white text-xl mb-1">{member.name}</div>
+                                  <div className="text-sm text-gray-400">{member.weight ? `${member.weight}kg` : '체중 미등록'} • {member.record}</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs text-gray-500 mb-1">승률</div>
+                                <div className="text-2xl font-bold text-emerald-400">{member.winRate}%</div>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <div className="text-xs text-gray-500 mb-1">승률</div>
-                              <div className="text-2xl font-bold text-emerald-400">{member.winRate}%</div>
-                            </div>
-                          </div>
-                          {isDisabled && (
-                            <div className="mt-2 text-xs text-red-400">
-                              {selectingCorner === 'blue' ? '홍코너에 이미 선택됨' : '청코너에 이미 선택됨'}
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                            {isDisabled && (
+                              <div className="mt-2 text-xs text-red-400">
+                                {selectingCorner === 'blue' ? '홍코너에 이미 선택됨' : '청코너에 이미 선택됨'}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* 모달 푸터 */}
@@ -1737,7 +1786,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               <div className="text-center p-6 bg-blue-500/20 rounded-xl">
                 <div className="text-4xl mb-2">{blueCorner.avatar}</div>
                 <div className="text-xl font-bold text-blue-400">{blueCorner.name}</div>
-                <div className="text-sm text-gray-400">{blueCorner.weight}kg</div>
+                <div className="text-sm text-gray-400">{blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'}</div>
               </div>
               <div className="text-center">
                 <div className="text-4xl font-bold text-white">VS</div>
@@ -1745,7 +1794,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               <div className="text-center p-6 bg-red-500/20 rounded-xl">
                 <div className="text-4xl mb-2">{redCorner.avatar}</div>
                 <div className="text-xl font-bold text-red-400">{redCorner.name}</div>
-                <div className="text-sm text-gray-400">{redCorner.weight}kg</div>
+                <div className="text-sm text-gray-400">{redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'}</div>
               </div>
             </div>
           </SpotlightCard>
