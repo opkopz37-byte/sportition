@@ -1293,35 +1293,20 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [memberLoadError, setMemberLoadError] = useState(null);
 
-  // 실제 DB 기준 당일 출석 회원 로드 (체급순)
+  // 실제 DB 기준 회원가입 회원 로드 (일반 회원 + 선수, 체육관 회원 제외)
   useEffect(() => {
-    const loadAttendedMembers = async () => {
+    const loadRegisteredMembers = async () => {
       setIsLoadingMembers(true);
       setMemberLoadError(null);
 
       try {
         const { supabase } = await import('@/lib/supabase');
-        const today = new Date().toISOString().split('T')[0];
-
-        const { data: attendanceRows, error: attendanceError } = await supabase
-          .from('attendance')
-          .select('user_id')
-          .eq('attendance_date', today);
-
-        if (attendanceError) throw attendanceError;
-
-        const uniqueUserIds = [...new Set((attendanceRows || []).map((row) => row.user_id).filter(Boolean))];
-
-        if (uniqueUserIds.length === 0) {
-          setAttendedMembers([]);
-          return;
-        }
 
         const { data: users, error: usersError } = await supabase
           .from('users')
-          .select('id, name, nickname, weight, role')
-          .in('id', uniqueUserIds)
-          .in('role', ['player_common', 'player_athlete']);
+          .select('id, name, nickname, weight, role, created_at')
+          .in('role', ['player_common', 'player_athlete', 'athlete', 'coach'])
+          .order('created_at', { ascending: false });
 
         if (usersError) throw usersError;
 
@@ -1345,15 +1330,15 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
         setAttendedMembers(mappedMembers);
       } catch (error) {
-        console.error('[MatchRoomView] 출석 회원 로드 실패:', error);
-        setMemberLoadError(error.message || '출석 회원 정보를 불러오지 못했습니다.');
+        console.error('[MatchRoomView] 회원 로드 실패:', error);
+        setMemberLoadError(error.message || '회원 정보를 불러오지 못했습니다.');
         setAttendedMembers([]);
       } finally {
         setIsLoadingMembers(false);
       }
     };
 
-    loadAttendedMembers();
+    loadRegisteredMembers();
   }, []);
 
   // 타이머 로직
@@ -1696,7 +1681,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                         <h3 className={`text-2xl font-bold ${selectingCorner === 'blue' ? 'text-blue-400' : 'text-red-400'}`}>
                           {selectingCorner === 'blue' ? '청코너' : '홍코너'} 선수 선택
                         </h3>
-                        <p className="text-sm text-gray-400">출석 회원을 선택하세요 (체급순)</p>
+                        <p className="text-sm text-gray-400">회원가입한 회원을 선택하세요 (체급순)</p>
                       </div>
                     </div>
                     <button 
@@ -1715,7 +1700,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                   ) : memberLoadError ? (
                     <div className="py-12 text-center text-red-400">{memberLoadError}</div>
                   ) : attendedMembers.length === 0 ? (
-                    <div className="py-12 text-center text-gray-400">오늘 출석한 회원이 없습니다.</div>
+                    <div className="py-12 text-center text-gray-400">회원가입한 일반 회원/선수 데이터가 없습니다.</div>
                   ) : (
                     <div className="space-y-3">
                       {attendedMembers.map((member) => {
