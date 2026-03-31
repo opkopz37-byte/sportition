@@ -11,6 +11,9 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
   const [statistics, setStatistics] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [rankingNews, setRankingNews] = useState([]);
+  const [matchHistory, setMatchHistory] = useState([]);
+  const [matchLoading, setMatchLoading] = useState(true);
+  const [matchError, setMatchError] = useState('');
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -29,15 +32,16 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
       if (user?.id) {
         console.log('[Dashboard] 사용자 데이터 로드 시작:', user.id);
         const supabaseModule = await import('@/lib/supabase');
-        const { getUserStatistics, getUserAttendance } = supabaseModule;
+        const { getUserStatistics, getUserAttendance, getUserMatches } = supabaseModule;
         const supabase = supabaseModule.default || supabaseModule.supabase;
 
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const [statsResult, attendanceResult, rankingResult] = await Promise.all([
+        const [statsResult, attendanceResult, rankingResult, matchesResult] = await Promise.all([
           getUserStatistics(user.id),
           getUserAttendance(user.id, thirtyDaysAgo.toISOString()),
+          getUserMatches(user.id),
           // 실시간 랭킹 데이터 가져오기
           supabase
             .from('public_player_profiles')
@@ -74,11 +78,75 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
           console.warn('[Dashboard] 랭킹 데이터 없음');
           setRankingNews([]);
         }
+
+        if (matchesResult.error) {
+          console.error('[Dashboard] 경기 기록 로드 에러:', matchesResult.error);
+          setMatchError('경기 기록을 불러오지 못했습니다.');
+          setMatchHistory([]);
+        } else {
+          const recentMatches = matchesResult.data?.recentMatches || [];
+          const formattedMatches = recentMatches.map((match) => {
+            const date = match.match_date ? new Date(match.match_date) : null;
+            const isKo = match.result === 'ko_win' || match.result === 'ko_loss';
+            return {
+              id: match.id,
+              result: match.normalized_result || 'draw',
+              opponent: match.opponent_label || 'Unknown',
+              opponentId: match.opponent_id || null,
+              date: date ? date.toLocaleDateString('ko-KR') : '-',
+              method: isKo ? `KO ${match.round || '-' }R` : (match.event_name || '기록 경기'),
+              score: isKo ? 'KO' : (match.notes || '-'),
+              rounds: match.round || '-',
+              weight: match.weight_class || '-',
+              icon: '🥊',
+            };
+          });
+          setMatchHistory(formattedMatches);
+          setMatchError('');
+        }
+        setMatchLoading(false);
+      } else {
+        setMatchHistory([]);
+        setMatchError('');
+        setMatchLoading(false);
       }
     };
 
     loadUserData();
   }, [user, profile]);
+
+  useEffect(() => {
+    const handleMatchChanged = async (event) => {
+      if (!user?.id) return;
+      if (event?.detail?.userId && event.detail.userId !== user.id) return;
+      setMatchLoading(true);
+      const supabaseModule = await import('@/lib/supabase');
+      const { getUserMatches } = supabaseModule;
+      const { data, error } = await getUserMatches(user.id);
+      if (error) {
+        setMatchError('경기 기록을 갱신하지 못했습니다.');
+      } else {
+        const recentMatches = data?.recentMatches || [];
+        setMatchHistory(recentMatches.map((match) => ({
+          id: match.id,
+          result: match.normalized_result || 'draw',
+          opponent: match.opponent_label || 'Unknown',
+          opponentId: match.opponent_id || null,
+          date: match.match_date ? new Date(match.match_date).toLocaleDateString('ko-KR') : '-',
+          method: (match.result === 'ko_win' || match.result === 'ko_loss') ? `KO ${match.round || '-'}R` : (match.event_name || '기록 경기'),
+          score: (match.result === 'ko_win' || match.result === 'ko_loss') ? 'KO' : (match.notes || '-'),
+          rounds: match.round || '-',
+          weight: match.weight_class || '-',
+          icon: '🥊',
+        })));
+        setMatchError('');
+      }
+      setMatchLoading(false);
+    };
+
+    window.addEventListener('matches:changed', handleMatchChanged);
+    return () => window.removeEventListener('matches:changed', handleMatchChanged);
+  }, [user?.id]);
   
   const monthNames = {
     ko: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'],
@@ -128,8 +196,6 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
       setShowDetailPage(false);
     }
   };
-
-  const matchHistory = [];
 
   // 자동 슬라이드 효과 - 1위부터 5위까지 보여주고 다시 1위로 (Hook을 최상위에 배치)
   useEffect(() => {
@@ -722,7 +788,21 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                   </button>
                 )}
               </div>
-              {matchHistory.length > 0 ? (
+              {matchLoading ? (
+                <div className="bg-white/5 rounded-lg p-8 text-center border border-white/5 text-gray-400 text-sm">
+                  경기 기록을 불러오는 중입니다...
+                </div>
+              ) : matchError ? (
+                <div className="bg-red-500/10 rounded-lg p-8 text-center border border-red-500/30">
+                  <p className="text-red-300 text-sm mb-3">{matchError}</p>
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent('matches:changed', { detail: { userId: user?.id } }))}
+                    className="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 text-red-200 hover:bg-red-500/30 transition-colors"
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              ) : matchHistory.length > 0 ? (
                 <div className="space-y-2">
                   {matchHistory.slice(0, 3).map((match, i) => (
                   <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/5 hover:border-white/10 transition-all">
@@ -740,9 +820,11 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveTab(`opponent-profile-${match.opponent}`);
+                                if (!match.opponentId) return;
+                                setActiveTab(`opponent-profile-${match.opponentId}`);
                               }}
-                              className="text-sm font-bold text-white hover:text-blue-400 transition-colors truncate"
+                              className="text-sm font-bold text-white hover:text-blue-400 transition-colors truncate disabled:opacity-60 disabled:cursor-not-allowed"
+                              disabled={!match.opponentId}
                             >
                               vs. {match.opponent}
                             </button>
@@ -1041,7 +1123,21 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
               )}
             </div>
 
-            {matchHistory.length > 0 ? (
+            {matchLoading ? (
+              <div className="text-center py-8 xs:py-10 sm:py-12 text-gray-400 text-sm">
+                경기 기록을 불러오는 중입니다...
+              </div>
+            ) : matchError ? (
+              <div className="text-center py-8 xs:py-10 sm:py-12">
+                <h4 className="text-sm xs:text-base sm:text-lg font-bold text-red-300 mb-2">{matchError}</h4>
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('matches:changed', { detail: { userId: user?.id } }))}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 text-red-200 hover:bg-red-500/30 transition-colors"
+                >
+                  다시 시도
+                </button>
+              </div>
+            ) : matchHistory.length > 0 ? (
               <div className="space-y-2 xs:space-y-3">
                 {matchHistory.map((match, i) => (
                   <div key={i} className="bg-gradient-to-r from-white/5 to-white/[0.02] rounded-lg overflow-hidden hover:from-white/10 hover:to-white/5 transition-all border border-white/5 hover:border-white/20">
@@ -1055,9 +1151,11 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveTab(`opponent-profile-${match.opponent}`);
+                                if (!match.opponentId) return;
+                                setActiveTab(`opponent-profile-${match.opponentId}`);
                               }}
-                              className="font-bold text-white text-xs xs:text-sm sm:text-base hover:text-blue-400 transition-colors underline decoration-transparent hover:decoration-blue-400 truncate"
+                              className="font-bold text-white text-xs xs:text-sm sm:text-base hover:text-blue-400 transition-colors underline decoration-transparent hover:decoration-blue-400 truncate disabled:opacity-60 disabled:cursor-not-allowed"
+                              disabled={!match.opponentId}
                             >
                               vs. {match.opponent}
                             </button>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
-import { getPublicPlayerProfiles } from '@/lib/supabase';
+import { getPublicPlayerProfiles, getUserMatches } from '@/lib/supabase';
 
 const ITEMS_PER_PAGE = 50;
 const TIERS = ['All', 'Master', 'Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze'];
@@ -25,11 +25,14 @@ const getRoleBadgeClass = (role) => {
 };
 
 const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [selectedTier, setSelectedTier] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [h2hRows, setH2hRows] = useState([]);
+  const [h2hLoading, setH2hLoading] = useState(true);
+  const [h2hError, setH2hError] = useState('');
 
   useEffect(() => {
     const loadPlayers = async () => {
@@ -41,6 +44,36 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
 
     loadPlayers();
   }, []);
+
+  useEffect(() => {
+    const loadH2h = async () => {
+      if (!user?.id) {
+        setH2hRows([]);
+        setH2hLoading(false);
+        return;
+      }
+
+      setH2hLoading(true);
+      const { data, error } = await getUserMatches(user.id);
+      if (error) {
+        setH2hError('상대 전적을 불러오지 못했습니다.');
+        setH2hRows([]);
+      } else {
+        setH2hRows(data?.h2h || []);
+        setH2hError('');
+      }
+      setH2hLoading(false);
+    };
+
+    const onMatchChanged = (event) => {
+      if (event?.detail?.userId && event.detail.userId !== user?.id) return;
+      loadH2h();
+    };
+
+    loadH2h();
+    window.addEventListener('matches:changed', onMatchChanged);
+    return () => window.removeEventListener('matches:changed', onMatchChanged);
+  }, [user?.id]);
 
   const filteredPlayers = selectedTier === 'All'
     ? players
@@ -272,6 +305,54 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
             <div className="text-center mt-3 text-sm text-gray-500">
               #{(currentPage - 1) * ITEMS_PER_PAGE + 1} ~ #{Math.min(currentPage * ITEMS_PER_PAGE, filteredPlayers.length)} / 총 {filteredPlayers.length}명
             </div>
+          </div>
+        )}
+      </SpotlightCard>
+
+      <SpotlightCard className="mt-4 sm:mt-6 overflow-hidden">
+        <div className="px-3 sm:px-4 py-3 border-b border-white/10 bg-white/5 flex items-center justify-between">
+          <h3 className="text-sm sm:text-base font-bold text-white">상대 전적 (H2H)</h3>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('matches:changed', { detail: { userId: user?.id } }))}
+            className="text-xs px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-gray-200 transition-colors"
+          >
+            새로고침
+          </button>
+        </div>
+        {h2hLoading && (
+          <div className="px-4 py-10 text-center text-gray-500">상대 전적을 불러오는 중입니다...</div>
+        )}
+        {!h2hLoading && h2hError && (
+          <div className="px-4 py-10 text-center">
+            <div className="text-red-300 text-sm mb-3">{h2hError}</div>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('matches:changed', { detail: { userId: user?.id } }))}
+              className="text-xs px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 transition-colors"
+            >
+              다시 시도
+            </button>
+          </div>
+        )}
+        {!h2hLoading && !h2hError && h2hRows.length === 0 && (
+          <div className="px-4 py-10 text-center text-gray-500">상대 전적 데이터가 없습니다.</div>
+        )}
+        {!h2hLoading && !h2hError && h2hRows.length > 0 && (
+          <div className="divide-y divide-white/5">
+            {h2hRows.map((row) => (
+              <div key={row.opponent_id || row.opponent_name} className="px-3 sm:px-4 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm sm:text-base font-bold text-white truncate">{row.opponent_name}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">{row.total}전 • 승률 {row.win_rate}%</div>
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-gray-200 whitespace-nowrap">
+                  <span className="text-blue-400">{row.wins}승</span>
+                  <span className="text-gray-500 mx-1">/</span>
+                  <span className="text-red-400">{row.losses}패</span>
+                  <span className="text-gray-500 mx-1">/</span>
+                  <span className="text-gray-300">{row.draws}무</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </SpotlightCard>
