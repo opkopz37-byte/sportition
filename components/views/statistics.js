@@ -1,9 +1,13 @@
 'use client';
 
 import { PageHeader, SpotlightCard } from '@/components/ui';
+import { useAuth } from '@/lib/AuthContext';
 
 // 통계 뷰
-const StyleStatsView = ({ t = (key) => key, setActiveTab }) => (
+const StyleStatsView = ({ t = (key) => key, setActiveTab }) => {
+  const { profile } = useAuth();
+  
+  return (
   <div className="animate-fade-in-up">
 <PageHeader 
   title={t('styleStats')} 
@@ -61,5 +65,6 @@ const StyleStatsView = ({ t = (key) => key, setActiveTab }) => (
 </SpotlightCard>
   </div>
 );
+};
 
 export { StyleStatsView };

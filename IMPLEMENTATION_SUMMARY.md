@@ -5,7 +5,7 @@
 ### 1. Supabase 클라이언트 설정
 - ✅ `lib/supabase.js` - Supabase 클라이언트 및 모든 API 함수 구현
 - ✅ `lib/AuthContext.js` - 인증 컨텍스트 (React Context API)
-- ✅ 환경 변수 설정 가이드 (`.env.local.example`)
+- ✅ 환경 변수 설정 가이드 (`.env.example` → `.env.local`)
 
 ### 2. 데이터베이스 스키마
 - ✅ `DATABASE_SCHEMA.md` - 완전한 SQL 스키마 문서

@@ -36,6 +36,9 @@ const Icon = ({ type, size = 20, className = "", fill = "none" }) => {
     menu: <><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></>,
     chevronDown: <><polyline points="6 9 12 15 18 9"/></>,
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
+    eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
+    eyeOff: <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>,
+    home: <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>,
   };
   
   return (
@@ -56,15 +59,23 @@ const Icon = ({ type, size = 20, className = "", fill = "none" }) => {
 };
 
 // 테마 상수
-const THEME_ATHLETE = {
+const THEME_PLAYER_COMMON = {
   accent: 'blue',
   primary: '#3B82F6',
 };
 
-const THEME_COACH = {
+const THEME_PLAYER_ATHLETE = {
   accent: 'emerald',
   primary: '#10B981',
 };
+
+const THEME_GYM = {
+  accent: 'purple',
+  primary: '#A855F7',
+};
+
+const THEME_ATHLETE = THEME_PLAYER_COMMON;
+const THEME_COACH = THEME_PLAYER_ATHLETE;
 
 // 페이지 헤더 컴포넌트 (뒤로가기 버튼 포함)
 const PageHeader = ({ title, description, onBack, children }) => (
@@ -92,8 +103,11 @@ const PageHeader = ({ title, description, onBack, children }) => (
 
 // 메뉴 구조 - 다국어 키 사용
 const getMenuStructure = (t) => ({
-  athlete: [
+  player_common: [
     { id: 'dashboard', labelKey: 'dashboard', icon: 'dashboard', submenus: [] },
+    { id: 'attendance', labelKey: 'attendance', icon: 'calendar', submenus: [] },
+    { id: 'gacha', labelKey: 'gacha', icon: 'gift', submenus: [] },
+    { id: 'inventory', labelKey: 'inventory', icon: 'inbox', submenus: [] },
     { 
       id: 'roadmap', 
       labelKey: 'roadmap', 
@@ -125,11 +139,50 @@ const getMenuStructure = (t) => ({
     },
     { id: 'mypage', labelKey: 'myPage', icon: 'user', submenus: [] },
   ],
-  coach: [
-    { id: 'insights', labelKey: 'insights', icon: 'chart', submenus: [] },
+  player_athlete: [
+    { id: 'dashboard', labelKey: 'dashboard', icon: 'dashboard', submenus: [] },
+    { id: 'attendance', labelKey: 'attendance', icon: 'calendar', submenus: [] },
+    { id: 'gacha', labelKey: 'gacha', icon: 'gift', submenus: [] },
+    { id: 'inventory', labelKey: 'inventory', icon: 'inbox', submenus: [] },
+    {
+      id: 'roadmap',
+      labelKey: 'roadmap',
+      icon: 'map',
+      alert: true,
+      submenus: [
+        { id: 'skill-tree', labelKey: 'skillTree' },
+        { id: 'active-skills', labelKey: 'activeSkills' }
+      ]
+    },
+    {
+      id: 'ranking',
+      labelKey: 'ranking',
+      icon: 'trophy',
+      submenus: [
+        { id: 'tier-board', labelKey: 'tierBoard' },
+        { id: 'style', labelKey: 'style' },
+        { id: 'regional', labelKey: 'regional' }
+      ]
+    },
+    {
+      id: 'statistics',
+      labelKey: 'statistics',
+      icon: 'chart',
+      submenus: [
+        { id: 'style-stats', labelKey: 'styleStats' },
+        { id: 'tier-stats', labelKey: 'tierStats' }
+      ]
+    },
+    { id: 'mypage', labelKey: 'myPage', icon: 'user', submenus: [] },
+  ],
+  gym: [
+    { id: 'dashboard', labelKey: 'dashboard', icon: 'home', submenus: [] },
+    { id: 'attendance', labelKey: 'attendance', icon: 'calendar', submenus: [] },
+    { id: 'approval', labelKey: 'approval', icon: 'checkCircle', submenus: [] },
     { id: 'players', labelKey: 'members', icon: 'users', submenus: [] },
     { id: 'match', labelKey: 'matchRoom', icon: 'trophy', submenus: [] },
     { id: 'admin', labelKey: 'management', icon: 'settings', submenus: [] },
+    { id: 'mypage', labelKey: 'myPage', icon: 'user', submenus: [] },
   ]
 });
 
@@ -195,4 +248,15 @@ const BackgroundGrid = ({ theme }) => {
   );
 };
 
-export { Icon, THEME_ATHLETE, THEME_COACH, PageHeader, getMenuStructure, SpotlightCard, BackgroundGrid };
+export {
+  Icon,
+  THEME_PLAYER_COMMON,
+  THEME_PLAYER_ATHLETE,
+  THEME_ATHLETE,
+  THEME_COACH,
+  THEME_GYM,
+  PageHeader,
+  getMenuStructure,
+  SpotlightCard,
+  BackgroundGrid
+};

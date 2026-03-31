@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { searchUserByPhone, checkAttendance, getUserProfile } from '@/lib/supabase';
+import { searchUserByPhone, kioskCheckAttendance } from '@/lib/supabase';
 
 export default function AttendancePage() {
   const [phoneInput, setPhoneInput] = useState('');
@@ -82,7 +82,7 @@ export default function AttendancePage() {
   };
 
   const processAttendance = async (member) => {
-    const { data, error: attendanceError, message } = await checkAttendance(
+    const { data, error: attendanceError, message } = await kioskCheckAttendance(
       member.id,
       member.membership_type
     );

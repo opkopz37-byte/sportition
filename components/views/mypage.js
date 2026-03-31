@@ -3,9 +3,34 @@
 import { useState, useEffect, useRef } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
+import { useAuth } from '@/lib/AuthContext';
 // 마이페이지 뷰들
 
-const MyPageView = ({ setActiveTab, t }) => (
+const MyPageView = ({ setActiveTab, t }) => {
+  const { profile } = useAuth();
+  
+  const getRoleLabelKey = (role) => {
+    if (role === 'player_common') return 'player_common';
+    if (role === 'player_athlete') return 'player_athlete';
+    if (role === 'gym') return 'gym';
+    return 'player_common';
+  };
+
+  const getWeightClass = (weight) => {
+    if (!weight) return '';
+    if (weight <= 51) return t('minimumWeight') || '미니멈급';
+    if (weight <= 54) return t('lightFlyWeight') || '라이트 플라이급';
+    if (weight <= 57) return t('flyWeight') || '플라이급';
+    if (weight <= 60) return t('bantamWeight') || '밴텀급';
+    if (weight <= 63.5) return t('featherWeight') || '페더급';
+    if (weight <= 67) return t('lightWeight') || '라이트급';
+    if (weight <= 71) return t('welterWeight') || '웰터급';
+    if (weight <= 75) return t('middleWeight') || '미들급';
+    if (weight <= 81) return t('lightHeavyWeight') || '라이트 헤비급';
+    return t('heavyWeight') || '헤비급';
+  };
+
+  return (
   <div className="animate-fade-in-up">
     <div className="mb-8">
       <h2 className="text-3xl font-bold text-white mb-2">{t('myPage')}</h2>
@@ -15,22 +40,48 @@ const MyPageView = ({ setActiveTab, t }) => (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       <SpotlightCard className="col-span-1 md:col-span-2 p-6">
         <div className="flex items-start gap-6">
-          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-            <Icon type="user" size={40} />
+          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-4xl">
+            {(profile?.nickname || profile?.name || 'U').charAt(0)}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
-                {t('athlete')}
+              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                profile?.role === 'player_common' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                profile?.role === 'player_athlete' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                profile?.role === 'gym' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+                'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+              }`}>
+                {t(getRoleLabelKey(profile?.role))}
               </span>
-              <h3 className="text-2xl font-bold text-white">김태양</h3>
+              <h3 className="text-2xl font-bold text-white">{profile?.nickname || profile?.name || '사용자'}</h3>
             </div>
             <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <span className="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs font-bold">Diamond II</span>
-              <span className="text-gray-500">•</span>
-              <span className="text-gray-400 text-sm whitespace-nowrap">웰터급 아웃복서</span>
+              {profile?.tier && (
+                <>
+                  <span className="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs font-bold">{profile.tier}</span>
+                  <span className="text-gray-500">•</span>
+                </>
+              )}
+              <span className="text-gray-400 text-sm whitespace-nowrap">
+                {profile?.weight ? getWeightClass(profile.weight) : ''}
+                {profile?.boxing_style ? ` ${profile.boxing_style}` : ''}
+                {profile?.gym_name ? ` (${profile.gym_name})` : ''}
+              </span>
             </div>
-            <p className="text-gray-400 text-sm">빠른 스피드와 정확한 펀치로 링을 지배하는 선수입니다!</p>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {profile?.email && (
+                <div>
+                  <span className="text-gray-500">{t('email') || '이메일'}: </span>
+                  <span className="text-white">{profile.email}</span>
+                </div>
+              )}
+              {(profile?.phone || profile?.phone_number) && (
+                <div>
+                  <span className="text-gray-500">{t('phone') || '전화번호'}: </span>
+                  <span className="text-white">{profile.phone || profile.phone_number}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </SpotlightCard>
@@ -59,9 +110,9 @@ const MyPageView = ({ setActiveTab, t }) => (
         </div>
         <div className="space-y-3">
           {[
-            { icon: 'trophy', text: '경기 승리', time: '2시간 전' },
-            { icon: 'star', text: '새로운 스킬 해금', time: '1일 전' },
-            { icon: 'trendingUp', text: '랭크 상승', time: '3일 전' },
+            { icon: 'trophy', text: t('matchVictory'), time: `2 ${t('hoursAgo')}` },
+            { icon: 'star', text: t('newSkillUnlocked'), time: `1 ${t('daysAgo')}` },
+            { icon: 'trendingUp', text: t('rankUp'), time: `3 ${t('daysAgo')}` },
           ].map((activity, i) => (
             <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-white/5">
               <Icon type={activity.icon} size={16} className="text-blue-400" />
@@ -97,20 +148,102 @@ const MyPageView = ({ setActiveTab, t }) => (
     </div>
   </div>
 );
+};
 
 // Edit Profile 페이지
 const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
+  const { profile, user, refreshProfile } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
   const [formData, setFormData] = useState({
-    username: '김플레이어',
-    email: 'kim.player@example.com',
-    bio: '열정적인 플레이어입니다. 항상 최선을 다합니다!',
-    location: '서울, 한국',
-    birthdate: '1995-03-15'
+    nickname: '',
+    phone: '',
+    birth_date: '',
+    gender: '',
+    height: '',
+    weight: '',
+    boxing_style: '',
+    gym_name: '',
+    gym_location: '',
+    representative_phone: '',
   });
 
-  const handleSave = () => {
-    alert('프로필이 업데이트되었습니다!');
-    setActiveTab('mypage');
+  useEffect(() => {
+    console.log('[EditProfile] 프로필 데이터 확인:', profile);
+    if (profile) {
+      const newFormData = {
+        nickname: profile.nickname || profile.name || '',
+        phone: profile.phone || '',
+        birth_date: profile.birth_date || '',
+        gender: profile.gender || '',
+        height: profile.height ? String(profile.height) : '',
+        weight: profile.weight ? String(profile.weight) : '',
+        boxing_style: profile.boxing_style || '',
+        gym_name: profile.gym_name || '',
+        gym_location: profile.gym_location || '',
+        representative_phone: profile.representative_phone || '',
+      };
+      console.log('[EditProfile] formData 설정:', newFormData);
+      setFormData(newFormData);
+    }
+  }, [profile]);
+
+  const handleSave = async () => {
+    if (!user?.id) {
+      setError('사용자 정보가 없습니다');
+      return;
+    }
+    
+    console.log('[EditProfile] 저장 시작, formData:', formData);
+    setLoading(true);
+    setError('');
+
+    try {
+      const { updateUserProfile } = await import('@/lib/supabase');
+      
+      const updates = {
+        name: formData.nickname,
+        nickname: formData.nickname,
+        phone: formData.phone || null,
+        birth_date: formData.birth_date || null,
+        gender: formData.gender || null,
+        height: formData.height ? parseInt(formData.height) : null,
+        weight: formData.weight ? parseFloat(formData.weight) : null,
+      };
+
+      if (profile?.role === 'player_common') {
+        updates.gym_name = formData.gym_name || null;
+      } else if (profile?.role === 'player_athlete') {
+        updates.boxing_style = formData.boxing_style || null;
+        updates.gym_name = formData.gym_name || null;
+      } else if (profile?.role === 'gym') {
+        updates.gym_name = formData.gym_name || null;
+        updates.gym_location = formData.gym_location || null;
+        updates.representative_phone = formData.representative_phone || null;
+      }
+
+      console.log('[EditProfile] 업데이트 데이터:', updates);
+      const { data, error: updateError } = await updateUserProfile(user.id, updates);
+      
+      if (updateError) {
+        console.error('[EditProfile] 업데이트 에러:', updateError);
+        throw updateError;
+      }
+
+      console.log('[EditProfile] 업데이트 성공:', data);
+      console.log('[EditProfile] 프로필 새로고침 시작');
+      await refreshProfile();
+      console.log('[EditProfile] 프로필 새로고침 완료');
+      
+      alert('프로필이 성공적으로 업데이트되었습니다!');
+      setActiveTab('mypage');
+    } catch (err) {
+      console.error('[EditProfile] 프로필 업데이트 에러:', err);
+      setError('프로필 업데이트에 실패했습니다: ' + (err.message || '알 수 없는 오류'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -128,66 +261,194 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">{t('username')}</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">{t('nickname') || '닉네임'}</label>
                 <input
                   type="text"
-                  value={formData.username}
-                  onChange={(e) => setFormData({...formData, username: e.target.value})}
+                  value={formData.nickname}
+                  onChange={(e) => setFormData({...formData, nickname: e.target.value})}
+                  placeholder={t('enterNickname')}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">{t('email')}</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">{t('email') || '이메일'}</label>
                 <input
                   type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  value={profile?.email || ''}
+                  disabled
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-gray-400 cursor-not-allowed"
                 />
+                <p className="text-xs text-gray-500 mt-1">{t('emailCannotChange')}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">{t('bio')}</label>
-                <textarea
-                  value={formData.bio}
-                  onChange={(e) => setFormData({...formData, bio: e.target.value})}
-                  rows={4}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">{t('location')}</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">{t('phone') || '전화번호'}</label>
                 <input
-                  type="text"
-                  value={formData.location}
-                  onChange={(e) => setFormData({...formData, location: e.target.value})}
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  placeholder="010-1234-5678"
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">{t('birthDate')}</label>
-                <input
-                  type="date"
-                  value={formData.birthdate}
-                  onChange={(e) => setFormData({...formData, birthdate: e.target.value})}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">{t('height') || '키 (cm)'}</label>
+                  <input
+                    type="number"
+                    value={formData.height}
+                    onChange={(e) => setFormData({...formData, height: e.target.value})}
+                    placeholder="175"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">{t('weight') || '체중 (kg)'}</label>
+                  <input
+                    type="number"
+                    value={formData.weight}
+                    onChange={(e) => setFormData({...formData, weight: e.target.value})}
+                    placeholder="70"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  />
+                </div>
+              </div>
+
+              {profile?.role === 'player_common' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('gymName') || '소속 체육관'}</label>
+                    <input
+                      type="text"
+                      value={formData.gym_name}
+                      onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
+                      placeholder={t('enterGymName')}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                    />
+                  </div>
+                </>
+              )}
+
+              {profile?.role === 'player_athlete' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('boxingStyle') || '복싱 스타일'}</label>
+                    <select
+                      value={formData.boxing_style}
+                      onChange={(e) => setFormData({...formData, boxing_style: e.target.value})}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
+                    >
+                      <option value="">{t('selectStyle') || '선택하세요'}</option>
+                      <option value="아웃복서">아웃복서</option>
+                      <option value="인파이터">인파이터</option>
+                      <option value="스워머">스워머</option>
+                      <option value="펀처">펀처</option>
+                      <option value="카운터 펀처">카운터 펀처</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('gymName') || '소속 체육관'}</label>
+                    <input
+                      type="text"
+                      value={formData.gym_name}
+                      onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
+                      placeholder={t('enterGymName')}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
+                    />
+                  </div>
+                </>
+              )}
+
+              {profile?.role === 'gym' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('gymName') || '체육관 이름'}</label>
+                    <input
+                      type="text"
+                      value={formData.gym_name}
+                      onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
+                      placeholder={t('enterGymName')}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('gymLocation') || '체육관 위치'}</label>
+                    <input
+                      type="text"
+                      value={formData.gym_location}
+                      onChange={(e) => setFormData({...formData, gym_location: e.target.value})}
+                      placeholder={t('enterGymLocation')}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('representativePhone') || '대표 전화번호'}</label>
+                    <input
+                      type="tel"
+                      value={formData.representative_phone}
+                      onChange={(e) => setFormData({...formData, representative_phone: e.target.value})}
+                      placeholder={t('enterRepPhone')}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">{t('birthDate') || '생년월일'}</label>
+                  <input
+                    type="date"
+                    value={formData.birth_date}
+                    onChange={(e) => setFormData({...formData, birth_date: e.target.value})}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">{t('gender') || '성별'}</label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) => setFormData({...formData, gender: e.target.value})}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  >
+                    <option value="">{t('select') || '선택'}</option>
+                    <option value="male">{t('male') || '남성'}</option>
+                    <option value="female">{t('female') || '여성'}</option>
+                  </select>
+                </div>
               </div>
             </div>
+
+            {error && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                {error}
+              </div>
+            )}
 
             <div className="flex gap-3 mt-6">
               <button 
                 onClick={handleSave}
-                className="flex-1 py-3 bg-blue-500 hover:bg-blue-600 rounded-lg text-white font-medium transition-colors"
+                disabled={loading}
+                className="flex-1 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-500 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2"
               >
-                {t('saveChanges')}
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {t('saving') || '저장 중...'}
+                  </>
+                ) : (
+                  t('saveChanges')
+                )}
               </button>
               <button 
                 onClick={() => setActiveTab('mypage')}
-                className="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-lg text-white font-medium transition-colors"
+                disabled={loading}
+                className="px-6 py-3 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors"
               >
                 {t('cancel')}
               </button>
@@ -973,308 +1234,173 @@ const ActivityHistoryView = ({ setActiveTab, t = (key) => key }) => {
 };
 
 // Opponent Profile 페이지
-const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentName }) => {
-  // 상대 선수 데이터 (실제로는 API에서 가져와야 함)
-  const opponentData = {
-    '이준호': { name: '이준호', tier: 'Diamond I', ranking: 28, totalMatches: 38, wins: 27, draws: 1, losses: 10, winRate: 71.1, koWins: 12, winStreak: 3, style: '인파이터', weightClass: '웰터급', specialty: '강력한 훅', height: '175cm', weight: '66.5kg', gender: '남성', topPercent: '0.3%' },
-    '박성민': { name: '박성민', tier: 'Diamond II', ranking: 35, totalMatches: 45, wins: 31, draws: 0, losses: 14, winRate: 68.9, koWins: 14, winStreak: 2, style: '올라운더', weightClass: '웰터급', specialty: '균형잡힌 복싱', height: '180cm', weight: '66.0kg', gender: '남성', topPercent: '0.4%' },
-    '최동훈': { name: '최동훈', tier: 'Diamond I', ranking: 22, totalMatches: 52, wins: 38, draws: 0, losses: 14, winRate: 73.1, koWins: 18, winStreak: 7, style: '펀처', weightClass: '웰터급', specialty: '파워 펀치', height: '182cm', weight: '66.8kg', gender: '남성', topPercent: '0.2%' },
-    '김재욱': { name: '김재욱', tier: 'Diamond III', ranking: 48, totalMatches: 32, wins: 21, draws: 0, losses: 11, winRate: 65.6, koWins: 9, winStreak: 1, style: '카운터 펀처', weightClass: '웰터급', specialty: '타이밍', height: '177cm', weight: '65.8kg', gender: '남성', topPercent: '0.6%' },
-    '정우성': { name: '정우성', tier: 'Diamond II', ranking: 40, totalMatches: 41, wins: 28, draws: 0, losses: 13, winRate: 68.3, koWins: 11, winStreak: 4, style: '아웃복서', weightClass: '웰터급', specialty: '풋워크', height: '179cm', weight: '66.3kg', gender: '남성', topPercent: '0.5%' },
-    '한석규': { name: '한석규', tier: 'Diamond II', ranking: 38, totalMatches: 48, wins: 34, draws: 0, losses: 14, winRate: 70.8, koWins: 16, winStreak: 2, style: '스워머', weightClass: '웰터급', specialty: '압박 복싱', height: '176cm', weight: '66.4kg', gender: '남성', topPercent: '0.5%' },
-    '최강민': { name: '최강민', tier: 'Master', ranking: 1, totalMatches: 68, wins: 58, draws: 1, losses: 9, winRate: 85.3, koWins: 32, winStreak: 12, style: '올라운더', weightClass: '웰터급', specialty: '완벽한 복싱', height: '180cm', weight: '66.7kg', gender: '남성', topPercent: '0.01%' },
-    '박철수': { name: '박철수', tier: 'Master', ranking: 2, totalMatches: 65, wins: 53, draws: 2, losses: 10, winRate: 82.1, koWins: 28, winStreak: 8, style: '펀처', weightClass: '웰터급', specialty: '파괴적 파워', height: '183cm', weight: '66.6kg', gender: '남성', topPercent: '0.02%' },
-    '김영희': { name: '김영희', tier: 'Diamond I', ranking: 30, totalMatches: 40, wins: 29, draws: 0, losses: 11, winRate: 72.5, koWins: 13, winStreak: 5, style: '테크니션', weightClass: '웰터급', specialty: '정교한 기술', height: '170cm', weight: '65.9kg', gender: '여성', topPercent: '0.4%' },
-    '정수진': { name: '정수진', tier: 'Diamond I', ranking: 25, totalMatches: 43, wins: 32, draws: 1, losses: 10, winRate: 74.2, koWins: 15, winStreak: 6, style: '아웃복서', weightClass: '웰터급', specialty: '빠른 풋워크', height: '168cm', weight: '65.5kg', gender: '여성', topPercent: '0.3%' },
-  };
+const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => {
+  const [opponent, setOpponent] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const opponent = opponentData[opponentName] || {
-    name: opponentName,
-    tier: 'Diamond II',
-    ranking: 45,
-    totalMatches: 35,
-    wins: 23,
-    draws: 1,
-    losses: 11,
-    winRate: 67.0,
-    koWins: 10,
-    winStreak: 2,
-    style: '올라운더',
-    weightClass: '웰터급',
-    specialty: '균형잡힌 복싱',
-    height: '178cm',
-    weight: '66.2kg',
-    gender: '남성',
-    topPercent: '0.5%'
-  };
+  useEffect(() => {
+    const loadOpponent = async () => {
+      setLoading(true);
+      const { getPublicPlayerProfileById } = await import('@/lib/supabase');
+      const { data } = await getPublicPlayerProfileById(opponentId);
+      setOpponent(data);
+      setLoading(false);
+    };
 
-  // 최근 경기 데이터 (샘플)
-  const recentMatches = [
-    { date: '2024.02.20', opponent: '김태양', result: 'loss', method: 'KO 3R', rounds: 3, score: 'KO' },
-    { date: '2024.02.17', opponent: '이민호', result: 'win', method: '판정승', rounds: 10, score: '96-92' },
-    { date: '2024.02.14', opponent: '박지성', result: 'win', method: 'KO 5R', rounds: 5, score: 'KO' },
-  ];
+    if (opponentId) {
+      loadOpponent();
+    }
+  }, [opponentId]);
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in-up">
+        <PageHeader
+          title="프로필 불러오는 중"
+          description="선수 공개 프로필을 가져오고 있습니다"
+          onBack={() => setActiveTab('ranking-tier-board')}
+        />
+        <SpotlightCard className="p-10 text-center text-gray-400">잠시만 기다려주세요.</SpotlightCard>
+      </div>
+    );
+  }
+
+  if (!opponent) {
+    return (
+      <div className="animate-fade-in-up">
+        <PageHeader
+          title="프로필을 찾을 수 없음"
+          description="선수 공개 프로필 데이터가 없습니다"
+          onBack={() => setActiveTab('ranking-tier-board')}
+        />
+        <SpotlightCard className="p-10 text-center text-gray-400">존재하지 않거나 비공개 처리된 선수입니다.</SpotlightCard>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in-up space-y-6">
-      {/* 헤더 */}
-      <PageHeader 
-        title={`${opponent.name} ${t('athlete')}`}
-        description="상대 선수 프로필"
-        onBack={() => setActiveTab('dashboard')}
+      <PageHeader
+        title={`${opponent.display_name} 프로필`}
+        description="공개 선수 프로필"
+        onBack={() => setActiveTab('ranking-tier-board')}
       />
 
-      {/* 메인 컨텐츠 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <SpotlightCard className="p-6 bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f]">
-            {/* 선수 프로필 헤더 */}
             <div className="flex items-center gap-4 mb-6 pb-4 border-b border-white/5">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-3xl shadow-lg border-2 border-purple-400/50">
-                <span>🥊</span>
+                {(opponent.display_name || 'U').charAt(0)}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2 flex-wrap">
-                  <h3 className="text-3xl font-bold text-white">{opponent.name}</h3>
-                  <span className="px-3 py-1 rounded-full text-sm font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30 shadow-lg">
-                    {t('athlete')}
+                  <h3 className="text-3xl font-bold text-white">{opponent.display_name}</h3>
+                  <span className={`px-3 py-1 rounded-full text-sm font-bold border ${
+                    opponent.role === 'player_athlete'
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                  }`}>
+                    {opponent.role === 'player_athlete' ? t('player_athlete') : t('player_common')}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-400 flex-wrap">
-                  <span className="font-bold text-yellow-400 whitespace-nowrap">{opponent.tier}</span>
+                  <span className="font-bold text-yellow-400 whitespace-nowrap">{opponent.tier || 'Unranked'}</span>
                   <span className="hidden sm:inline">•</span>
-                  <span className="whitespace-nowrap">{t('nationalRanking')} #{opponent.ranking}</span>
-                  <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold whitespace-nowrap">
-                    상위 {opponent.topPercent}
-                  </span>
+                  <span className="whitespace-nowrap">{t('nationalRanking')} #{opponent.rank || '-'}</span>
+                  {opponent.gym_name && (
+                    <>
+                      <span className="hidden sm:inline">•</span>
+                      <span className="whitespace-nowrap">{opponent.gym_name}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* 핵심 전적 */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-xl p-3 border border-blue-500/20">
                 <div className="text-xs text-blue-300 mb-1 whitespace-nowrap">{t('totalMatches')}</div>
-                <div className="text-2xl font-bold text-white">{opponent.totalMatches}</div>
+                <div className="text-2xl font-bold text-white">{opponent.total_matches || 0}</div>
               </div>
               <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-xl p-3 border border-emerald-500/20">
-                <div className="text-xs text-emerald-300 mb-1 whitespace-nowrap">전적</div>
-                <div className="text-lg font-bold text-white">{opponent.wins}승 {opponent.draws}무 {opponent.losses}패</div>
-                <div className="text-xs text-emerald-400 mt-1">승률 {opponent.winRate}%</div>
+                <div className="text-xs text-emerald-300 mb-1 whitespace-nowrap">{t('record')}</div>
+                <div className="text-lg font-bold text-white">
+                  {opponent.wins || 0}승 {opponent.draws || 0}무 {opponent.losses || 0}패
+                </div>
+                <div className="text-xs text-emerald-400 mt-1">승률 {opponent.win_rate || 0}%</div>
               </div>
               <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 rounded-xl p-3 border border-red-500/20">
                 <div className="text-xs text-red-300 mb-1 whitespace-nowrap">{t('koWins')}</div>
-                <div className="text-2xl font-bold text-red-400">{opponent.koWins}</div>
+                <div className="text-2xl font-bold text-red-400">{opponent.ko_wins || 0}</div>
               </div>
               <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 rounded-xl p-3 border border-purple-500/20">
                 <div className="text-xs text-purple-300 mb-1 whitespace-nowrap">{t('winStreak')}</div>
-                <div className="text-2xl font-bold text-purple-400">{opponent.winStreak}</div>
+                <div className="text-2xl font-bold text-purple-400">{opponent.current_win_streak || 0}</div>
               </div>
             </div>
 
-            {/* 복싱 스타일 & 특성 */}
             <div className="mb-6">
               <h4 className="text-sm font-bold text-white mb-3">{t('boxingStyle')}</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
-                      <span className="text-xl">🥊</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('mainStyle')}</div>
-                      <div className="text-sm font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{opponent.style}</div>
-                    </div>
-                  </div>
+                  <div className="text-xs text-gray-400 mb-1">{t('mainStyle')}</div>
+                  <div className="text-sm font-bold text-white">{opponent.boxing_style || '미등록'}</div>
                 </div>
-
                 <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                      <span className="text-xl">⚖️</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('weightClass')}</div>
-                      <div className="text-sm font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{opponent.weightClass}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center">
-                      <span className="text-xl">⭐</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('specialty')}</div>
-                      <div className="text-sm font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{opponent.specialty}</div>
-                    </div>
+                  <div className="text-xs text-gray-400 mb-1">{t('gender')}</div>
+                  <div className="text-sm font-bold text-white">
+                    {opponent.gender === 'female' ? t('female') : opponent.gender === 'male' ? t('male') : '미등록'}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 선수 기본 정보 */}
             <div>
               <h4 className="text-sm font-bold text-white mb-4">{t('athleteInfo')}</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-xl p-4 border border-blue-500/20">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                      <span className="text-xl">📏</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-400 whitespace-nowrap">{t('height')}</div>
-                      <div className="text-lg font-bold text-white">{opponent.height}</div>
-                    </div>
-                  </div>
+                  <div className="text-xs text-gray-400 whitespace-nowrap">{t('height')}</div>
+                  <div className="text-lg font-bold text-white">{opponent.height ? `${opponent.height}cm` : '미등록'}</div>
                 </div>
-
                 <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 rounded-xl p-4 border border-purple-500/20">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                      <span className="text-xl">⚖️</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-400 whitespace-nowrap">{t('weight')}</div>
-                      <div className="text-lg font-bold text-white">{opponent.weight}</div>
-                    </div>
-                  </div>
+                  <div className="text-xs text-gray-400 whitespace-nowrap">{t('weight')}</div>
+                  <div className="text-lg font-bold text-white">{opponent.weight ? `${opponent.weight}kg` : '미등록'}</div>
                 </div>
-
                 <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-xl p-4 border border-emerald-500/20">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                      <span className="text-xl">👤</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-400 whitespace-nowrap">{t('gender')}</div>
-                      <div className="text-lg font-bold text-white">{opponent.gender === '남성' ? t('male') : t('female')}</div>
-                    </div>
+                  <div className="text-xs text-gray-400 whitespace-nowrap">{t('gender')}</div>
+                  <div className="text-lg font-bold text-white">
+                    {opponent.gender === 'female' ? t('female') : opponent.gender === 'male' ? t('male') : '미등록'}
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* 최근 경기 */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-bold text-white">최근 경기</h4>
-              </div>
-              <div className="space-y-2">
-                {recentMatches.map((match, i) => (
-                  <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/5 hover:border-white/10 transition-all">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
-                          match.result === 'win' ? 'bg-blue-500/20 text-blue-400' :
-                          match.result === 'loss' ? 'bg-red-500/20 text-red-400' :
-                          'bg-gray-500/20 text-gray-400'
-                        }`}>
-                          {match.result === 'win' ? 'W' : match.result === 'loss' ? 'L' : 'D'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveTab(`opponent-profile-${match.opponent}`);
-                              }}
-                              className="text-sm font-bold text-white hover:text-blue-400 transition-colors truncate"
-                            >
-                              vs. {match.opponent}
-                            </button>
-                            <span className="text-xs text-gray-500 whitespace-nowrap">{match.date}</span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-gray-400">{match.method}</span>
-                            <span className="text-xs text-gray-500">•</span>
-                            <span className={`text-xs font-bold ${
-                              match.result === 'win' ? 'text-blue-400' :
-                              match.result === 'loss' ? 'text-red-400' :
-                              'text-gray-400'
-                            }`}>
-                              {match.score}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                        {match.rounds}R
-                      </div>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           </SpotlightCard>
         </div>
 
-        {/* 오른쪽: 추가 정보 */}
         <div className="space-y-4">
-          {/* 티어 정보 */}
           <SpotlightCard className="p-6 bg-[#1a1a1a]">
             <h3 className="text-lg font-bold text-white mb-4">티어 정보</h3>
-            <div className="flex items-center justify-center mb-4">
-              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center border-2 border-blue-400/50 shadow-lg shadow-blue-500/30">
-                <span className="text-3xl">💎</span>
-              </div>
-            </div>
             <div className="text-center mb-4">
               <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-1">
-                {opponent.tier}
+                {opponent.tier || 'Unranked'}
               </div>
-              <div className="text-sm text-gray-400">전국 랭킹 #{opponent.ranking}</div>
+              <div className="text-sm text-gray-400">전국 랭킹 #{opponent.rank || '-'}</div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between py-2 border-b border-white/5">
                 <span className="text-sm text-gray-400">전적</span>
-                <span className="text-sm font-bold text-white">{opponent.wins}승 {opponent.draws}무 {opponent.losses}패</span>
+                <span className="text-sm font-bold text-white">
+                  {opponent.wins || 0}승 {opponent.draws || 0}무 {opponent.losses || 0}패
+                </span>
               </div>
               <div className="flex justify-between py-2 border-b border-white/5">
                 <span className="text-sm text-gray-400">KO승</span>
-                <span className="text-sm font-bold text-red-400">{opponent.koWins}회</span>
+                <span className="text-sm font-bold text-red-400">{opponent.ko_wins || 0}회</span>
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-sm text-gray-400">현재 연승</span>
-                <span className="text-sm font-bold text-purple-400">{opponent.winStreak}연승</span>
-              </div>
-            </div>
-          </SpotlightCard>
-
-          {/* 스타일 분석 */}
-          <SpotlightCard className="p-6 bg-[#1a1a1a]">
-            <h3 className="text-lg font-bold text-white mb-4">스타일 분석</h3>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-400">공격성향</span>
-                  <span className="text-sm font-bold text-red-400">
-                    {opponent.style === '인파이터' || opponent.style === '펀처' ? '85%' : 
-                     opponent.style === '스워머' ? '78%' : '65%'}
-                  </span>
-                </div>
-                <div className="w-full bg-white/5 rounded-full h-2">
-                  <div className="bg-gradient-to-r from-red-500 to-orange-500 h-2 rounded-full" 
-                    style={{ width: opponent.style === '인파이터' || opponent.style === '펀처' ? '85%' : 
-                                   opponent.style === '스워머' ? '78%' : '65%' }}>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-400">방어성향</span>
-                  <span className="text-sm font-bold text-blue-400">
-                    {opponent.style === '아웃복서' ? '82%' : 
-                     opponent.style === '올라운더' ? '75%' : '60%'}
-                  </span>
-                </div>
-                <div className="w-full bg-white/5 rounded-full h-2">
-                  <div className="bg-gradient-to-r from-blue-500 to-cyan-500 h-2 rounded-full" 
-                    style={{ width: opponent.style === '아웃복서' ? '82%' : 
-                                   opponent.style === '올라운더' ? '75%' : '60%' }}>
-                  </div>
-                </div>
+                <span className="text-sm font-bold text-purple-400">{opponent.current_win_streak || 0}연승</span>
               </div>
             </div>
           </SpotlightCard>

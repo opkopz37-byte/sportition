@@ -23,12 +23,16 @@ npm install
 ### 3. Supabase 설정
 
 1. [Supabase](https://supabase.com)에서 새 프로젝트 생성
-2. 프로젝트 루트에 `.env.local` 파일 생성:
+2. 환경 변수 파일 만들기 (예시 파일 복사 후 값만 채우면 됩니다):
    ```bash
-   NEXT_PUBLIC_SUPABASE_URL=your-project-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   cp .env.example .env.local
    ```
-3. `DATABASE_SCHEMA.md` 파일의 SQL을 Supabase SQL Editor에서 실행
+3. `.env.local`을 열고 **Settings → API**에서 복사한 값으로 채웁니다:
+   - `NEXT_PUBLIC_SUPABASE_URL` — Project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — `anon` `public` 키  
+   *(서비스 롤 secret 키는 브라우저용이 아니라 서버 전용입니다. 위 두 개만 있으면 회원가입/로그인이 동작합니다.)*
+4. 개발 서버를 **반드시 재시작**합니다: `npm run dev`
+5. `DATABASE_SCHEMA.md` 파일의 SQL을 Supabase SQL Editor에서 실행
 
 📖 자세한 설정 가이드는 [SUPABASE_SETUP.md](./SUPABASE_SETUP.md)를 참고하세요.
 
@@ -73,7 +77,7 @@ sportition-mvp3/
 │   ├── AuthContext.js     # 인증 컨텍스트
 │   └── translations.js    # 다국어 지원
 ├── public/                # 정적 파일
-├── .env.local.example     # 환경 변수 예시
+├── .env.example           # 환경 변수 템플릿 (복사 → .env.local)
 ├── DATABASE_SCHEMA.md     # 데이터베이스 스키마
 ├── SUPABASE_SETUP.md      # Supabase 설정 가이드
 ├── MOBILE_RESPONSIVE.md   # 모바일 반응형 가이드

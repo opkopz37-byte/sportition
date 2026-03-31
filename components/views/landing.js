@@ -116,34 +116,142 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
   );
 };
 
+// 비밀번호 검증 함수
+const validatePassword = (password) => {
+  const checks = {
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
+  };
+  
+  const strength = Object.values(checks).filter(Boolean).length;
+  return { checks, strength };
+};
+
 // 회원가입 페이지
-const SignupPage = ({ onBack, language, t, onSignupSuccess }) => {
+const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'player_common' }) => {
+  const [step, setStep] = useState(1); // 1: 계정 생성, 2: 프로필 입력
   const [formData, setFormData] = useState({
-    fullName: '',
+    // Step 1: 계정 생성 및 인증
+    role: initialRole,
     email: '',
     password: '',
     confirmPassword: '',
+    agreeTerms: false,
+    agreePrivacy: false,
+    
+    // Step 2: 프로필 정보
+    nickname: '',
     phone: '',
     birthDate: '',
-    role: 'athlete',
-    membershipType: 'basic'
+    gender: '',
+    height: '',
+    weight: '',
+    boxingStyle: '', // 선수만
+    gymName: '', // 일반/선수
+    gymLocation: '', // 체육관만
+    representativePhone: '', // 체육관만
+    membershipType: 'basic' // 일반/선수만
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [passwordStrength, setPasswordStrength] = useState({ checks: {}, strength: 0 });
+  const [showPassword, setShowPassword] = useState(false);
 
+  // 비밀번호 변경 시 강도 체크
+  const handlePasswordChange = (value) => {
+    setFormData({...formData, password: value});
+    setPasswordStrength(validatePassword(value));
+  };
+
+  // Step 1 검증
+  const validateStep1 = () => {
+    if (!formData.email) {
+      setError('이메일을 입력해주세요.');
+      return false;
+    }
+    
+    if (!formData.password) {
+      setError('비밀번호를 입력해주세요.');
+      return false;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('비밀번호가 일치하지 않습니다.');
+      return false;
+    }
+
+    const { checks } = validatePassword(formData.password);
+    if (!checks.length || !checks.uppercase || !checks.lowercase || !checks.special) {
+      setError('비밀번호는 8자 이상, 대문자, 소문자, 특수문자를 포함해야 합니다.');
+      return false;
+    }
+
+    if (!formData.agreeTerms || !formData.agreePrivacy) {
+      setError('필수 약관에 동의해주세요.');
+      return false;
+    }
+
+    return true;
+  };
+
+  // Step 2 검증
+  const validateStep2 = () => {
+    if (!formData.nickname) {
+      setError('닉네임을 입력해주세요.');
+      return false;
+    }
+    
+    if (!formData.phone) {
+      setError('핸드폰 번호를 입력해주세요.');
+      return false;
+    }
+
+    if (!formData.birthDate) {
+      setError('생년월일을 입력해주세요.');
+      return false;
+    }
+
+    if (!formData.gender) {
+      setError('성별을 선택해주세요.');
+      return false;
+    }
+
+    // 체육관 역할인 경우 추가 검증
+    if (formData.role === 'gym') {
+      if (!formData.gymName) {
+        setError('체육관 이름을 입력해주세요.');
+        return false;
+      }
+      if (!formData.gymLocation) {
+        setError('체육관 위치를 입력해주세요.');
+        return false;
+      }
+      if (!formData.representativePhone) {
+        setError('대표 연락처를 입력해주세요.');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // Step 1 다음으로
+  const handleStep1Next = () => {
+    setError('');
+    if (validateStep1()) {
+      setStep(2);
+    }
+  };
+
+  // Step 2 제출
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    if (formData.password !== formData.confirmPassword) {
-      setError('비밀번호가 일치하지 않습니다.');
-      setLoading(false);
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      setError('비밀번호는 최소 6자 이상이어야 합니다.');
+    if (!validateStep2()) {
       setLoading(false);
       return;
     }
@@ -151,28 +259,69 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess }) => {
     try {
       const { signUp } = await import('@/lib/supabase');
       
+      console.log('[SignUp] 회원가입 폼 데이터:', formData);
+      
+      const userData = {
+        name: formData.nickname,
+        phone: formData.phone,
+        birth_date: formData.birthDate,
+        role: formData.role,
+        gender: formData.gender,
+        height: formData.height || null,
+        weight: formData.weight || null,
+      };
+
+      // 역할별 추가 데이터
+      if (formData.role === 'player_common') {
+        // 일반 회원
+        userData.gym_name = formData.gymName || null;
+        userData.membership_type = formData.membershipType;
+      } else if (formData.role === 'player_athlete') {
+        // 선수
+        userData.boxing_style = formData.boxingStyle || null;
+        userData.gym_name = formData.gymName || null;
+        userData.membership_type = formData.membershipType;
+      } else if (formData.role === 'gym') {
+        // 체육관
+        userData.gym_name = formData.gymName;
+        userData.gym_location = formData.gymLocation;
+        userData.representative_phone = formData.representativePhone;
+      }
+      
+      console.log('[SignUp] signUp 함수에 전달할 userData:', userData);
+      
       const { data, error: signUpError } = await signUp(
         formData.email,
         formData.password,
-        {
-          name: formData.fullName,
-          phone: formData.phone,
-          birth_date: formData.birthDate,
-          role: formData.role,
-          membership_type: formData.membershipType,
-        }
+        userData
       );
 
       if (signUpError) {
         console.error('Signup error:', signUpError);
-        setError(signUpError.message || '회원가입에 실패했습니다.');
+        // 이미 가입된 이메일인 경우 → 로그인 유도
+        if (
+          signUpError.message?.toLowerCase().includes('user already registered') ||
+          signUpError.code === 'user_already_exists' ||
+          signUpError.status === 422
+        ) {
+          setError('이미 가입된 이메일입니다. 로그인 페이지에서 로그인해주세요.');
+          setTimeout(() => {
+            if (onSignupSuccess) onSignupSuccess(null);
+            else onBack();
+          }, 2000);
+        } else {
+          setError(signUpError.message || '회원가입에 실패했습니다.');
+        }
         return;
       }
 
       if (data?.user) {
-        alert('회원가입이 완료되었습니다! 이메일을 확인하고 로그인해주세요.');
-        onSignupSuccess && onSignupSuccess(data.user);
-        onBack();
+        alert('회원가입이 완료되었습니다! 로그인해주세요.');
+        if (onSignupSuccess) {
+          onSignupSuccess(data.user);
+        } else {
+          onBack();
+        }
       }
     } catch (err) {
       setError('회원가입 중 오류가 발생했습니다: ' + (err.message || err));
@@ -187,169 +336,428 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess }) => {
   <BackgroundGrid theme={{ accent: 'blue' }} />
   
   <button
-    onClick={onBack}
+    onClick={step === 1 ? onBack : () => setStep(1)}
     className="fixed top-6 left-6 z-50 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2"
   >
     <Icon type="arrowRight" size={16} className="rotate-180" />
-    {t('back')}
+    {step === 1 ? t('back') : '이전'}
   </button>
 
   <div className="w-full max-w-lg">
     <SpotlightCard className="p-8">
+      {/* 진행 표시 바 */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-gray-400">Step {step} of 2</span>
+          <span className="text-xs text-gray-400">{step === 1 ? '계정 생성' : '프로필 입력'}</span>
+        </div>
+        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500"
+            style={{ width: `${(step / 2) * 100}%` }}
+          />
+        </div>
+      </div>
+
       <div className="text-center mb-8">
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/20 text-blue-400 mb-4">
           <Icon type="zap" size={24} fill="currentColor" />
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">{t('createAccount')}</h2>
-        <p className="text-gray-500 text-sm">{t('joinCommunity')}</p>
+        <h2 className="text-2xl font-bold text-white mb-2">
+          {step === 1 ? '계정 생성 및 인증' : '프로필 정보 입력'}
+        </h2>
+        <p className="text-gray-500 text-sm">
+          {step === 1 ? '기본 정보를 입력하고 계정을 만들어주세요' : '추가 정보를 입력해주세요'}
+        </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-            {error}
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">이름</label>
-          <input
-            type="text"
-            value={formData.fullName}
-            onChange={(e) => setFormData({...formData, fullName: e.target.value})}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-            placeholder="홍길동"
-            required
-            disabled={loading}
-          />
+      {error && (
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm mb-4">
+          {error}
         </div>
+      )}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">{t('email')}</label>
-          <input
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({...formData, email: e.target.value})}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-            placeholder="example@email.com"
-            required
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">전화번호</label>
-          <input
-            type="tel"
-            value={formData.phone}
-            onChange={(e) => setFormData({...formData, phone: e.target.value})}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-            placeholder="010-1234-5678"
-            required
-            disabled={loading}
-          />
-          <p className="text-xs text-gray-500 mt-1">출석 체크 시 마지막 4자리를 사용합니다</p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">생년월일</label>
-          <input
-            type="date"
-            value={formData.birthDate}
-            onChange={(e) => setFormData({...formData, birthDate: e.target.value})}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-            required
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">{t('password')}</label>
-          <input
-            type="password"
-            value={formData.password}
-            onChange={(e) => setFormData({...formData, password: e.target.value})}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-            placeholder="최소 6자 이상"
-            required
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">비밀번호 확인</label>
-          <input
-            type="password"
-            value={formData.confirmPassword}
-            onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-            placeholder="비밀번호 재입력"
-            required
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">멤버십 타입</label>
-          <div className="grid grid-cols-3 gap-2">
-            {['basic', 'standard', 'premium'].map((type) => (
+      {/* Step 1: 계정 생성 및 인증 */}
+      {step === 1 && (
+        <div className="space-y-4">
+          {/* 역할 선택 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">역할 선택 *</label>
+            <div className="grid grid-cols-3 gap-2">
               <button
-                key={type}
                 type="button"
-                onClick={() => setFormData({...formData, membershipType: type})}
+                onClick={() => setFormData({...formData, role: 'player_common'})}
                 disabled={loading}
-                className={`p-2 rounded-lg border transition-all text-xs ${
-                  formData.membershipType === type
+                className={`p-3 rounded-lg border transition-all ${
+                  formData.role === 'player_common'
+                    ? 'border-blue-500 bg-blue-500/10 text-white' 
+                    : 'border-white/10 bg-white/5 text-gray-400'
+                }`}
+              >
+                <Icon type="zap" size={18} className="mx-auto mb-1" />
+                <span className="text-xs font-medium">일반회원</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({...formData, role: 'player_athlete'})}
+                disabled={loading}
+                className={`p-3 rounded-lg border transition-all ${
+                  formData.role === 'player_athlete'
+                    ? 'border-emerald-500 bg-emerald-500/10 text-white' 
+                    : 'border-white/10 bg-white/5 text-gray-400'
+                }`}
+              >
+                <Icon type="target" size={18} className="mx-auto mb-1" />
+                <span className="text-xs font-medium">선수</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({...formData, role: 'gym'})}
+                disabled={loading}
+                className={`p-3 rounded-lg border transition-all ${
+                  formData.role === 'gym' 
+                    ? 'border-purple-500 bg-purple-500/10 text-white' 
+                    : 'border-white/10 bg-white/5 text-gray-400'
+                }`}
+              >
+                <Icon type="home" size={18} className="mx-auto mb-1" />
+                <span className="text-xs font-medium">체육관</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 이메일 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">이메일 *</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              placeholder="example@email.com"
+              disabled={loading}
+            />
+          </div>
+
+          {/* 비밀번호 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">비밀번호 *</label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={formData.password}
+                onChange={(e) => handlePasswordChange(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all pr-10"
+                placeholder="8자 이상, 대/소문자, 특수문자"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+              >
+                <Icon type={showPassword ? "eyeOff" : "eye"} size={18} />
+              </button>
+            </div>
+            
+            {/* 비밀번호 강도 표시 */}
+            {formData.password && (
+              <div className="mt-2 space-y-1">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map((level) => (
+                    <div
+                      key={level}
+                      className={`h-1 flex-1 rounded-full transition-all ${
+                        passwordStrength.strength >= level
+                          ? passwordStrength.strength === 4
+                            ? 'bg-green-500'
+                            : passwordStrength.strength === 3
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                          : 'bg-white/10'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className={passwordStrength.checks.length ? 'text-green-400' : 'text-gray-500'}>
+                    ✓ 8자 이상
+                  </span>
+                  <span className={passwordStrength.checks.uppercase ? 'text-green-400' : 'text-gray-500'}>
+                    ✓ 대문자
+                  </span>
+                  <span className={passwordStrength.checks.lowercase ? 'text-green-400' : 'text-gray-500'}>
+                    ✓ 소문자
+                  </span>
+                  <span className={passwordStrength.checks.special ? 'text-green-400' : 'text-gray-500'}>
+                    ✓ 특수문자
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 비밀번호 확인 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">비밀번호 확인 *</label>
+            <input
+              type="password"
+              value={formData.confirmPassword}
+              onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              placeholder="비밀번호 재입력"
+              disabled={loading}
+            />
+            {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+              <p className="text-xs text-red-400 mt-1">비밀번호가 일치하지 않습니다</p>
+            )}
+            {formData.confirmPassword && formData.password === formData.confirmPassword && (
+              <p className="text-xs text-green-400 mt-1">비밀번호가 일치합니다</p>
+            )}
+          </div>
+
+          {/* 약관 동의 */}
+          <div className="space-y-2 pt-2">
+            <label className="flex items-start gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={formData.agreeTerms}
+                onChange={(e) => setFormData({...formData, agreeTerms: e.target.checked})}
+                className="mt-0.5 w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              />
+              <span className="text-sm text-gray-400 group-hover:text-white transition-colors">
+                [필수] 이용약관에 동의합니다
+              </span>
+            </label>
+            <label className="flex items-start gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={formData.agreePrivacy}
+                onChange={(e) => setFormData({...formData, agreePrivacy: e.target.checked})}
+                className="mt-0.5 w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              />
+              <span className="text-sm text-gray-400 group-hover:text-white transition-colors">
+                [필수] 개인정보 수집 및 이용에 동의합니다 (핸드폰 번호 포함)
+              </span>
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleStep1Next}
+            disabled={loading}
+            className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            다음 단계
+            <Icon type="arrowRight" size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Step 2: 프로필 정보 */}
+      {step === 2 && (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* 공통 필드 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">닉네임 *</label>
+            <input
+              type="text"
+              value={formData.nickname}
+              onChange={(e) => setFormData({...formData, nickname: e.target.value})}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              placeholder="닉네임"
+              disabled={loading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">핸드폰 번호 *</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              placeholder="010-1234-5678"
+              disabled={loading}
+            />
+            <p className="text-xs text-gray-500 mt-1">출석 체크 시 마지막 4자리를 사용합니다</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">생년월일 *</label>
+            <input
+              type="date"
+              value={formData.birthDate}
+              onChange={(e) => setFormData({...formData, birthDate: e.target.value})}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              disabled={loading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">성별 *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData({...formData, gender: 'male'})}
+                disabled={loading}
+                className={`p-3 rounded-lg border transition-all ${
+                  formData.gender === 'male'
                     ? 'border-blue-500 bg-blue-500/10 text-white'
                     : 'border-white/10 bg-white/5 text-gray-400'
                 }`}
               >
-                {type === 'basic' ? '베이직' : type === 'standard' ? '스탠다드' : '프리미엄'}
+                남성
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setFormData({...formData, gender: 'female'})}
+                disabled={loading}
+                className={`p-3 rounded-lg border transition-all ${
+                  formData.gender === 'female'
+                    ? 'border-pink-500 bg-pink-500/10 text-white'
+                    : 'border-white/10 bg-white/5 text-gray-400'
+                }`}
+              >
+                여성
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">{t('iAm')}</label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setFormData({...formData, role: 'athlete'})}
-              disabled={loading}
-              className={`p-3 rounded-lg border transition-all ${
-                formData.role === 'athlete' 
-                  ? 'border-blue-500 bg-blue-500/10 text-white' 
-                  : 'border-white/10 bg-white/5 text-gray-400'
-              }`}
-            >
-              <Icon type="zap" size={20} className="mx-auto mb-1" />
-              <span className="text-sm font-medium">{t('athlete')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormData({...formData, role: 'coach'})}
-              disabled={loading}
-              className={`p-3 rounded-lg border transition-all ${
-                formData.role === 'coach' 
-                  ? 'border-emerald-500 bg-emerald-500/10 text-white' 
-                  : 'border-white/10 bg-white/5 text-gray-400'
-              }`}
-            >
-              <Icon type="target" size={20} className="mx-auto mb-1" />
-              <span className="text-sm font-medium">{t('coach')}</span>
-            </button>
-          </div>
-        </div>
+          {/* 일반/선수 공통 */}
+          {(formData.role === 'player_common' || formData.role === 'player_athlete') && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">키 (cm)</label>
+                  <input
+                    type="number"
+                    value={formData.height}
+                    onChange={(e) => setFormData({...formData, height: e.target.value})}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                    placeholder="170"
+                    disabled={loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">몸무게 (kg)</label>
+                  <input
+                    type="number"
+                    value={formData.weight}
+                    onChange={(e) => setFormData({...formData, weight: e.target.value})}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                    placeholder="70"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? '가입 중...' : t('createAccount')}
-        </button>
-      </form>
+              {formData.role === 'player_athlete' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">복싱 스타일</label>
+                    <select
+                      value={formData.boxingStyle}
+                      onChange={(e) => setFormData({...formData, boxingStyle: e.target.value})}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
+                      disabled={loading}
+                    >
+                      <option value="">선택하세요</option>
+                      <option value="아웃복서">아웃복서</option>
+                      <option value="인파이터">인파이터</option>
+                      <option value="스워머">스워머</option>
+                      <option value="펀처">펀처</option>
+                      <option value="카운터 펀처">카운터 펀처</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">소속 체육관</label>
+                <input
+                  type="text"
+                  value={formData.gymName}
+                  onChange={(e) => setFormData({...formData, gymName: e.target.value})}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  placeholder="체육관 이름"
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">멤버십 타입</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['basic', 'standard', 'premium'].map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setFormData({...formData, membershipType: type})}
+                      disabled={loading}
+                      className={`p-2 rounded-lg border transition-all text-xs ${
+                        formData.membershipType === type
+                          ? 'border-blue-500 bg-blue-500/10 text-white'
+                          : 'border-white/10 bg-white/5 text-gray-400'
+                      }`}
+                    >
+                      {type === 'basic' ? '베이직' : type === 'standard' ? '스탠다드' : '프리미엄'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* 체육관 전용 */}
+          {formData.role === 'gym' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">체육관 이름 *</label>
+                <input
+                  type="text"
+                  value={formData.gymName}
+                  onChange={(e) => setFormData({...formData, gymName: e.target.value})}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  placeholder="체육관 이름"
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">체육관 위치 (주소) *</label>
+                <input
+                  type="text"
+                  value={formData.gymLocation}
+                  onChange={(e) => setFormData({...formData, gymLocation: e.target.value})}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  placeholder="서울시 강남구..."
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">대표 연락처 *</label>
+                <input
+                  type="tel"
+                  value={formData.representativePhone}
+                  onChange={(e) => setFormData({...formData, representativePhone: e.target.value})}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  placeholder="02-1234-5678"
+                  disabled={loading}
+                />
+              </div>
+            </>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? '가입 중...' : '계정 만들기'}
+          </button>
+        </form>
+      )}
     </SpotlightCard>
   </div>
 </div>
@@ -437,7 +845,7 @@ return () => document.removeEventListener('mousedown', handleClickOutside);
 
   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 xs:gap-4 sm:gap-6 w-full max-w-4xl px-3 xs:px-4 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
     <SpotlightCard 
-      onClick={() => onSelectRole('athlete')} 
+      onClick={() => onSelectRole('player_common')}
       theme="blue"
       className="p-4 xs:p-5 sm:p-8 group text-left h-40 xs:h-48 sm:h-64 flex flex-col justify-between hover:bg-white/[0.02]"
     >
@@ -456,21 +864,22 @@ return () => document.removeEventListener('mousedown', handleClickOutside);
     </SpotlightCard>
 
     <SpotlightCard 
-      onClick={() => onSelectRole('coach')} 
-      theme="emerald"
+      onClick={() => onSelectRole('gym')} 
+      theme="blue"
       className="p-4 xs:p-5 sm:p-8 group text-left h-40 xs:h-48 sm:h-64 flex flex-col justify-between hover:bg-white/[0.02]"
+      style={{ '--spotlight-color': '168, 85, 247' }}
     >
       <div>
-        <div className="w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 mb-2 xs:mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
-          <Icon type="chart" size={18} className="xs:w-5 xs:h-5 sm:w-6 sm:h-6" />
+        <div className="w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 mb-2 xs:mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+          <Icon type="home" size={18} className="xs:w-5 xs:h-5 sm:w-6 sm:h-6" />
         </div>
-        <h3 className="text-lg xs:text-xl sm:text-2xl font-bold text-white mb-1 xs:mb-1.5 sm:mb-2 group-hover:text-emerald-400 transition-colors">{t('coach')}</h3>
+        <h3 className="text-lg xs:text-xl sm:text-2xl font-bold text-white mb-1 xs:mb-1.5 sm:mb-2 group-hover:text-purple-400 transition-colors">{t('gym')}</h3>
         <p className="text-gray-500 text-[11px] xs:text-xs sm:text-sm whitespace-pre-line leading-relaxed">
-          {t('coachDesc')}
+          {t('gymDesc')}
         </p>
       </div>
       <div className="flex items-center text-[11px] xs:text-xs sm:text-sm text-gray-400 group-hover:text-white transition-colors">
-        {t('openAdmin')} <Icon type="arrowRight" size={12} className="xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 ml-1.5 xs:ml-2 group-hover:translate-x-1 transition-transform" />
+        {t('openGym')} <Icon type="arrowRight" size={12} className="xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 ml-1.5 xs:ml-2 group-hover:translate-x-1 transition-transform" />
       </div>
     </SpotlightCard>
   </div>

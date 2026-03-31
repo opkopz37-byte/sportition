@@ -27,13 +27,21 @@ npm install @supabase/supabase-js
 
 ### 2.2 환경 변수 설정
 
-프로젝트 루트에 `.env.local` 파일을 생성하고 다음 내용을 입력하세요:
+프로젝트 루트에 `.env.local` 파일을 만듭니다. 저장소에 포함된 예시를 복사해 쓰는 것을 권장합니다.
 
 ```bash
-# Supabase 설정
+cp .env.example .env.local
+```
+
+`.env.local`을 열고 아래 변수에 실제 값을 넣습니다.
+
+```bash
+# Supabase 설정 (프론트엔드용 — anon public 키)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
+
+> **참고:** `service_role` secret 키는 **서버(API Route 등)에서만** 사용합니다. `NEXT_PUBLIC_` 접두사를 붙이지 마세요. 브라우저에 노출되면 안 됩니다. 현재 앱의 회원가입/로그인에는 **URL + anon 키**만 있으면 됩니다.
 
 **값을 가져오는 방법:**
 1. Supabase 대시보드에서 프로젝트 선택

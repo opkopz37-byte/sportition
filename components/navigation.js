@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Icon, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
+import { Icon, THEME_ATHLETE, THEME_COACH, THEME_GYM, getMenuStructure } from '@/components/ui';
+import { useAuth } from '@/lib/AuthContext';
+import { searchPublicPlayerProfiles } from '@/lib/supabase';
 
 // 네비게이션 메뉴 아이템
 const NavMenuItem = ({ item, activeTab, setActiveTab, theme, t }) => {
@@ -67,46 +69,41 @@ return () => {
 
 // 네비게이션 바
 const Navbar = ({ role, activeTab, setActiveTab, onLogout, language, setLanguage, t }) => {
-  const theme = role === 'athlete' ? THEME_ATHLETE : THEME_COACH;
-  const menuItems = getMenuStructure(t)[role];
+  const { profile } = useAuth();
+  const isPlayerRole = role === 'player_common' || role === 'player_athlete';
+  const theme = role === 'player_common' ? THEME_ATHLETE : (role === 'player_athlete' ? THEME_COACH : THEME_GYM);
+  const menuItems = getMenuStructure(t)[role] || [];
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [playerResults, setPlayerResults] = useState([]);
   const langRef = useRef(null);
+  const profileRef = useRef(null);
   const searchRef = useRef(null);
 
-  // 글로벌 플레이어 검색 데이터
-  const allPlayers = [
-{ name: '김태양', tier: 'Diamond II', ranking: 42, winRate: 68.2, style: '아웃복서' },
-{ name: '최강민', tier: 'Master', ranking: 1, winRate: 85.3, style: '올라운더' },
-{ name: '박철수', tier: 'Master', ranking: 2, winRate: 82.1, style: '펀처' },
-{ name: '이준호', tier: 'Diamond I', ranking: 28, winRate: 71.1, style: '인파이터' },
-{ name: '박성민', tier: 'Diamond II', ranking: 35, winRate: 68.9, style: '올라운더' },
-{ name: '최동훈', tier: 'Diamond I', ranking: 22, winRate: 73.1, style: '펀처' },
-{ name: '김재욱', tier: 'Diamond III', ranking: 48, winRate: 65.6, style: '카운터 펀처' },
-{ name: '정우성', tier: 'Diamond II', ranking: 40, winRate: 68.3, style: '아웃복서' },
-{ name: '한석규', tier: 'Diamond II', ranking: 38, winRate: 70.8, style: '스워머' },
-{ name: '김영희', tier: 'Diamond I', ranking: 30, winRate: 72.5, style: '테크니션' },
-{ name: '정수진', tier: 'Diamond I', ranking: 25, winRate: 74.2, style: '아웃복서' },
-{ name: '이민호', tier: 'Platinum I', ranking: 55, winRate: 64.3, style: '인파이터' },
-{ name: '박지성', tier: 'Diamond III', ranking: 50, winRate: 66.8, style: '올라운더' },
-{ name: '손흥민', tier: 'Master', ranking: 5, winRate: 80.5, style: '스피드스터' },
-  ];
+  useEffect(() => {
+    const loadPlayerResults = async () => {
+      if (!isPlayerRole || !searchQuery.trim()) {
+        setPlayerResults([]);
+        return;
+      }
 
-  // 검색 필터링
-  const filteredPlayers = searchQuery.trim().length > 0
-? allPlayers.filter(player => 
-    player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    player.tier.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    player.style.toLowerCase().includes(searchQuery.toLowerCase())
-  ).slice(0, 8)
-: [];
+      const { data } = await searchPublicPlayerProfiles(searchQuery);
+      setPlayerResults(data || []);
+    };
+
+    loadPlayerResults();
+  }, [isPlayerRole, searchQuery]);
 
   useEffect(() => {
 const handleClickOutside = (event) => {
   if (langRef.current && !langRef.current.contains(event.target)) {
     setShowLangMenu(false);
+  }
+  if (profileRef.current && !profileRef.current.contains(event.target)) {
+    setShowProfileMenu(false);
   }
   if (searchRef.current && !searchRef.current.contains(event.target)) {
     setShowSearchResults(false);
@@ -188,13 +185,15 @@ return (
         <Icon type={showMobileMenu ? "x" : "menu"} size={18} />
       </button>
 
-      <div className="flex items-center gap-1.5 sm:gap-2 font-bold text-white tracking-tight cursor-pointer" onClick={() => setActiveTab(menuItems[0].id)}>
+      <div className="flex items-center gap-1.5 sm:gap-2 font-bold text-white tracking-tight cursor-pointer" onClick={() => setActiveTab(menuItems[0]?.id || 'dashboard')}>
         <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center ${
           theme.accent === 'blue' 
             ? 'bg-blue-500/20 text-blue-500' 
-            : 'bg-emerald-500/20 text-emerald-500'
+            : theme.accent === 'emerald'
+            ? 'bg-emerald-500/20 text-emerald-500'
+            : 'bg-purple-500/20 text-purple-500'
         }`}>
-          {role === 'athlete' ? <Icon type="zap" size={14} className="sm:w-4 sm:h-4" fill="currentColor" /> : <Icon type="target" size={14} className="sm:w-4 sm:h-4" />}
+          {role === 'player_common' ? <Icon type="zap" size={14} className="sm:w-4 sm:h-4" fill="currentColor" /> : role === 'player_athlete' ? <Icon type="target" size={14} className="sm:w-4 sm:h-4" /> : <Icon type="home" size={14} className="sm:w-4 sm:h-4" />}
         </div>
         <span className="text-xs sm:text-sm">Sportition</span>
       </div>
@@ -214,9 +213,9 @@ return (
     </div>
 
     <div className="flex items-center gap-1.5 sm:gap-3">
-      {role === 'coach' && (
+      {role === 'gym' && (
         <button
-          onClick={() => window.open('attendance.html', '_blank', 'width=1920,height=1080,toolbar=no,location=no,status=no,menubar=no,scrollbars=no')}
+          onClick={() => window.open('/attendance', '_blank', 'width=1920,height=1080,toolbar=no,location=no,status=no,menubar=no,scrollbars=no')}
           className="relative p-1.5 rounded-lg transition-colors text-gray-400 hover:text-white hover:bg-white/5 group"
           title="출석체크 키오스크 열기"
         >
@@ -225,7 +224,7 @@ return (
         </button>
       )}
 
-      {role === 'athlete' && (
+      {isPlayerRole && (
         <div className="relative" ref={searchRef}>
           <div className="relative">
             <input
@@ -259,18 +258,18 @@ return (
 
           {showSearchResults && searchQuery.trim().length > 0 && (
             <div className="absolute top-full right-0 mt-2 w-72 sm:w-80 bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up max-h-96 overflow-y-auto">
-              {filteredPlayers.length > 0 ? (
+              {playerResults.length > 0 ? (
                 <div>
                   <div className="px-3 py-2 border-b border-white/5 bg-white/5">
                     <span className="text-xs text-gray-400">
-                      {filteredPlayers.length}명의 선수를 찾았습니다
+                      {playerResults.length}명의 선수를 찾았습니다
                     </span>
                   </div>
-                  {filteredPlayers.map((player, index) => (
+                  {playerResults.map((player) => (
                     <button
-                      key={index}
+                      key={player.id}
                       onClick={() => {
-                        setActiveTab(`opponent-profile-${player.name}`);
+                        setActiveTab(`opponent-profile-${player.id}`);
                         setSearchQuery('');
                         setShowSearchResults(false);
                       }}
@@ -279,21 +278,21 @@ return (
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                            {player.name.charAt(0)}
+                            {(player.display_name || player.name || 'U').charAt(0)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="text-sm font-bold text-white truncate">{player.name}</span>
+                              <span className="text-sm font-bold text-white truncate">{player.display_name || player.name}</span>
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 whitespace-nowrap">
-                                #{player.ranking}
+                                #{player.rank || '-'}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 text-xs text-gray-400">
                               <span className="text-yellow-400 font-medium">{player.tier}</span>
                               <span>•</span>
-                              <span>승률 {player.winRate}%</span>
+                              <span>승률 {player.win_rate || 0}%</span>
                               <span>•</span>
-                              <span className="truncate">{player.style}</span>
+                              <span className="truncate">{player.boxing_style || '미등록'}</span>
                             </div>
                           </div>
                         </div>
@@ -347,21 +346,86 @@ return (
       </div>
 
       <div className="h-4 w-[1px] bg-white/10 hidden sm:block" />
-      <button onClick={onLogout} className="flex items-center gap-1.5 sm:gap-2 group">
-        <div className="text-right hidden lg:block">
-          <div className="text-[10px] sm:text-xs font-medium text-white group-hover:text-gray-300 whitespace-nowrap">
-            {role === 'athlete' ? '김플레이어' : '강코치'}
+      
+      <div className="relative" ref={profileRef}>
+        <button 
+          onClick={() => setShowProfileMenu(!showProfileMenu)}
+          className="flex items-center gap-1.5 sm:gap-2 group hover:bg-white/5 rounded-lg px-1.5 py-1 transition-colors"
+        >
+          <div className="text-right hidden lg:block">
+            <div className="text-[10px] sm:text-xs font-medium text-white group-hover:text-gray-300 whitespace-nowrap">
+              {profile?.nickname || profile?.name || '사용자'}
+            </div>
+            <div className={`text-[9px] sm:text-[10px] uppercase whitespace-nowrap ${
+              theme.accent === 'blue' ? 'text-blue-400' : 'text-emerald-400'
+            }`}>
+              {profile?.tier || (role === 'gym' ? (language === 'ko' ? '체육관' : 'Gym') : 'Bronze III')}
+            </div>
           </div>
-          <div className={`text-[9px] sm:text-[10px] uppercase whitespace-nowrap ${
-            theme.accent === 'blue' ? 'text-blue-400' : 'text-emerald-400'
-          }`}>
-            {role === 'athlete' ? 'Diamond II' : language === 'ko' ? '헤드코치' : 'Head Coach'}
+          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border border-white/10 flex items-center justify-center text-[10px] sm:text-xs font-bold text-white">
+            {(profile?.nickname || profile?.name || 'U').charAt(0)}
           </div>
-        </div>
-        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 flex items-center justify-center text-[10px] sm:text-xs">
-          <Icon type="user" size={14} className="sm:w-4 sm:h-4" />
-        </div>
-      </button>
+        </button>
+
+        {showProfileMenu && (
+          <div className="absolute top-full right-0 mt-2 w-48 bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up">
+            <div className="px-4 py-3 border-b border-white/10">
+              <div className="text-sm font-medium text-white mb-0.5">
+                {profile?.nickname || profile?.name || '사용자'}
+              </div>
+              <div className="text-xs text-gray-400 truncate">
+                {profile?.email}
+              </div>
+            </div>
+            
+            <button
+              onClick={() => {
+                setActiveTab('mypage');
+                setShowProfileMenu(false);
+              }}
+              className="w-full px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+            >
+              <Icon type="user" size={16} />
+              <span>{t('myPage') || '마이페이지'}</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                setActiveTab('mypage-edit-profile');
+                setShowProfileMenu(false);
+              }}
+              className="w-full px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+            >
+              <Icon type="edit" size={16} />
+              <span>{t('editProfile') || '프로필 수정'}</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                setActiveTab('mypage-security');
+                setShowProfileMenu(false);
+              }}
+              className="w-full px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+            >
+              <Icon type="shield" size={16} />
+              <span>{t('accountSecurity') || '계정 보안'}</span>
+            </button>
+
+            <div className="border-t border-white/10">
+              <button
+                onClick={() => {
+                  onLogout();
+                  setShowProfileMenu(false);
+                }}
+                className="w-full px-4 py-3 text-left text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+              >
+                <Icon type="logout" size={16} />
+                <span>{t('logout') || '로그아웃'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   </header>
 
@@ -378,9 +442,11 @@ return (
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
               theme.accent === 'blue' 
                 ? 'bg-blue-500/20 text-blue-500' 
-                : 'bg-emerald-500/20 text-emerald-500'
+                : theme.accent === 'emerald'
+                ? 'bg-emerald-500/20 text-emerald-500'
+                : 'bg-purple-500/20 text-purple-500'
             }`}>
-              {role === 'athlete' ? <Icon type="zap" size={16} fill="currentColor" /> : <Icon type="target" size={16} />}
+              {role === 'player_common' ? <Icon type="zap" size={16} fill="currentColor" /> : role === 'player_athlete' ? <Icon type="target" size={16} /> : <Icon type="home" size={16} />}
             </div>
             <span className="font-bold text-white text-sm">Menu</span>
           </div>
@@ -392,7 +458,7 @@ return (
           </button>
         </div>
 
-        {role === 'athlete' && (
+        {isPlayerRole && (
           <div className="p-3 border-b border-white/10">
             <div className="relative">
               <input
@@ -426,18 +492,18 @@ return (
 
             {searchQuery.trim().length > 0 && (
               <div className="mt-2 max-h-64 overflow-y-auto bg-white/5 rounded-lg border border-white/10">
-                {filteredPlayers.length > 0 ? (
+                {playerResults.length > 0 ? (
                   <div>
                     <div className="px-3 py-2 border-b border-white/5 bg-white/5">
                       <span className="text-xs text-gray-400">
-                        {filteredPlayers.length}명의 선수
+                        {playerResults.length}명의 선수
                       </span>
                     </div>
-                    {filteredPlayers.map((player, index) => (
+                    {playerResults.map((player) => (
                       <button
-                        key={index}
+                        key={player.id}
                         onClick={() => {
-                          setActiveTab(`opponent-profile-${player.name}`);
+                          setActiveTab(`opponent-profile-${player.id}`);
                           setSearchQuery('');
                           setShowSearchResults(false);
                           setShowMobileMenu(false);
@@ -446,19 +512,19 @@ return (
                       >
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                            {player.name.charAt(0)}
+                            {(player.display_name || player.name || 'U').charAt(0)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="text-sm font-bold text-white truncate">{player.name}</span>
+                              <span className="text-sm font-bold text-white truncate">{player.display_name || player.name}</span>
                               <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-400 whitespace-nowrap">
-                                #{player.ranking}
+                                #{player.rank || '-'}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
                               <span className="text-yellow-400 font-medium">{player.tier}</span>
                               <span>•</span>
-                              <span>{player.winRate}%</span>
+                              <span>{player.win_rate || 0}%</span>
                             </div>
                           </div>
                         </div>
@@ -491,21 +557,27 @@ return (
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-2.5 border-t border-white/10 bg-[#0A0A0A]">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 flex items-center justify-center flex-shrink-0">
-              <Icon type="user" size={14} />
+          <button
+            onClick={() => {
+              setActiveTab('mypage');
+              setShowMobileMenu(false);
+            }}
+            className="flex items-center gap-2 mb-2 w-full hover:bg-white/5 rounded-lg p-1.5 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border border-white/10 flex items-center justify-center flex-shrink-0 text-white font-bold text-xs">
+              {(profile?.nickname || profile?.name || 'U').charAt(0)}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 text-left">
               <div className="text-xs font-medium text-white whitespace-nowrap overflow-hidden text-ellipsis">
-                {role === 'athlete' ? '김플레이어' : '강코치'}
+                {profile?.nickname || profile?.name || '사용자'}
               </div>
               <div className={`text-[10px] whitespace-nowrap overflow-hidden text-ellipsis ${
                 theme.accent === 'blue' ? 'text-blue-400' : 'text-emerald-400'
               }`}>
-                {role === 'athlete' ? 'Diamond II' : language === 'ko' ? '헤드코치' : 'Head Coach'}
+                {profile?.tier || (role === 'gym' ? (language === 'ko' ? '체육관' : 'Gym') : 'Bronze III')}
               </div>
             </div>
-          </div>
+          </button>
           <button 
             onClick={() => {
               onLogout();

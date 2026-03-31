@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BackgroundGrid, THEME_ATHLETE, THEME_COACH } from '@/components/ui';
+import { BackgroundGrid, THEME_ATHLETE, THEME_COACH, THEME_GYM } from '@/components/ui';
 import { Navbar } from '@/components/navigation';
 import { LoginModal, SignupPage, LandingPage } from '@/components/views/landing';
 import { DashboardView } from '@/components/views/dashboard';
@@ -11,13 +11,23 @@ import { TierBoardView } from '@/components/views/ranking';
 import { StyleStatsView } from '@/components/views/statistics';
 import { MyPageView, EditProfileView, PrivacySettingsView, NotificationsView, AccountSecurityView, ActivityHistoryView, OpponentProfileView, AchievementsView } from '@/components/views/mypage';
 import { CoachInsightsView, PlayersManagementView, MatchRoomView, AdminManagementView } from '@/components/views/coach';
+import { AttendanceView } from '@/components/views/attendance';
+import { GachaView } from '@/components/views/gacha';
+import { InventoryView } from '@/components/views/inventory';
+import { ApprovalView } from '@/components/views/approval';
 import { ComingSoonView } from '@/components/views/comingsoon';
 import { translations } from '@/lib/translations';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function SportitionApp() {
+  const { user, profile, isAuthenticated, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState('landing');
   const [role, setRole] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // profile.role을 항상 우선 신뢰 (role state가 아직 null이어도 렌더링 가능)
+  const effectiveRole = profile?.role || role;
+  const [signupInitialRole, setSignupInitialRole] = useState('player_common');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [language, setLanguage] = useState('ko');
   
@@ -48,16 +58,48 @@ export default function SportitionApp() {
     ));
   };
 
+  // 인증 상태 변화 감지 및 자동 화면 전환
+  useEffect(() => {
+    if (loading) {
+      console.log('[Auth Effect] 인증 상태 로딩 중...');
+      return;
+    }
+
+    if (isAuthenticated && profile) {
+      console.log('[Auth Effect] 로그인 상태 - 프로필:', profile);
+      if (currentPage !== 'app') {
+        console.log('[Auth Effect] 앱으로 이동');
+        setRole(profile.role);
+        setCurrentPage('app');
+        setIsLoginModalOpen(false);
+        
+        // 역할에 따라 초기 탭 설정
+        if (profile.role === 'player_common' || profile.role === 'player_athlete') {
+          setActiveTab('dashboard');
+        } else if (profile.role === 'gym') {
+          setActiveTab('dashboard');
+        }
+      }
+    } else if (!isAuthenticated) {
+      console.log('[Auth Effect] 로그아웃 상태 - 랜딩으로 이동');
+      // signup 페이지는 비로그인 상태에서도 접근 허용
+      if (currentPage !== 'landing' && currentPage !== 'signup') {
+        setRole(null);
+        setCurrentPage('landing');
+        setActiveTab('dashboard');
+      }
+    }
+  }, [isAuthenticated, profile, loading, currentPage]);
+
   // 역할 변경 시 activeTab 설정
   useEffect(() => {
     console.log('역할 변경됨:', role);
-    if (role === 'athlete') {
+    if (role === 'player_common' || role === 'player_athlete') {
       setActiveTab('dashboard');
       console.log('activeTab을 dashboard로 설정');
-    }
-    if (role === 'coach') {
-      setActiveTab('insights');
-      console.log('activeTab을 insights로 설정');
+    } else if (role === 'gym') {
+      setActiveTab('dashboard');
+      console.log('activeTab을 dashboard로 설정 (gym)');
     }
   }, [role]);
 
@@ -67,22 +109,72 @@ export default function SportitionApp() {
   }, [currentPage, role, activeTab]);
 
   const handleSelectRole = (selectedRole) => {
-    console.log('=== 역할 선택 시작 ===');
-    console.log('선택된 역할:', selectedRole);
-    setRole(selectedRole);
-    setCurrentPage('app');
-    console.log('=== 역할 선택 완료 ===');
+    // 비로그인 상태에서 역할 카드 클릭 → 해당 역할로 회원가입 페이지 이동
+    setSignupInitialRole(selectedRole);
+    setCurrentPage('signup');
   };
 
-  const handleLogout = () => {
-    setRole(null);
-    setCurrentPage('landing');
+  const handleLogout = async () => {
+    try {
+      console.log('[Logout] 로그아웃 시작');
+      const { signOut } = await import('@/lib/supabase');
+      const { error } = await signOut();
+      
+      if (error) {
+        console.error('[Logout] signOut 에러:', error);
+      } else {
+        console.log('[Logout] Supabase signOut 성공');
+      }
+      
+      // 로그인 모달 닫기 및 랜딩으로 강제 이동
+      setIsLoginModalOpen(false);
+      setRole(null);
+      setSignupInitialRole('player_common');
+      setCurrentPage('landing');
+      setActiveTab('dashboard');
+    } catch (error) {
+      console.error('[Logout] 로그아웃 예외:', error);
+      setIsLoginModalOpen(false);
+      setRole(null);
+      setSignupInitialRole('player_common');
+      setCurrentPage('landing');
+      setActiveTab('dashboard');
+    }
   };
 
   const handleSignupClick = () => {
     setIsLoginModalOpen(false);
     setCurrentPage('signup');
   };
+
+  const handleLoginSuccess = () => {
+    console.log('로그인 성공 콜백 호출');
+    // AuthContext가 자동으로 프로필 로드
+    // useEffect가 화면 전환 처리
+  };
+
+  const handleSignupSuccess = () => {
+    console.log('회원가입 성공 콜백 호출');
+    setCurrentPage('landing');
+    setIsLoginModalOpen(true);
+  };
+
+  // 로딩 중일 때
+  if (loading) {
+    return (
+      <div className="relative min-h-screen bg-black text-white flex items-center justify-center">
+        <BackgroundGrid theme={{ accent: 'blue' }} />
+        <div className="relative z-10 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/20 text-blue-400 mb-4 animate-pulse">
+            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />
+            </svg>
+          </div>
+          <p className="text-gray-400">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (currentPage === 'signup') {
     return (
@@ -91,6 +183,8 @@ export default function SportitionApp() {
           onBack={() => setCurrentPage('landing')} 
           language={language}
           t={t}
+          onSignupSuccess={handleSignupSuccess}
+          initialRole={signupInitialRole}
         />
       </div>
     );
@@ -111,6 +205,7 @@ export default function SportitionApp() {
           isOpen={isLoginModalOpen}
           onClose={() => setIsLoginModalOpen(false)}
           onSignup={handleSignupClick}
+          onLoginSuccess={handleLoginSuccess}
           t={t}
         />
       </div>
@@ -122,16 +217,22 @@ export default function SportitionApp() {
     console.log('앱 페이지 렌더링 시도, role:', role, 'activeTab:', activeTab);
   }
   
-  const theme = role === 'athlete' ? THEME_ATHLETE : THEME_COACH;
+  const theme =
+    effectiveRole === 'player_common' ? THEME_ATHLETE :
+    effectiveRole === 'player_athlete' ? THEME_COACH :
+    THEME_GYM;
 
   const renderDashboardRoutes = () => {
     if (activeTab.startsWith('opponent-profile-')) {
-      const opponentName = activeTab.replace('opponent-profile-', '');
-      return <OpponentProfileView setActiveTab={setActiveTab} t={t} opponentName={opponentName} />;
+      const opponentId = activeTab.replace('opponent-profile-', '');
+      return <OpponentProfileView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
     }
-    
+
     switch(activeTab) {
-      case 'dashboard': return <DashboardView setActiveTab={setActiveTab} t={t} role={role} />;
+      case 'dashboard': return <DashboardView setActiveTab={setActiveTab} t={t} role={effectiveRole} />;
+      case 'attendance': return <AttendanceView setActiveTab={setActiveTab} t={t} language={language} />;
+      case 'gacha': return <GachaView setActiveTab={setActiveTab} t={t} />;
+      case 'inventory': return <InventoryView setActiveTab={setActiveTab} t={t} />;
       case 'dashboard-workout-details': return <ComingSoonView title={t('workoutResults')} />;
       case 'dashboard-steps': return <ComingSoonView title={t('stepsForToday')} />;
       case 'dashboard-habits': return <ComingSoonView title={t('myHabits')} />;
@@ -150,8 +251,8 @@ export default function SportitionApp() {
 
   const renderRankingRoutes = () => {
     if (activeTab.startsWith('opponent-profile-')) {
-      const opponentName = activeTab.replace('opponent-profile-', '');
-      return <OpponentProfileView setActiveTab={setActiveTab} t={t} opponentName={opponentName} />;
+      const opponentId = activeTab.replace('opponent-profile-', '');
+      return <OpponentProfileView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
     }
     
     switch(activeTab) {
@@ -186,6 +287,8 @@ export default function SportitionApp() {
   const renderCoachRoutes = () => {
     switch(activeTab) {
       case 'insights': return <CoachInsightsView t={t} setActiveTab={setActiveTab} skillRequests={skillRequests} updateSkillRequestStatus={updateSkillRequestStatus} />;
+      case 'attendance': return <AttendanceView setActiveTab={setActiveTab} t={t} language={language} />;
+      case 'approval': return <ApprovalView setActiveTab={setActiveTab} t={t} />;
       case 'players': return <PlayersManagementView t={t} setActiveTab={setActiveTab} />;
       case 'match': return <MatchRoomView t={t} setActiveTab={setActiveTab} />;
       case 'admin': return <AdminManagementView t={t} setActiveTab={setActiveTab} />;
@@ -194,15 +297,17 @@ export default function SportitionApp() {
   };
 
   const renderView = () => {
-    if (role === 'athlete') {
+    if (effectiveRole === 'player_common' || effectiveRole === 'player_athlete') {
       return renderDashboardRoutes() || 
              renderRoadmapRoutes() || 
              renderRankingRoutes() || 
              renderStatisticsRoutes() || 
              renderMyPageRoutes() || 
              <ComingSoonView title="Coming Soon" />;
+    } else if (effectiveRole === 'gym') {
+      return renderDashboardRoutes() || renderCoachRoutes() || renderMyPageRoutes() || <ComingSoonView title="Coming Soon" />;
     } else {
-      return renderCoachRoutes() || <ComingSoonView title="Coming Soon" />;
+      return <ComingSoonView title="Coming Soon" />;
     }
   };
 
@@ -211,7 +316,7 @@ export default function SportitionApp() {
       <BackgroundGrid theme={theme} />
       
       <Navbar 
-        role={role} 
+        role={effectiveRole} 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         onLogout={handleLogout}
