@@ -269,6 +269,76 @@ CREATE TRIGGER on_attendance_recorded_update_stats
   AFTER INSERT ON public.attendance
   FOR EACH ROW EXECUTE FUNCTION public.handle_attendance_recorded();
 
+CREATE TABLE IF NOT EXISTS public.match_statistics_ledger (
+  match_id    UUID PRIMARY KEY REFERENCES public.matches(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_match_statistics_ledger_user
+  ON public.match_statistics_ledger(user_id);
+
+CREATE OR REPLACE FUNCTION public.handle_match_recorded_update_stats()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  inserted_match_id UUID;
+  win_delta INTEGER := 0;
+  loss_delta INTEGER := 0;
+  draw_delta INTEGER := 0;
+BEGIN
+  INSERT INTO public.match_statistics_ledger (match_id, user_id)
+  VALUES (NEW.id, NEW.user_id)
+  ON CONFLICT (match_id) DO NOTHING
+  RETURNING match_id INTO inserted_match_id;
+
+  IF inserted_match_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.result IN ('win', 'ko_win') THEN
+    win_delta := 1;
+  ELSIF NEW.result IN ('loss', 'ko_loss') THEN
+    loss_delta := 1;
+  ELSIF NEW.result = 'draw' THEN
+    draw_delta := 1;
+  END IF;
+
+  INSERT INTO public.statistics (
+    user_id,
+    total_matches,
+    wins,
+    losses,
+    draws,
+    ko_wins
+  ) VALUES (
+    NEW.user_id,
+    1,
+    win_delta,
+    loss_delta,
+    draw_delta,
+    CASE WHEN NEW.result = 'ko_win' THEN 1 ELSE 0 END
+  )
+  ON CONFLICT (user_id) DO UPDATE SET
+    total_matches = public.statistics.total_matches + 1,
+    wins = public.statistics.wins + win_delta,
+    losses = public.statistics.losses + loss_delta,
+    draws = public.statistics.draws + draw_delta,
+    ko_wins = public.statistics.ko_wins + CASE WHEN NEW.result = 'ko_win' THEN 1 ELSE 0 END,
+    updated_at = NOW();
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_match_recorded_update_stats ON public.matches;
+CREATE TRIGGER on_match_recorded_update_stats
+  AFTER INSERT ON public.matches
+  FOR EACH ROW EXECUTE FUNCTION public.handle_match_recorded_update_stats();
+
 CREATE OR REPLACE FUNCTION public.search_members_by_phone_last4(phone_last_four TEXT)
 RETURNS TABLE (
   id UUID,
