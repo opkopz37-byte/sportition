@@ -1287,18 +1287,63 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [scores, setScores] = useState({ round1: null, round2: null, round3: null });
   const [selectingCorner, setSelectingCorner] = useState(null); // 'blue' | 'red' | null
   const [rscWinner, setRscWinner] = useState(null); // RSC 승자 ('blue' | 'red' | null)
-  const [finishMethod, setFinishMethod] = useState(null); // 'decision' | 'rsc'
+  const [finishMethod, setFinishMethod] = useState(null); // 'decision' | 'rsc' | 'forced'
   const [currentScoreInput, setCurrentScoreInput] = useState({ blue: null, red: null, dominant: null }); // 현재 라운드 점수 입력
-  
-  // 출석한 선수 리스트 (체급순)
-  const attendedMembers = [
-    { id: 1, name: '김철수', weight: 54, record: '12승 3패', winRate: 80, avatar: '🥊' },
-    { id: 2, name: '이영희', weight: 54, record: '10승 5패', winRate: 67, avatar: '🥋' },
-    { id: 3, name: '박민수', weight: 58, record: '15승 2패', winRate: 88, avatar: '⚡' },
-    { id: 4, name: '정수진', weight: 58, record: '8승 4패', winRate: 67, avatar: '💪' },
-    { id: 5, name: '최동욱', weight: 63, record: '20승 5패', winRate: 80, avatar: '🔥' },
-    { id: 6, name: '강예린', weight: 63, record: '14승 8패', winRate: 64, avatar: '⭐' },
-  ];
+  const [attendedMembers, setAttendedMembers] = useState([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(true);
+  const [memberLoadError, setMemberLoadError] = useState(null);
+  const [showForceStopModal, setShowForceStopModal] = useState(false);
+  const [forcedResult, setForcedResult] = useState({ winner: null, blueScore: '', redScore: '' });
+  const [isSavingResult, setIsSavingResult] = useState(false);
+  const [resultSaved, setResultSaved] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+
+  // 실제 DB 기준 회원가입 회원 로드 (RLS 영향을 줄이기 위해 공개 뷰 사용)
+  useEffect(() => {
+    const loadRegisteredMembers = async () => {
+      setIsLoadingMembers(true);
+      setMemberLoadError(null);
+
+      try {
+        const { supabase } = await import('@/lib/supabase');
+
+        const { data: users, error: usersError } = await supabase
+          .from('public_player_profiles')
+          .select('id, name, nickname, display_name, weight, rank')
+          .order('rank', { ascending: true, nullsFirst: false });
+
+        if (usersError) throw usersError;
+
+        const avatarPool = ['🥊', '🥋', '⚡', '💪', '🔥', '⭐', '🏅', '🛡️'];
+        const mappedMembers = (users || [])
+          .map((user, index) => ({
+            id: user.id,
+            name: user.display_name || user.name || user.nickname || '이름 미등록',
+            weight: Number.isFinite(Number(user.weight)) ? Number(user.weight) : null,
+            record: '기록 준비중',
+            winRate: 0,
+            avatar: avatarPool[index % avatarPool.length],
+          }))
+          .sort((a, b) => {
+            if (a.weight === null && b.weight === null) return a.name.localeCompare(b.name, 'ko');
+            if (a.weight === null) return 1;
+            if (b.weight === null) return -1;
+            if (a.weight !== b.weight) return a.weight - b.weight;
+            return a.name.localeCompare(b.name, 'ko');
+          });
+
+        setAttendedMembers(mappedMembers);
+      } catch (error) {
+        console.error('[MatchRoomView] 회원 로드 실패:', error);
+        setMemberLoadError(error.message || '회원 정보를 불러오지 못했습니다.');
+        setAttendedMembers([]);
+      } finally {
+        setIsLoadingMembers(false);
+      }
+    };
+
+    loadRegisteredMembers();
+  }, []);
 
   // 타이머 로직
   useEffect(() => {
@@ -1374,6 +1419,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const handleRSC = (corner) => {
     setIsPlaying(false);
     setRscWinner(corner);
+    setForcedResult({ winner: corner, blueScore: '', redScore: '' });
     setFinishMethod('rsc');
     setPhase('finish');
   };
@@ -1382,10 +1428,75 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     if (finishMethod === 'rsc') {
       return rscWinner === 'blue' ? blueCorner : redCorner;
     }
+    if (finishMethod === 'forced') {
+      if (forcedResult.winner === 'blue') return blueCorner;
+      if (forcedResult.winner === 'red') return redCorner;
+      return null;
+    }
     const blueTotal = (scores.round1?.blue || 0) + (scores.round2?.blue || 0) + (scores.round3?.blue || 0);
     const redTotal = (scores.round1?.red || 0) + (scores.round2?.red || 0) + (scores.round3?.red || 0);
     return blueTotal > redTotal ? blueCorner : redCorner;
   };
+
+  const getFinalScore = () => {
+    if (finishMethod === 'forced') {
+      return {
+        blue: Number(forcedResult.blueScore) || 0,
+        red: Number(forcedResult.redScore) || 0,
+      };
+    }
+    return {
+      blue: (scores.round1?.blue || 0) + (scores.round2?.blue || 0) + (scores.round3?.blue || 0),
+      red: (scores.round1?.red || 0) + (scores.round2?.red || 0) + (scores.round3?.red || 0),
+    };
+  };
+
+  useEffect(() => {
+    const persistMatchResult = async () => {
+      if (phase !== 'finish' || !blueCorner?.id || !redCorner?.id || resultSaved) return;
+
+      const finalScore = finishMethod === 'forced'
+        ? {
+            blue: Number(forcedResult.blueScore) || 0,
+            red: Number(forcedResult.redScore) || 0,
+          }
+        : {
+            blue: (scores.round1?.blue || 0) + (scores.round2?.blue || 0) + (scores.round3?.blue || 0),
+            red: (scores.round1?.red || 0) + (scores.round2?.red || 0) + (scores.round3?.red || 0),
+          };
+      const winnerCorner = finishMethod === 'forced'
+        ? (forcedResult.winner || 'draw')
+        : finishMethod === 'rsc'
+          ? (rscWinner || 'draw')
+          : finalScore.blue === finalScore.red
+            ? 'draw'
+            : finalScore.blue > finalScore.red ? 'blue' : 'red';
+
+      setIsSavingResult(true);
+      setSaveError(null);
+      try {
+        const { submitMatchResult } = await import('@/lib/supabase');
+        const { error } = await submitMatchResult({
+          blueUserId: blueCorner.id,
+          redUserId: redCorner.id,
+          winnerCorner,
+          finishMethod,
+          blueScore: finalScore.blue,
+          redScore: finalScore.red,
+          roundsPlayed: currentRound,
+        });
+        if (error) throw error;
+        setResultSaved(true);
+      } catch (error) {
+        console.error('[MatchRoomView] 경기 결과 저장 실패:', error);
+        setSaveError(error.message || '경기 결과 저장에 실패했습니다.');
+      } finally {
+        setIsSavingResult(false);
+      }
+    };
+
+    persistMatchResult();
+  }, [phase, finishMethod, forcedResult, rscWinner, blueCorner, redCorner, currentRound, resultSaved, scores]);
 
   const resetMatch = () => {
     setPhase('lobby');
@@ -1399,6 +1510,11 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     setRscWinner(null);
     setFinishMethod(null);
     setCurrentScoreInput({ blue: null, red: null, dominant: null });
+    setShowForceStopModal(false);
+    setForcedResult({ winner: null, blueScore: '', redScore: '' });
+    setIsSavingResult(false);
+    setResultSaved(false);
+    setSaveError(null);
   };
 
   return (
@@ -1509,7 +1625,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg text-center">
                   <div className="text-xl sm:text-2xl mb-1">{blueCorner.avatar}</div>
                   <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{blueCorner.name}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{blueCorner.weight}kg • {blueCorner.record}</div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'} • {blueCorner.record}</div>
                   <div className="flex gap-1.5 sm:gap-2 mt-2">
                     <button 
                       onClick={() => setSelectingCorner('blue')}
@@ -1553,7 +1669,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 <div className="p-2 sm:p-3 bg-red-500/20 rounded-lg text-center">
                   <div className="text-xl sm:text-2xl mb-1">{redCorner.avatar}</div>
                   <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{redCorner.name}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{redCorner.weight}kg • {redCorner.record}</div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'} • {redCorner.record}</div>
                   <div className="flex gap-1.5 sm:gap-2 mt-2">
                     <button 
                       onClick={() => setSelectingCorner('red')}
@@ -1640,7 +1756,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                         <h3 className={`text-2xl font-bold ${selectingCorner === 'blue' ? 'text-blue-400' : 'text-red-400'}`}>
                           {selectingCorner === 'blue' ? '청코너' : '홍코너'} 선수 선택
                         </h3>
-                        <p className="text-sm text-gray-400">출석 회원을 선택하세요 (체급순)</p>
+                        <p className="text-sm text-gray-400">회원가입한 회원을 선택하세요 (체급순)</p>
                       </div>
                     </div>
                     <button 
@@ -1654,56 +1770,64 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
                 {/* 회원 리스트 */}
                 <div className="p-6 overflow-y-auto max-h-[60vh]">
-                  <div className="space-y-3">
-                    {attendedMembers.map((member) => {
-                      const isDisabled = (selectingCorner === 'blue' && redCorner?.id === member.id) || 
-                                       (selectingCorner === 'red' && blueCorner?.id === member.id);
-                      
-                      return (
-                        <button
-                          key={member.id}
-                          onClick={() => {
-                            if (selectingCorner === 'blue') {
-                              setBlueCorner(member);
-                              setSelectingCorner(null);
-                              // 청코너 선택 후 자동으로 홍코너 선택 모달 열기
-                              setTimeout(() => {
-                                if (!redCorner) setSelectingCorner('red');
-                              }, 300);
-                            } else {
-                              setRedCorner(member);
-                              setSelectingCorner(null);
-                            }
-                          }}
-                          disabled={isDisabled}
-                          className={`w-full p-5 rounded-xl border transition-all text-left ${
-                            isDisabled
-                              ? 'bg-white/5 border-white/20 opacity-40 cursor-not-allowed'
-                              : 'bg-gradient-to-r from-white/5 to-white/[0.02] border-white/10 hover:bg-white/10 hover:scale-[1.02] hover:border-white/30'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="text-4xl">{member.avatar}</div>
-                              <div>
-                                <div className="font-bold text-white text-xl mb-1">{member.name}</div>
-                                <div className="text-sm text-gray-400">{member.weight}kg • {member.record}</div>
+                  {isLoadingMembers ? (
+                    <div className="py-12 text-center text-gray-400">회원 정보를 불러오는 중...</div>
+                  ) : memberLoadError ? (
+                    <div className="py-12 text-center text-red-400">{memberLoadError}</div>
+                  ) : attendedMembers.length === 0 ? (
+                    <div className="py-12 text-center text-gray-400">회원가입한 일반 회원/선수 데이터가 없습니다.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {attendedMembers.map((member) => {
+                        const isDisabled = (selectingCorner === 'blue' && redCorner?.id === member.id) || 
+                                         (selectingCorner === 'red' && blueCorner?.id === member.id);
+                        
+                        return (
+                          <button
+                            key={member.id}
+                            onClick={() => {
+                              if (selectingCorner === 'blue') {
+                                setBlueCorner(member);
+                                setSelectingCorner(null);
+                                // 청코너 선택 후 자동으로 홍코너 선택 모달 열기
+                                setTimeout(() => {
+                                  if (!redCorner) setSelectingCorner('red');
+                                }, 300);
+                              } else {
+                                setRedCorner(member);
+                                setSelectingCorner(null);
+                              }
+                            }}
+                            disabled={isDisabled}
+                            className={`w-full p-5 rounded-xl border transition-all text-left ${
+                              isDisabled
+                                ? 'bg-white/5 border-white/20 opacity-40 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-white/5 to-white/[0.02] border-white/10 hover:bg-white/10 hover:scale-[1.02] hover:border-white/30'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="text-4xl">{member.avatar}</div>
+                                <div>
+                                  <div className="font-bold text-white text-xl mb-1">{member.name}</div>
+                                  <div className="text-sm text-gray-400">{member.weight ? `${member.weight}kg` : '체중 미등록'} • {member.record}</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs text-gray-500 mb-1">승률</div>
+                                <div className="text-2xl font-bold text-emerald-400">{member.winRate}%</div>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <div className="text-xs text-gray-500 mb-1">승률</div>
-                              <div className="text-2xl font-bold text-emerald-400">{member.winRate}%</div>
-                            </div>
-                          </div>
-                          {isDisabled && (
-                            <div className="mt-2 text-xs text-red-400">
-                              {selectingCorner === 'blue' ? '홍코너에 이미 선택됨' : '청코너에 이미 선택됨'}
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                            {isDisabled && (
+                              <div className="mt-2 text-xs text-red-400">
+                                {selectingCorner === 'blue' ? '홍코너에 이미 선택됨' : '청코너에 이미 선택됨'}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* 모달 푸터 */}
@@ -1737,7 +1861,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               <div className="text-center p-6 bg-blue-500/20 rounded-xl">
                 <div className="text-4xl mb-2">{blueCorner.avatar}</div>
                 <div className="text-xl font-bold text-blue-400">{blueCorner.name}</div>
-                <div className="text-sm text-gray-400">{blueCorner.weight}kg</div>
+                <div className="text-sm text-gray-400">{blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'}</div>
               </div>
               <div className="text-center">
                 <div className="text-4xl font-bold text-white">VS</div>
@@ -1745,7 +1869,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               <div className="text-center p-6 bg-red-500/20 rounded-xl">
                 <div className="text-4xl mb-2">{redCorner.avatar}</div>
                 <div className="text-xl font-bold text-red-400">{redCorner.name}</div>
-                <div className="text-sm text-gray-400">{redCorner.weight}kg</div>
+                <div className="text-sm text-gray-400">{redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'}</div>
               </div>
             </div>
           </SpotlightCard>
@@ -1760,6 +1884,16 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             }`}
           >
             {isPlaying ? '⏸️ 일시정지' : '▶️ 시작 / 재개'}
+          </button>
+
+          <button
+            onClick={() => {
+              setForcedResult({ winner: null, blueScore: '', redScore: '' });
+              setShowForceStopModal(true);
+            }}
+            className="w-full py-4 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-bold rounded-xl transition-all hover:scale-105"
+          >
+            ⛔ 경기 강제 종료
           </button>
 
           {/* RSC 버튼 */}
@@ -1853,6 +1987,16 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               <div className="text-4xl font-bold text-white mb-4">휴식 {formatTime(restTime)}</div>
             </div>
           </SpotlightCard>
+
+          <button
+            onClick={() => {
+              setForcedResult({ winner: null, blueScore: '', redScore: '' });
+              setShowForceStopModal(true);
+            }}
+            className="w-full py-4 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-bold rounded-xl transition-all hover:scale-105"
+          >
+            ⛔ 경기 강제 종료
+          </button>
 
           {/* 채점 */}
           {!scores[`round${currentRound}`] && (
@@ -2031,6 +2175,83 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
         </div>
       )}
 
+      {showForceStopModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-[#0A0A0A] border border-white/20 rounded-2xl p-6">
+            <h3 className="text-xl font-bold text-white mb-2">⛔ 경기 강제 종료</h3>
+            <p className="text-sm text-gray-400 mb-5">승자와 최종 점수를 입력하면 즉시 경기를 종료하고 전적에 반영합니다.</p>
+
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <button
+                onClick={() => setForcedResult(prev => ({ ...prev, winner: 'blue' }))}
+                className={`py-3 rounded-lg font-bold transition-all ${forcedResult.winner === 'blue' ? 'bg-blue-500 text-white' : 'bg-blue-500/20 text-blue-400'}`}
+              >
+                청코너 승
+              </button>
+              <button
+                onClick={() => setForcedResult(prev => ({ ...prev, winner: 'red' }))}
+                className={`py-3 rounded-lg font-bold transition-all ${forcedResult.winner === 'red' ? 'bg-red-500 text-white' : 'bg-red-500/20 text-red-400'}`}
+              >
+                홍코너 승
+              </button>
+              <button
+                onClick={() => setForcedResult(prev => ({ ...prev, winner: 'draw' }))}
+                className={`py-3 rounded-lg font-bold transition-all ${forcedResult.winner === 'draw' ? 'bg-gray-500 text-white' : 'bg-gray-700 text-gray-300'}`}
+              >
+                무승부
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <label className="block">
+                <div className="text-xs text-blue-400 mb-1">{blueCorner?.name || '청코너'} 점수</div>
+                <input
+                  type="number"
+                  min="0"
+                  value={forcedResult.blueScore}
+                  onChange={(e) => setForcedResult(prev => ({ ...prev, blueScore: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white"
+                />
+              </label>
+              <label className="block">
+                <div className="text-xs text-red-400 mb-1">{redCorner?.name || '홍코너'} 점수</div>
+                <input
+                  type="number"
+                  min="0"
+                  value={forcedResult.redScore}
+                  onChange={(e) => setForcedResult(prev => ({ ...prev, redScore: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShowForceStopModal(false)}
+                className="py-3 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  if (!forcedResult.winner || forcedResult.blueScore === '' || forcedResult.redScore === '') {
+                    alert('승자와 점수를 모두 입력해주세요.');
+                    return;
+                  }
+                  setIsPlaying(false);
+                  setFinishMethod('forced');
+                  setPhase('finish');
+                  setShowForceStopModal(false);
+                }}
+                className="py-3 rounded-lg bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-bold"
+              >
+                강제 종료 확정
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Phase 4: Finish - 판정 */}
       {phase === 'finish' && (
         <div className="space-y-6">
@@ -2038,16 +2259,16 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             <div className="text-center mb-8">
               <div className="text-6xl mb-4">🏆</div>
               <div className="text-3xl font-bold text-yellow-400 mb-2">
-                {finishMethod === 'rsc' ? 'RSC 승리!' : '판정 승리!'}
+                {finishMethod === 'rsc' ? 'RSC 승리!' : finishMethod === 'forced' ? '강제 종료 판정' : '판정 승리!'}
               </div>
-              <div className="text-5xl font-bold text-white mb-4">{calculateWinner()?.name}</div>
+              <div className="text-5xl font-bold text-white mb-4">{calculateWinner()?.name || '무승부'}</div>
               {finishMethod === 'rsc' ? (
                 <div className="text-xl text-gray-400">
                   ROUND {currentRound} - Referee Stops Contest
                 </div>
               ) : (
                 <div className="text-xl text-gray-400">
-                  {blueCorner.name} {(scores.round1?.blue || 0) + (scores.round2?.blue || 0) + (scores.round3?.blue || 0)} - {(scores.round1?.red || 0) + (scores.round2?.red || 0) + (scores.round3?.red || 0)} {redCorner.name}
+                  {blueCorner.name} {getFinalScore().blue} - {getFinalScore().red} {redCorner.name}
                 </div>
               )}
             </div>
@@ -2140,6 +2361,22 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 </div>
               </div>
             )}
+
+            {finishMethod === 'forced' && (
+              <div className="mb-6 p-4 bg-rose-500/10 rounded-xl border border-rose-500/30">
+                <div className="text-center">
+                  <div className="text-sm text-gray-400 mb-2">경기 종료 방식</div>
+                  <div className="text-2xl font-bold text-white mb-2">FORCED STOP</div>
+                  <div className="text-sm text-gray-500">코치가 강제 종료 후 승자/점수 입력</div>
+                </div>
+              </div>
+            )}
+
+            <div className="mb-4">
+              {isSavingResult && <div className="text-center text-yellow-400 text-sm">전적 저장 중...</div>}
+              {!isSavingResult && resultSaved && <div className="text-center text-emerald-400 text-sm">전적 저장 완료 (대시보드/전적에서 확인 가능)</div>}
+              {saveError && <div className="text-center text-red-400 text-sm">전적 저장 실패: {saveError}</div>}
+            </div>
 
             <button
               onClick={resetMatch}
