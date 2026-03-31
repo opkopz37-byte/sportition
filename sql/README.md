@@ -25,6 +25,7 @@
 - `00_reset_all.sql`: 전체 재설치가 필요할 때만 사용하는 초기화 파일
 - `01_core_schema.sql`: 회원, 비공개 프로필, 출석, 경기, 통계 같은 핵심 테이블
 - `02_game_schema.sql`: 가챠, 카드, 스킬트리, 승인 큐 같은 게임 시스템
+- `02_game_schema.sql`에는 기존 `matches` 테이블을 최신 구조(`match_id`, `opponent_id`, `played_at`, `score_for/score_against`)로 맞추는 마이그레이션이 포함됩니다.
 - `03_auth_and_triggers.sql`: 회원가입 동기화, 기존 `auth.users` 백필, 출석 처리 트리거, 키오스크 RPC
 - `04_rls_policies.sql`: 민감 데이터 보호와 본인 데이터 접근 정책
 - `05_views.sql`: 공개 선수 프로필, 카드 상세, 승인 큐 상세 뷰

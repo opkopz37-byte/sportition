@@ -274,3 +274,40 @@ CREATE POLICY "Users can update their own profile image"
 - 관리자는 모든 데이터에 접근 가능합니다.
 - 전화번호 마지막 4자리는 출석 체크 키오스크에서 사용됩니다.
 - 프로필 이미지는 Supabase Storage에 저장됩니다.
+
+---
+
+## MVP3 Matches (현재 기준)
+
+`sql/02_game_schema.sql` 기준으로 `matches`는 아래 구조를 사용합니다.
+
+```sql
+-- 핵심 컬럼
+id UUID PRIMARY KEY
+match_id UUID                      -- 같은 경기를 양쪽 행으로 묶는 식별자
+user_id UUID NOT NULL              -- FK -> public.users(id)
+opponent_id UUID                   -- FK -> public.users(id)
+result TEXT CHECK (result IN ('win', 'loss', 'draw'))
+score_for INTEGER                  -- optional
+score_against INTEGER              -- optional
+played_at TIMESTAMPTZ NOT NULL
+```
+
+### 인덱스
+
+```sql
+CREATE INDEX idx_matches_user_opponent_played_at
+  ON public.matches(user_id, opponent_id, played_at DESC);
+
+CREATE INDEX idx_matches_match_id
+  ON public.matches(match_id);
+```
+
+### RLS 핵심 규칙
+
+`sql/04_rls_policies.sql`에서 조회 정책은 다음을 따릅니다.
+
+- 본인이 `user_id`인 경기 조회 가능
+- 본인이 `opponent_id`인 경기 조회 가능
+
+즉, **본인이 참가한 경기만 조회 가능**합니다.
