@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
@@ -23,6 +23,22 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
   const [showDetailPage, setShowDetailPage] = useState(false);
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
 
+  const toDashboardMatchRow = useCallback((match) => {
+    const isKo = match.result === 'ko_win' || match.result === 'ko_loss';
+    return {
+      id: match.id,
+      result: match.normalized_result || 'draw',
+      opponent: match.opponent_label || 'Unknown',
+      opponentId: match.opponent_id || null,
+      date: match.match_date ? new Date(match.match_date).toLocaleDateString('ko-KR') : '-',
+      method: isKo ? `KO ${match.round || '-'}R` : (match.event_name || '기록 경기'),
+      score: isKo ? 'KO' : (match.notes || '-'),
+      rounds: match.round || '-',
+      weight: match.weight_class || '-',
+      icon: '🥊',
+    };
+  }, []);
+
   useEffect(() => {
     console.log('[Dashboard] 컴포넌트 마운트/업데이트');
     console.log('[Dashboard] 프로필 데이터:', profile);
@@ -30,6 +46,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
 
     const loadUserData = async () => {
       if (user?.id) {
+        setMatchLoading(true);
         console.log('[Dashboard] 사용자 데이터 로드 시작:', user.id);
         const supabaseModule = await import('@/lib/supabase');
         const { getUserStatistics, getUserAttendance, getUserMatches } = supabaseModule;
@@ -85,22 +102,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
           setMatchHistory([]);
         } else {
           const recentMatches = matchesResult.data?.recentMatches || [];
-          const formattedMatches = recentMatches.map((match) => {
-            const date = match.match_date ? new Date(match.match_date) : null;
-            const isKo = match.result === 'ko_win' || match.result === 'ko_loss';
-            return {
-              id: match.id,
-              result: match.normalized_result || 'draw',
-              opponent: match.opponent_label || 'Unknown',
-              opponentId: match.opponent_id || null,
-              date: date ? date.toLocaleDateString('ko-KR') : '-',
-              method: isKo ? `KO ${match.round || '-' }R` : (match.event_name || '기록 경기'),
-              score: isKo ? 'KO' : (match.notes || '-'),
-              rounds: match.round || '-',
-              weight: match.weight_class || '-',
-              icon: '🥊',
-            };
-          });
+          const formattedMatches = recentMatches.map(toDashboardMatchRow);
           setMatchHistory(formattedMatches);
           setMatchError('');
         }
@@ -113,7 +115,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
     };
 
     loadUserData();
-  }, [user, profile]);
+  }, [user, profile, toDashboardMatchRow]);
 
   useEffect(() => {
     const handleMatchChanged = async (event) => {
@@ -127,18 +129,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
         setMatchError('경기 기록을 갱신하지 못했습니다.');
       } else {
         const recentMatches = data?.recentMatches || [];
-        setMatchHistory(recentMatches.map((match) => ({
-          id: match.id,
-          result: match.normalized_result || 'draw',
-          opponent: match.opponent_label || 'Unknown',
-          opponentId: match.opponent_id || null,
-          date: match.match_date ? new Date(match.match_date).toLocaleDateString('ko-KR') : '-',
-          method: (match.result === 'ko_win' || match.result === 'ko_loss') ? `KO ${match.round || '-'}R` : (match.event_name || '기록 경기'),
-          score: (match.result === 'ko_win' || match.result === 'ko_loss') ? 'KO' : (match.notes || '-'),
-          rounds: match.round || '-',
-          weight: match.weight_class || '-',
-          icon: '🥊',
-        })));
+        setMatchHistory(recentMatches.map(toDashboardMatchRow));
         setMatchError('');
       }
       setMatchLoading(false);
@@ -146,7 +137,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
 
     window.addEventListener('matches:changed', handleMatchChanged);
     return () => window.removeEventListener('matches:changed', handleMatchChanged);
-  }, [user?.id]);
+  }, [user?.id, toDashboardMatchRow]);
   
   const monthNames = {
     ko: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'],
