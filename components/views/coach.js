@@ -1293,7 +1293,8 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [memberLoadError, setMemberLoadError] = useState(null);
   const [showForceStopModal, setShowForceStopModal] = useState(false);
-  const [forcedResult, setForcedResult] = useState({ winner: null, blueScore: '', redScore: '' });
+  const [forcedResult, setForcedResult] = useState({ winner: null, blueScore: '', redScore: '', finishType: 'decision' });
+  const [resultMethod, setResultMethod] = useState(null); // decision | tko | ko
   const [isSavingResult, setIsSavingResult] = useState(false);
   const [resultSaved, setResultSaved] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -1371,6 +1372,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             } else {
               setPhase('finish');
               setFinishMethod('decision');
+              setResultMethod('decision');
             }
             return 60;
           }
@@ -1419,8 +1421,9 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const handleRSC = (corner) => {
     setIsPlaying(false);
     setRscWinner(corner);
-    setForcedResult({ winner: corner, blueScore: '', redScore: '' });
+    setForcedResult({ winner: corner, blueScore: '', redScore: '', finishType: 'tko' });
     setFinishMethod('rsc');
+    setResultMethod('tko');
     setPhase('finish');
   };
 
@@ -1480,7 +1483,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
           blueUserId: blueCorner.id,
           redUserId: redCorner.id,
           winnerCorner,
-          finishMethod,
+          finishMethod: resultMethod || finishMethod,
           blueScore: finalScore.blue,
           redScore: finalScore.red,
           roundsPlayed: currentRound,
@@ -1496,7 +1499,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     };
 
     persistMatchResult();
-  }, [phase, finishMethod, forcedResult, rscWinner, blueCorner, redCorner, currentRound, resultSaved, scores]);
+  }, [phase, finishMethod, forcedResult, rscWinner, blueCorner, redCorner, currentRound, resultSaved, scores, resultMethod]);
 
   const resetMatch = () => {
     setPhase('lobby');
@@ -1511,7 +1514,8 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     setFinishMethod(null);
     setCurrentScoreInput({ blue: null, red: null, dominant: null });
     setShowForceStopModal(false);
-    setForcedResult({ winner: null, blueScore: '', redScore: '' });
+    setForcedResult({ winner: null, blueScore: '', redScore: '', finishType: 'decision' });
+    setResultMethod(null);
     setIsSavingResult(false);
     setResultSaved(false);
     setSaveError(null);
@@ -1888,7 +1892,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
           <button
             onClick={() => {
-              setForcedResult({ winner: null, blueScore: '', redScore: '' });
+              setForcedResult({ winner: null, blueScore: '', redScore: '', finishType: 'decision' });
               setShowForceStopModal(true);
             }}
             className="w-full py-4 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-bold rounded-xl transition-all hover:scale-105"
@@ -1990,7 +1994,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
           <button
             onClick={() => {
-              setForcedResult({ winner: null, blueScore: '', redScore: '' });
+              setForcedResult({ winner: null, blueScore: '', redScore: '', finishType: 'decision' });
               setShowForceStopModal(true);
             }}
             className="w-full py-4 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-bold rounded-xl transition-all hover:scale-105"
@@ -2202,6 +2206,30 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               </button>
             </div>
 
+            <div className="mb-4">
+              <div className="text-xs text-gray-400 mb-2">종료 방식</div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => setForcedResult(prev => ({ ...prev, finishType: 'decision' }))}
+                  className={`py-2 rounded-lg text-sm font-bold ${forcedResult.finishType === 'decision' ? 'bg-emerald-500 text-white' : 'bg-white/10 text-gray-300'}`}
+                >
+                  판정
+                </button>
+                <button
+                  onClick={() => setForcedResult(prev => ({ ...prev, finishType: 'tko' }))}
+                  className={`py-2 rounded-lg text-sm font-bold ${forcedResult.finishType === 'tko' ? 'bg-yellow-500 text-black' : 'bg-white/10 text-gray-300'}`}
+                >
+                  TKO
+                </button>
+                <button
+                  onClick={() => setForcedResult(prev => ({ ...prev, finishType: 'ko' }))}
+                  className={`py-2 rounded-lg text-sm font-bold ${forcedResult.finishType === 'ko' ? 'bg-red-500 text-white' : 'bg-white/10 text-gray-300'}`}
+                >
+                  KO
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3 mb-5">
               <label className="block">
                 <div className="text-xs text-blue-400 mb-1">{blueCorner?.name || '청코너'} 점수</div>
@@ -2239,6 +2267,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                     return;
                   }
                   setIsPlaying(false);
+                  setResultMethod(forcedResult.finishType || 'decision');
                   setFinishMethod('forced');
                   setPhase('finish');
                   setShowForceStopModal(false);
@@ -2259,7 +2288,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             <div className="text-center mb-8">
               <div className="text-6xl mb-4">🏆</div>
               <div className="text-3xl font-bold text-yellow-400 mb-2">
-                {finishMethod === 'rsc' ? 'RSC 승리!' : finishMethod === 'forced' ? '강제 종료 판정' : '판정 승리!'}
+                {resultMethod === 'ko' ? 'KO 승리!' : resultMethod === 'tko' ? 'TKO 승리!' : finishMethod === 'forced' ? '강제 종료 판정' : '판정 승리!'}
               </div>
               <div className="text-5xl font-bold text-white mb-4">{calculateWinner()?.name || '무승부'}</div>
               {finishMethod === 'rsc' ? (
@@ -2366,8 +2395,8 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               <div className="mb-6 p-4 bg-rose-500/10 rounded-xl border border-rose-500/30">
                 <div className="text-center">
                   <div className="text-sm text-gray-400 mb-2">경기 종료 방식</div>
-                  <div className="text-2xl font-bold text-white mb-2">FORCED STOP</div>
-                  <div className="text-sm text-gray-500">코치가 강제 종료 후 승자/점수 입력</div>
+                  <div className="text-2xl font-bold text-white mb-2">{(resultMethod || 'decision').toUpperCase()} (FORCED STOP)</div>
+                  <div className="text-sm text-gray-500">코치가 강제 종료 후 승자/점수/종료방식 입력</div>
                 </div>
               </div>
             )}
