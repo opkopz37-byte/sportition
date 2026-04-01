@@ -170,6 +170,46 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
         )}
       </SpotlightCard>
 
+      <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm sm:text-base font-bold text-white">전적 분석 (OP.GG 스타일)</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] sm:text-xs text-gray-500">최근 {recentMatches.length}경기</span>
+            <button
+              onClick={() => setShowAllRecentMatches(prev => !prev)}
+              className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
+            >
+              {showAllRecentMatches ? '접기' : '펼치기'}
+            </button>
+          </div>
+        </div>
+        {recentMatches.length === 0 ? (
+          <div className="text-xs sm:text-sm text-gray-500 py-4 text-center">기록된 경기 전적이 없습니다.</div>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {(showAllRecentMatches ? recentMatches : recentMatches.slice(0, 5)).map((m) => (
+              <div key={m.id} className={`p-2.5 sm:p-3 rounded-lg border ${
+                m.result === 'win' ? 'bg-emerald-500/10 border-emerald-500/30' :
+                m.result === 'loss' ? 'bg-red-500/10 border-red-500/30' :
+                'bg-gray-500/10 border-gray-500/30'
+              }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs sm:text-sm font-bold text-white truncate">vs {m.opponent}</div>
+                  <div className="text-[10px] sm:text-xs text-gray-400">{m.playedAt}</div>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-[11px] sm:text-xs">
+                  <span className="text-gray-300">점수 {m.score}</span>
+                  <span className="text-gray-300">{m.method}</span>
+                  <span className={m.result === 'win' ? 'text-emerald-400' : m.result === 'loss' ? 'text-red-400' : 'text-gray-300'}>
+                    {m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SpotlightCard>
+
       <SpotlightCard className="overflow-hidden">
         <div className="hidden sm:block bg-white/5 px-2 sm:px-4 py-2 border-b border-white/10 overflow-x-auto">
           <div className="grid grid-cols-12 gap-2 sm:gap-3 items-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase min-w-[500px]">
