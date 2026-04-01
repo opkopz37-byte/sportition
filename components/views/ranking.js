@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
-import { getPublicPlayerProfiles, getUserMatches } from '@/lib/supabase';
+import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
 
 const ITEMS_PER_PAGE = 50;
 const TIERS = ['All', 'Master', 'Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze'];
@@ -36,7 +36,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
   useEffect(() => {
     const loadPlayers = async () => {
       setLoading(true);
-      const { data } = await getPublicPlayerProfiles();
+      const { data } = await getMatchLeaderboard();
       setPlayers(data || []);
       setLoading(false);
     };
@@ -79,7 +79,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
     <div className="animate-fade-in-up">
       <PageHeader
         title={t('tierBoard')}
-        description={`전체 ${players.length.toLocaleString()}명의 선수를 불러왔습니다`}
+        description={`매치 전적 기준 랭킹 · 전체 ${players.length.toLocaleString()}명`}
       />
 
       <div className="mb-4 sm:mb-5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2">
@@ -121,13 +121,53 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
               </div>
             </div>
           </div>
-          <div className="text-right flex-shrink-0">
-            <div className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-              {profile?.tier_points || 0}
+            <div className="text-right flex-shrink-0">
+              <div className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
+                {(profile?.wins || 0) * 3 + (profile?.draws || 0)}
+              </div>
+              <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500">승점</div>
             </div>
-            <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500">포인트</div>
+          </div>
+      </SpotlightCard>
+
+      <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm sm:text-base font-bold text-white">전적 분석 (OP.GG 스타일)</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] sm:text-xs text-gray-500">최근 {recentMatches.length}경기</span>
+            <button
+              onClick={() => setShowAllRecentMatches(prev => !prev)}
+              className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
+            >
+              {showAllRecentMatches ? '접기' : '펼치기'}
+            </button>
           </div>
         </div>
+        {recentMatches.length === 0 ? (
+          <div className="text-xs sm:text-sm text-gray-500 py-4 text-center">기록된 경기 전적이 없습니다.</div>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {(showAllRecentMatches ? recentMatches : recentMatches.slice(0, 5)).map((m) => (
+              <div key={m.id} className={`p-2.5 sm:p-3 rounded-lg border ${
+                m.result === 'win' ? 'bg-emerald-500/10 border-emerald-500/30' :
+                m.result === 'loss' ? 'bg-red-500/10 border-red-500/30' :
+                'bg-gray-500/10 border-gray-500/30'
+              }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs sm:text-sm font-bold text-white truncate">vs {m.opponent}</div>
+                  <div className="text-[10px] sm:text-xs text-gray-400">{m.playedAt}</div>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-[11px] sm:text-xs">
+                  <span className="text-gray-300">점수 {m.score}</span>
+                  <span className="text-gray-300">{m.method}</span>
+                  <span className={m.result === 'win' ? 'text-emerald-400' : m.result === 'loss' ? 'text-red-400' : 'text-gray-300'}>
+                    {m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </SpotlightCard>
 
       <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6">
@@ -176,7 +216,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
             <div className="col-span-1">#</div>
             <div className="col-span-3">선수명</div>
             <div className="col-span-2">티어</div>
-            <div className="col-span-2">포인트</div>
+            <div className="col-span-2">승점</div>
             <div className="col-span-3">스타일</div>
             <div className="col-span-1 text-right">승률</div>
           </div>
@@ -193,8 +233,8 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
 
           {paginatedPlayers.map((player) => {
             const tierColor = getTierColor(player.tier);
-            const rank = player.rank || '-';
-            const isTopThree = Number.isInteger(player.rank) && player.rank <= 3;
+            const rank = player.rank_label || player.match_rank || '-';
+            const isTopThree = Number.isInteger(player.match_rank) && player.match_rank <= 3;
 
             return (
               <div
@@ -223,8 +263,8 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
                       </button>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold text-blue-400">{player.tier_points || 0}</div>
-                      <div className="text-[9px] text-gray-500">pts</div>
+                      <div className="text-lg font-bold text-blue-400">{player.match_points || 0}</div>
+                      <div className="text-[9px] text-gray-500">승점</div>
                     </div>
                   </div>
 
@@ -235,8 +275,11 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
                     <div className="flex items-center gap-2 text-gray-400">
                       <span>승률 {player.win_rate || 0}%</span>
                       <span>•</span>
-                      <span>{player.total_matches || 0}전</span>
+                      <span>{player.wins || 0}승 {player.losses || 0}패</span>
                     </div>
+                    {!player.qualified_rank && (
+                      <div className="text-[9px] text-amber-400 mt-1">배치 중 (5경기 미만)</div>
+                    )}
                   </div>
                 </div>
 
@@ -273,8 +316,8 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
                   </div>
 
                   <div className="col-span-2">
-                    <div className="font-bold text-sm sm:text-base text-white whitespace-nowrap">{(player.tier_points || 0).toLocaleString()}</div>
-                    <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">pts</div>
+                    <div className="font-bold text-sm sm:text-base text-white whitespace-nowrap">{(player.match_points || 0).toLocaleString()}</div>
+                    <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">승점</div>
                   </div>
 
                   <div className="col-span-3">
@@ -292,7 +335,8 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
 
                   <div className="col-span-1 text-right">
                     <div className="font-bold text-sm sm:text-base text-blue-400">{player.win_rate || 0}%</div>
-                    <div className="text-xs text-gray-500">{player.total_matches || 0}전</div>
+                    <div className="text-xs text-gray-500">{player.wins || 0}승 {player.losses || 0}패</div>
+                    {!player.qualified_rank && <div className="text-[10px] text-amber-400">배치 중</div>}
                   </div>
                 </div>
               </div>
