@@ -1413,14 +1413,12 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
             <div className="mt-5 pt-4 border-t border-white/10">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-sm font-bold text-white">상대 전적 리스트</h4>
-                {opponentMatches.length > 5 && (
-                  <button
-                    onClick={() => setShowAllOpponentMatches(prev => !prev)}
-                    className="text-[10px] px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white"
-                  >
-                    {showAllOpponentMatches ? '접기' : '펼치기'}
-                  </button>
-                )}
+                <button
+                  onClick={() => setShowAllOpponentMatches(prev => !prev)}
+                  className="text-[10px] px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white"
+                >
+                  {showAllOpponentMatches ? '접기' : '펼치기'}
+                </button>
               </div>
 
               {opponentMatches.length === 0 ? (

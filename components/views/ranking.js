@@ -135,14 +135,12 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
           <h3 className="text-sm sm:text-base font-bold text-white">전적 분석 (OP.GG 스타일)</h3>
           <div className="flex items-center gap-2">
             <span className="text-[10px] sm:text-xs text-gray-500">최근 {recentMatches.length}경기</span>
-            {recentMatches.length > 5 && (
-              <button
-                onClick={() => setShowAllRecentMatches(prev => !prev)}
-                className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
-              >
-                {showAllRecentMatches ? '접기' : '펼치기'}
-              </button>
-            )}
+            <button
+              onClick={() => setShowAllRecentMatches(prev => !prev)}
+              className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
+            >
+              {showAllRecentMatches ? '접기' : '펼치기'}
+            </button>
           </div>
         </div>
         {recentMatches.length === 0 ? (
