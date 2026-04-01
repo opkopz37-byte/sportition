@@ -11,6 +11,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
   const [statistics, setStatistics] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [matchHistory, setMatchHistory] = useState([]);
+  const [showAllMatchHistory, setShowAllMatchHistory] = useState(false);
   const [rankingNews, setRankingNews] = useState([]);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -86,6 +87,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
             const result = match.result === 'win' || match.result === 'loss' || match.result === 'draw' ? match.result : 'draw';
             return {
               icon: result === 'win' ? '🔥' : result === 'loss' ? '💥' : '🤝',
+              opponentId: match.opponent?.id || match.opponent_id || null,
               opponent: match.opponent_name || match.opponent?.nickname || match.opponent?.name || '상대 미상',
               date: dateLabel,
               result,
@@ -734,6 +736,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                 {matchHistory.length > 3 && (
                   <button 
                     onClick={() => {
+                      setShowAllMatchHistory(true);
                       const matchHistorySection = document.getElementById('match-history-section');
                       if (matchHistorySection) {
                         matchHistorySection.scrollIntoView({ behavior: 'smooth' });
@@ -763,7 +766,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveTab(`opponent-profile-${match.opponent}`);
+                                if (match.opponentId) setActiveTab(`opponent-profile-${match.opponentId}`);
                               }}
                               className="text-sm font-bold text-white hover:text-blue-400 transition-colors truncate"
                             >
@@ -1058,15 +1061,18 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
             <div className="flex items-center justify-between mb-3 xs:mb-4 sm:mb-6 gap-2">
               <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white">{t('matchHistory')}</h3>
               {matchHistory.length > 0 && (
-                <button className="px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg text-[10px] xs:text-xs sm:text-sm text-white font-bold transition-all hover:scale-105 flex items-center gap-1 xs:gap-2 whitespace-nowrap">
-                  {t('viewHistory')} <Icon type="arrowRight" size={12} className="xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4" />
+                <button
+                  onClick={() => setShowAllMatchHistory(prev => !prev)}
+                  className="px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg text-[10px] xs:text-xs sm:text-sm text-white font-bold transition-all hover:scale-105 flex items-center gap-1 xs:gap-2 whitespace-nowrap"
+                >
+                  {showAllMatchHistory ? '접기' : t('viewHistory')} <Icon type="arrowRight" size={12} className={`xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 transition-transform ${showAllMatchHistory ? 'rotate-90' : ''}`} />
                 </button>
               )}
             </div>
 
             {matchHistory.length > 0 ? (
               <div className="space-y-2 xs:space-y-3">
-                {matchHistory.map((match, i) => (
+                {(showAllMatchHistory ? matchHistory : matchHistory.slice(0, 5)).map((match, i) => (
                   <div key={i} className="bg-gradient-to-r from-white/5 to-white/[0.02] rounded-lg overflow-hidden hover:from-white/10 hover:to-white/5 transition-all border border-white/5 hover:border-white/20">
                     <div className="flex items-center justify-between p-2 xs:p-3 sm:p-4 gap-2 xs:gap-3">
                       <div className="flex items-center gap-2 xs:gap-3 sm:gap-4 flex-1 min-w-0">
@@ -1078,7 +1084,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveTab(`opponent-profile-${match.opponent}`);
+                                if (match.opponentId) setActiveTab(`opponent-profile-${match.opponentId}`);
                               }}
                               className="font-bold text-white text-xs xs:text-sm sm:text-base hover:text-blue-400 transition-colors underline decoration-transparent hover:decoration-blue-400 truncate"
                             >

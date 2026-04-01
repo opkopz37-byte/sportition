@@ -30,6 +30,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [players, setPlayers] = useState([]);
   const [recentMatches, setRecentMatches] = useState([]);
+  const [showAllRecentMatches, setShowAllRecentMatches] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -132,13 +133,21 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
       <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm sm:text-base font-bold text-white">전적 분석 (OP.GG 스타일)</h3>
-          <span className="text-[10px] sm:text-xs text-gray-500">최근 {recentMatches.length}경기</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] sm:text-xs text-gray-500">최근 {recentMatches.length}경기</span>
+            <button
+              onClick={() => setShowAllRecentMatches(prev => !prev)}
+              className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
+            >
+              {showAllRecentMatches ? '접기' : '펼치기'}
+            </button>
+          </div>
         </div>
         {recentMatches.length === 0 ? (
           <div className="text-xs sm:text-sm text-gray-500 py-4 text-center">기록된 경기 전적이 없습니다.</div>
         ) : (
           <div className="space-y-2 max-h-72 overflow-y-auto">
-            {recentMatches.map((m) => (
+            {(showAllRecentMatches ? recentMatches : recentMatches.slice(0, 5)).map((m) => (
               <div key={m.id} className={`p-2.5 sm:p-3 rounded-lg border ${
                 m.result === 'win' ? 'bg-emerald-500/10 border-emerald-500/30' :
                 m.result === 'loss' ? 'bg-red-500/10 border-red-500/30' :
