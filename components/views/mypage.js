@@ -1236,14 +1236,20 @@ const ActivityHistoryView = ({ setActiveTab, t = (key) => key }) => {
 // Opponent Profile 페이지
 const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => {
   const [opponent, setOpponent] = useState(null);
+  const [opponentMatches, setOpponentMatches] = useState([]);
+  const [showAllOpponentMatches, setShowAllOpponentMatches] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadOpponent = async () => {
       setLoading(true);
-      const { getPublicPlayerProfileById } = await import('@/lib/supabase');
-      const { data } = await getPublicPlayerProfileById(opponentId);
-      setOpponent(data);
+      const { getPublicPlayerProfileById, getUserMatches } = await import('@/lib/supabase');
+      const [{ data: profileData }, { data: matchData }] = await Promise.all([
+        getPublicPlayerProfileById(opponentId),
+        getUserMatches(opponentId, 50),
+      ]);
+      setOpponent(profileData);
+      setOpponentMatches(matchData || []);
       setLoading(false);
     };
 
@@ -1402,6 +1408,47 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
                 <span className="text-sm text-gray-400">현재 연승</span>
                 <span className="text-sm font-bold text-purple-400">{opponent.current_win_streak || 0}연승</span>
               </div>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-bold text-white">상대 전적 리스트</h4>
+                <button
+                  onClick={() => setShowAllOpponentMatches(prev => !prev)}
+                  className="text-[10px] px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white"
+                >
+                  {showAllOpponentMatches ? '접기' : '펼치기'}
+                </button>
+              </div>
+
+              {opponentMatches.length === 0 ? (
+                <div className="text-xs text-gray-500">표시할 전적이 없습니다.</div>
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {(showAllOpponentMatches ? opponentMatches : opponentMatches.slice(0, 5)).map((match) => (
+                    <div key={match.id} className="p-2 rounded-lg bg-white/5 border border-white/10">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs text-white font-bold truncate">
+                          vs {match.opponent_name || match.opponent?.nickname || match.opponent?.name || '상대 미상'}
+                        </div>
+                        <div className="text-[10px] text-gray-500">
+                          {match.played_at ? new Date(match.played_at).toISOString().split('T')[0] : '-'}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-1 text-[10px] text-gray-300">
+                        <span>{match.score || '-'}</span>
+                        <span>{(match.method || 'decision').toUpperCase()}</span>
+                        <span className={
+                          match.result === 'win' ? 'text-emerald-400' :
+                          match.result === 'loss' ? 'text-red-400' : 'text-gray-300'
+                        }>
+                          {match.result === 'win' ? '승' : match.result === 'loss' ? '패' : '무'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </SpotlightCard>
         </div>
