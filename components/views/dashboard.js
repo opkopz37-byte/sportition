@@ -10,6 +10,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
   const { profile, user } = useAuth();
   const [statistics, setStatistics] = useState(null);
   const [attendance, setAttendance] = useState([]);
+  const [matchHistory, setMatchHistory] = useState([]);
   const [rankingNews, setRankingNews] = useState([]);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -29,13 +30,13 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
       if (user?.id) {
         console.log('[Dashboard] 사용자 데이터 로드 시작:', user.id);
         const supabaseModule = await import('@/lib/supabase');
-        const { getUserStatistics, getUserAttendance } = supabaseModule;
+        const { getUserStatistics, getUserAttendance, getUserMatches } = supabaseModule;
         const supabase = supabaseModule.default || supabaseModule.supabase;
 
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const [statsResult, attendanceResult, rankingResult] = await Promise.all([
+        const [statsResult, attendanceResult, rankingResult, matchesResult] = await Promise.all([
           getUserStatistics(user.id),
           getUserAttendance(user.id, thirtyDaysAgo.toISOString()),
           // 실시간 랭킹 데이터 가져오기
@@ -43,7 +44,8 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
             .from('public_player_profiles')
             .select('id, display_name, tier, tier_points')
             .order('rank', { ascending: true, nullsFirst: false })
-            .limit(5)
+            .limit(5),
+          getUserMatches(user.id, 20),
         ]);
 
         if (statsResult.data) {
@@ -73,6 +75,30 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
         } else {
           console.warn('[Dashboard] 랭킹 데이터 없음');
           setRankingNews([]);
+        }
+
+        if (matchesResult.data) {
+          const formattedMatches = matchesResult.data.map((match) => {
+            const playedAt = match.played_at ? new Date(match.played_at) : null;
+            const dateLabel = playedAt && !Number.isNaN(playedAt.getTime())
+              ? playedAt.toISOString().split('T')[0]
+              : '-';
+            const result = match.result === 'win' || match.result === 'loss' || match.result === 'draw' ? match.result : 'draw';
+            return {
+              icon: result === 'win' ? '🔥' : result === 'loss' ? '💥' : '🤝',
+              opponentId: match.opponent?.id || match.opponent_id || null,
+              opponent: match.opponent_name || match.opponent?.nickname || match.opponent?.name || '상대 미상',
+              date: dateLabel,
+              result,
+              method: match.method || 'decision',
+              score: match.score || '-',
+              rounds: match.rounds || '-',
+              weight: profile?.weight ? `${profile.weight}kg` : '체급 미등록',
+            };
+          });
+          setMatchHistory(formattedMatches);
+        } else {
+          setMatchHistory([]);
         }
       }
     };
@@ -128,8 +154,6 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
       setShowDetailPage(false);
     }
   };
-
-  const matchHistory = [];
 
   // 자동 슬라이드 효과 - 1위부터 5위까지 보여주고 다시 1위로 (Hook을 최상위에 배치)
   useEffect(() => {
@@ -740,7 +764,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveTab(`opponent-profile-${match.opponent}`);
+                                if (match.opponentId) setActiveTab(`opponent-profile-${match.opponentId}`);
                               }}
                               className="text-sm font-bold text-white hover:text-blue-400 transition-colors truncate"
                             >
@@ -1055,7 +1079,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveTab(`opponent-profile-${match.opponent}`);
+                                if (match.opponentId) setActiveTab(`opponent-profile-${match.opponentId}`);
                               }}
                               className="font-bold text-white text-xs xs:text-sm sm:text-base hover:text-blue-400 transition-colors underline decoration-transparent hover:decoration-blue-400 truncate"
                             >

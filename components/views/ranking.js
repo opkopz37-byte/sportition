@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
-import { getPublicPlayerProfiles } from '@/lib/supabase';
+import { getPublicPlayerProfiles, getUserMatches } from '@/lib/supabase';
 
 const ITEMS_PER_PAGE = 50;
 const TIERS = ['All', 'Master', 'Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze'];
@@ -25,10 +25,12 @@ const getRoleBadgeClass = (role) => {
 };
 
 const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [selectedTier, setSelectedTier] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [players, setPlayers] = useState([]);
+  const [recentMatches, setRecentMatches] = useState([]);
+  const [showAllRecentMatches, setShowAllRecentMatches] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,6 +43,27 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
 
     loadPlayers();
   }, []);
+
+  useEffect(() => {
+    const loadRecentMatches = async () => {
+      if (!user?.id) {
+        setRecentMatches([]);
+        return;
+      }
+      const { data } = await getUserMatches(user.id, 20);
+      const normalized = (data || []).map((match) => ({
+        id: match.id,
+        opponent: match.opponent_name || match.opponent?.nickname || match.opponent?.name || '상대 미상',
+        score: match.score || '-',
+        method: (match.method || 'decision').toUpperCase(),
+        result: match.result || 'draw',
+        playedAt: match.played_at ? new Date(match.played_at).toISOString().split('T')[0] : '-',
+      }));
+      setRecentMatches(normalized);
+    };
+
+    loadRecentMatches();
+  }, [user?.id]);
 
   const filteredPlayers = selectedTier === 'All'
     ? players
@@ -105,6 +128,48 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
             <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500">포인트</div>
           </div>
         </div>
+      </SpotlightCard>
+
+      <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm sm:text-base font-bold text-white">전적 분석 (OP.GG 스타일)</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] sm:text-xs text-gray-500">최근 {recentMatches.length}경기</span>
+            {recentMatches.length > 5 && (
+              <button
+                onClick={() => setShowAllRecentMatches(prev => !prev)}
+                className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
+              >
+                {showAllRecentMatches ? '접기' : '펼치기'}
+              </button>
+            )}
+          </div>
+        </div>
+        {recentMatches.length === 0 ? (
+          <div className="text-xs sm:text-sm text-gray-500 py-4 text-center">기록된 경기 전적이 없습니다.</div>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {(showAllRecentMatches ? recentMatches : recentMatches.slice(0, 5)).map((m) => (
+              <div key={m.id} className={`p-2.5 sm:p-3 rounded-lg border ${
+                m.result === 'win' ? 'bg-emerald-500/10 border-emerald-500/30' :
+                m.result === 'loss' ? 'bg-red-500/10 border-red-500/30' :
+                'bg-gray-500/10 border-gray-500/30'
+              }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs sm:text-sm font-bold text-white truncate">vs {m.opponent}</div>
+                  <div className="text-[10px] sm:text-xs text-gray-400">{m.playedAt}</div>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-[11px] sm:text-xs">
+                  <span className="text-gray-300">점수 {m.score}</span>
+                  <span className="text-gray-300">{m.method}</span>
+                  <span className={m.result === 'win' ? 'text-emerald-400' : m.result === 'loss' ? 'text-red-400' : 'text-gray-300'}>
+                    {m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </SpotlightCard>
 
       <SpotlightCard className="overflow-hidden">
