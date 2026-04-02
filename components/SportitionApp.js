@@ -12,8 +12,6 @@ import { StyleStatsView } from '@/components/views/statistics';
 import { MyPageView, EditProfileView, PrivacySettingsView, NotificationsView, AccountSecurityView, ActivityHistoryView, OpponentProfileView, AchievementsView } from '@/components/views/mypage';
 import { CoachInsightsView, PlayersManagementView, MatchRoomView, AdminManagementView } from '@/components/views/coach';
 import { AttendanceView } from '@/components/views/attendance';
-import { GachaView } from '@/components/views/gacha';
-import { InventoryView } from '@/components/views/inventory';
 import { ApprovalView } from '@/components/views/approval';
 import { ComingSoonView } from '@/components/views/comingsoon';
 import { translations } from '@/lib/translations';
@@ -231,8 +229,14 @@ export default function SportitionApp() {
     switch(activeTab) {
       case 'dashboard': return <DashboardView setActiveTab={setActiveTab} t={t} role={effectiveRole} />;
       case 'attendance': return <AttendanceView setActiveTab={setActiveTab} t={t} language={language} />;
-      case 'gacha': return <GachaView setActiveTab={setActiveTab} t={t} />;
-      case 'inventory': return <InventoryView setActiveTab={setActiveTab} t={t} />;
+      case 'gacha':
+      case 'inventory':
+        return (
+          <ComingSoonView
+            title="카드·가챠는 추후 제공 예정입니다"
+            subtitle="지금은 출석으로 모은 스킬 포인트로 로드맵의 액티브 스킬 트리에서 노드를 찍을 수 있습니다."
+          />
+        );
       case 'dashboard-workout-details': return <ComingSoonView title={t('workoutResults')} />;
       case 'dashboard-steps': return <ComingSoonView title={t('stepsForToday')} />;
       case 'dashboard-habits': return <ComingSoonView title={t('myHabits')} />;

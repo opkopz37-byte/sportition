@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
 
 const ITEMS_PER_PAGE = 50;
+const RECENT_MATCHES_COLLAPSED = 1;
+const RECENT_MATCHES_EXPANDED = 5;
 const TIERS = ['All', 'Master', 'Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze'];
 
 const getTierColor = (tier = '') => {
@@ -30,7 +32,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [players, setPlayers] = useState([]);
   const [recentMatches, setRecentMatches] = useState([]);
-  const [showAllRecentMatches, setShowAllRecentMatches] = useState(false);
+  const [recentMatchesExpanded, setRecentMatchesExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -58,12 +60,26 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
         method: (match.method || 'decision').toUpperCase(),
         result: match.result || 'draw',
         playedAt: match.played_at ? new Date(match.played_at).toISOString().split('T')[0] : '-',
+        playedAtSort: match.played_at ? new Date(match.played_at).getTime() : 0,
       }));
+      normalized.sort((a, b) => b.playedAtSort - a.playedAtSort);
       setRecentMatches(normalized);
     };
 
     loadRecentMatches();
   }, [user?.id]);
+
+  useEffect(() => {
+    setRecentMatchesExpanded(false);
+  }, [user?.id]);
+
+  const visibleRecentMatches = useMemo(() => {
+    if (recentMatches.length === 0) return [];
+    const limit = recentMatchesExpanded ? RECENT_MATCHES_EXPANDED : RECENT_MATCHES_COLLAPSED;
+    return recentMatches.slice(0, limit);
+  }, [recentMatches, recentMatchesExpanded]);
+
+  const canExpandRecentMatches = recentMatches.length > RECENT_MATCHES_COLLAPSED;
 
   const filteredPlayers = selectedTier === 'All'
     ? players
@@ -131,63 +147,37 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
       </SpotlightCard>
 
       <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm sm:text-base font-bold text-white">전적 분석 (OP.GG 스타일)</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] sm:text-xs text-gray-500">최근 {recentMatches.length}경기</span>
-            <button
-              onClick={() => setShowAllRecentMatches(prev => !prev)}
-              className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
-            >
-              {showAllRecentMatches ? '접기' : '펼치기'}
-            </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
+          <h3 className="text-sm sm:text-base font-bold text-white">전적 분석</h3>
+          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+            <span className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">
+              최근 {recentMatches.length}경기
+            </span>
+            {user?.id && (
+              <button
+                type="button"
+                onClick={() => setActiveTab(`opponent-profile-${user.id}`)}
+                className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white whitespace-nowrap"
+              >
+                전체보기
+              </button>
+            )}
+            {canExpandRecentMatches && (
+              <button
+                type="button"
+                onClick={() => setRecentMatchesExpanded((prev) => !prev)}
+                className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white whitespace-nowrap"
+              >
+                {recentMatchesExpanded ? '접기' : '펼치기'}
+              </button>
+            )}
           </div>
         </div>
         {recentMatches.length === 0 ? (
           <div className="text-xs sm:text-sm text-gray-500 py-4 text-center">기록된 경기 전적이 없습니다.</div>
         ) : (
           <div className="space-y-2 max-h-72 overflow-y-auto">
-            {(showAllRecentMatches ? recentMatches : recentMatches.slice(0, 5)).map((m) => (
-              <div key={m.id} className={`p-2.5 sm:p-3 rounded-lg border ${
-                m.result === 'win' ? 'bg-emerald-500/10 border-emerald-500/30' :
-                m.result === 'loss' ? 'bg-red-500/10 border-red-500/30' :
-                'bg-gray-500/10 border-gray-500/30'
-              }`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs sm:text-sm font-bold text-white truncate">vs {m.opponent}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400">{m.playedAt}</div>
-                </div>
-                <div className="mt-1 flex items-center justify-between text-[11px] sm:text-xs">
-                  <span className="text-gray-300">점수 {m.score}</span>
-                  <span className="text-gray-300">{m.method}</span>
-                  <span className={m.result === 'win' ? 'text-emerald-400' : m.result === 'loss' ? 'text-red-400' : 'text-gray-300'}>
-                    {m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SpotlightCard>
-
-      <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm sm:text-base font-bold text-white">전적 분석 (OP.GG 스타일)</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] sm:text-xs text-gray-500">최근 {recentMatches.length}경기</span>
-            <button
-              onClick={() => setShowAllRecentMatches(prev => !prev)}
-              className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
-            >
-              {showAllRecentMatches ? '접기' : '펼치기'}
-            </button>
-          </div>
-        </div>
-        {recentMatches.length === 0 ? (
-          <div className="text-xs sm:text-sm text-gray-500 py-4 text-center">기록된 경기 전적이 없습니다.</div>
-        ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto">
-            {(showAllRecentMatches ? recentMatches : recentMatches.slice(0, 5)).map((m) => (
+            {visibleRecentMatches.map((m) => (
               <div key={m.id} className={`p-2.5 sm:p-3 rounded-lg border ${
                 m.result === 'win' ? 'bg-emerald-500/10 border-emerald-500/30' :
                 m.result === 'loss' ? 'bg-red-500/10 border-red-500/30' :
@@ -277,9 +267,6 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
                       <span>•</span>
                       <span>{player.wins || 0}승 {player.losses || 0}패</span>
                     </div>
-                    {!player.qualified_rank && (
-                      <div className="text-[9px] text-amber-400 mt-1">배치 중 (5경기 미만)</div>
-                    )}
                   </div>
                 </div>
 
@@ -336,7 +323,6 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
                   <div className="col-span-1 text-right">
                     <div className="font-bold text-sm sm:text-base text-blue-400">{player.win_rate || 0}%</div>
                     <div className="text-xs text-gray-500">{player.wins || 0}승 {player.losses || 0}패</div>
-                    {!player.qualified_rank && <div className="text-[10px] text-amber-400">배치 중</div>}
                   </div>
                 </div>
               </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 
 // Lucide 아이콘을 간단한 SVG로 대체
 const Icon = ({ type, size = 20, className = "", fill = "none" }) => {
+  const sizeFromClass = /(?:^|\s)(?:!)?w-\S|(?:^|\s)(?:!)?h-\S|(?:^|\s)size-\S/.test(className);
   const icons = {
     zap: <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />,
     target: <><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>,
@@ -43,8 +44,8 @@ const Icon = ({ type, size = 20, className = "", fill = "none" }) => {
   
   return (
     <svg 
-      width={size} 
-      height={size} 
+      width={sizeFromClass ? undefined : size} 
+      height={sizeFromClass ? undefined : size} 
       viewBox="0 0 24 24" 
       fill={fill} 
       stroke="currentColor" 
@@ -80,23 +81,28 @@ const THEME_COACH = THEME_PLAYER_ATHLETE;
 // 페이지 헤더 컴포넌트 (뒤로가기 버튼 포함)
 const PageHeader = ({ title, description, onBack, children }) => (
   <div className="mb-3 sm:mb-6">
-    <div className="flex items-center justify-between flex-wrap gap-2">
-      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
         {onBack && (
           <button
+            type="button"
             onClick={onBack}
-            className="w-7 h-7 sm:w-9 sm:h-9 flex-shrink-0 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all group"
+            className="w-7 h-7 sm:w-9 sm:h-9 flex-shrink-0 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all group mt-0.5"
             title="뒤로가기"
           >
             <Icon type="arrowLeft" size={14} className="sm:w-4 sm:h-4 text-gray-400 group-hover:text-white group-hover:-translate-x-1 transition-all" />
           </button>
         )}
         <div className="flex-1 min-w-0">
-          <h2 className="text-base sm:text-xl lg:text-2xl font-bold text-white mb-0.5 truncate">{title}</h2>
-          {description && <p className="text-[11px] sm:text-xs text-gray-500 truncate">{description}</p>}
+          <h2 className="text-base sm:text-xl lg:text-2xl font-bold text-white mb-0.5 break-words">{title}</h2>
+          {description && (
+            <p className="text-[11px] sm:text-xs text-gray-500 leading-snug break-words">{description}</p>
+          )}
         </div>
       </div>
-      {children && <div className="w-full sm:w-auto flex-shrink-0">{children}</div>}
+      {children && (
+        <div className="w-full sm:w-auto flex-shrink-0 flex flex-wrap gap-2 sm:justify-end">{children}</div>
+      )}
     </div>
   </div>
 );
@@ -106,8 +112,6 @@ const getMenuStructure = (t) => ({
   player_common: [
     { id: 'dashboard', labelKey: 'dashboard', icon: 'dashboard', submenus: [] },
     { id: 'attendance', labelKey: 'attendance', icon: 'calendar', submenus: [] },
-    { id: 'gacha', labelKey: 'gacha', icon: 'gift', submenus: [] },
-    { id: 'inventory', labelKey: 'inventory', icon: 'inbox', submenus: [] },
     { 
       id: 'roadmap', 
       labelKey: 'roadmap', 
@@ -142,8 +146,6 @@ const getMenuStructure = (t) => ({
   player_athlete: [
     { id: 'dashboard', labelKey: 'dashboard', icon: 'dashboard', submenus: [] },
     { id: 'attendance', labelKey: 'attendance', icon: 'calendar', submenus: [] },
-    { id: 'gacha', labelKey: 'gacha', icon: 'gift', submenus: [] },
-    { id: 'inventory', labelKey: 'inventory', icon: 'inbox', submenus: [] },
     {
       id: 'roadmap',
       labelKey: 'roadmap',

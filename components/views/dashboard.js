@@ -6,6 +6,67 @@ import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 // 대시보드 뷰
 
+const LIVE_MATCH_POINTS_SNAPSHOT_KEY = 'sportition_live_match_points_v1';
+
+/** 티어보드와 동일한 getMatchLeaderboard 상위 N명 기준, 이전 방문 대비 승점(매치 포인트) 변화 */
+function buildLiveRankingNews(leaderboardTop) {
+  if (!leaderboardTop?.length) return [];
+  let prev = {};
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(LIVE_MATCH_POINTS_SNAPSHOT_KEY);
+      if (raw) prev = JSON.parse(raw);
+    } catch {
+      prev = {};
+    }
+  }
+
+  const rows = leaderboardTop.map((p) => {
+    const pts = Number(p.match_points ?? 0);
+    const prevPts = prev[p.id];
+    let deltaType = 'same';
+    let deltaAbs = 0;
+    if (typeof prevPts !== 'number') {
+      deltaType = 'unknown';
+    } else {
+      const d = pts - prevPts;
+      if (d > 0) {
+        deltaType = 'up';
+        deltaAbs = d;
+      } else if (d < 0) {
+        deltaType = 'down';
+        deltaAbs = Math.abs(d);
+      } else {
+        deltaType = 'same';
+        deltaAbs = 0;
+      }
+    }
+    return {
+      id: p.id,
+      rank: p.rank_label || '-',
+      name: p.display_name || '사용자',
+      tier: p.tier || 'Bronze III',
+      matchPoints: pts,
+      deltaType,
+      deltaAbs,
+    };
+  });
+
+  if (typeof window !== 'undefined') {
+    try {
+      const next = {};
+      leaderboardTop.forEach((p) => {
+        next[p.id] = Number(p.match_points ?? 0);
+      });
+      localStorage.setItem(LIVE_MATCH_POINTS_SNAPSHOT_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return rows;
+}
+
 const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' }) => {
   const { profile, user } = useAuth();
   const [statistics, setStatistics] = useState(null);
@@ -31,21 +92,15 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
       if (user?.id) {
         console.log('[Dashboard] 사용자 데이터 로드 시작:', user.id);
         const supabaseModule = await import('@/lib/supabase');
-        const { getUserStatistics, getUserAttendance, getUserMatches } = supabaseModule;
-        const supabase = supabaseModule.default || supabaseModule.supabase;
+        const { getUserStatistics, getUserAttendance, getUserMatches, getMatchLeaderboard } = supabaseModule;
 
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const [statsResult, attendanceResult, rankingResult, matchesResult] = await Promise.all([
+        const [statsResult, attendanceResult, lbResult, matchesResult] = await Promise.all([
           getUserStatistics(user.id),
           getUserAttendance(user.id, thirtyDaysAgo.toISOString()),
-          // 실시간 랭킹 데이터 가져오기
-          supabase
-            .from('public_player_profiles')
-            .select('id, display_name, tier, tier_points')
-            .order('rank', { ascending: true, nullsFirst: false })
-            .limit(5),
+          getMatchLeaderboard(5),
           getUserMatches(user.id, 20),
         ]);
 
@@ -63,16 +118,9 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
           console.warn('[Dashboard] 출석 데이터 없음');
         }
 
-        if (rankingResult.data && rankingResult.data.length > 0) {
-          console.log('[Dashboard] 랭킹 데이터 로드:', rankingResult.data.length, '건');
-          const formattedRanking = rankingResult.data.map((item, index) => ({
-            rank: index + 1,
-            name: item.display_name || '사용자',
-            tier: item.tier || 'Bronze III',
-            change: '0',
-            type: 'same'
-          }));
-          setRankingNews(formattedRanking);
+        if (lbResult.data && lbResult.data.length > 0) {
+          console.log('[Dashboard] 실시간 랭킹(티어보드 연동):', lbResult.data.length, '건');
+          setRankingNews(buildLiveRankingNews(lbResult.data));
         } else {
           console.warn('[Dashboard] 랭킹 데이터 없음');
           setRankingNews([]);
@@ -166,6 +214,12 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
     }, 3000);
 
     return () => clearInterval(interval);
+  }, [rankingNews.length]);
+
+  useEffect(() => {
+    setCurrentNewsIndex((i) =>
+      rankingNews.length === 0 ? 0 : Math.min(i, rankingNews.length - 1)
+    );
   }, [rankingNews.length]);
 
   // 상세 페이지 렌더링
@@ -526,52 +580,68 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
       {/* 실시간 랭킹 헤드라인 */}
       {rankingNews.length > 0 && (
         <div className="overflow-hidden bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 border border-blue-500/30 rounded-lg xs:rounded-xl relative">
-          <div className="absolute left-1.5 xs:left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10">
+          <div className="absolute left-1.5 xs:left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
             <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 bg-black/50 backdrop-blur-sm px-1.5 xs:px-2 sm:px-3 py-0.5 xs:py-1 rounded-md xs:rounded-lg">
-              <span className="w-1.5 h-1.5 xs:w-2 xs:h-2 rounded-full bg-red-500 animate-pulse"></span>
+              <span className="w-1.5 h-1.5 xs:w-2 xs:h-2 rounded-full bg-red-500 animate-pulse" />
               <span className="text-[9px] xs:text-[10px] sm:text-xs font-bold text-gray-300">LIVE</span>
             </div>
           </div>
-          <div className="relative h-12 xs:h-14 sm:h-16 flex items-center justify-center">
-            <div 
-              className="absolute left-0 right-0 transition-transform duration-700 ease-in-out"
-              style={{ 
-                transform: `translateY(-${currentNewsIndex * (typeof window !== 'undefined' && window.innerWidth < 375 ? 48 : window.innerWidth < 640 ? 56 : 64)}px)` 
+          <div className="absolute right-1.5 xs:right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
+            <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 bg-black/50 backdrop-blur-sm px-1.5 xs:px-2 sm:px-3 py-0.5 xs:py-1 rounded-md xs:rounded-lg font-bold whitespace-nowrap">
+              {t('liveRanking')}
+            </div>
+          </div>
+
+          <div className="relative h-14 sm:h-16 overflow-hidden">
+            <div
+              className="transition-transform duration-700 ease-in-out will-change-transform"
+              style={{
+                transform: `translateY(-${(100 * currentNewsIndex) / rankingNews.length}%)`,
               }}
             >
               {rankingNews.map((news, index) => (
                 <div
-                  key={index}
-                  className="h-12 xs:h-14 sm:h-16 flex items-center justify-center px-3 xs:px-4 sm:px-6"
+                  key={news.id ?? index}
+                  className="h-14 sm:h-16 flex items-center justify-center box-border pl-[4.25rem] pr-[5.5rem] xs:pl-20 xs:pr-24 sm:pl-24 sm:pr-28"
                 >
-                  <div className="flex items-center gap-2 xs:gap-3 sm:gap-4">
-                    <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2">
-                      <span className="text-base xs:text-lg sm:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-500">
-                        #{news.rank}
-                      </span>
-                      <span className="text-sm xs:text-base sm:text-lg font-bold text-white truncate max-w-[80px] xs:max-w-none">{news.name}</span>
-                    </div>
-                    <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2">
-                      <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 rounded-md xs:rounded-lg bg-blue-500/20 text-blue-400 text-[9px] xs:text-[10px] sm:text-xs font-bold whitespace-nowrap">
+                  <div className="flex items-center justify-center gap-1.5 xs:gap-2 sm:gap-3 w-full min-w-0 max-w-full">
+                    <span className="text-sm xs:text-base sm:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-500 flex-shrink-0 tabular-nums">
+                      #{news.rank}
+                    </span>
+                    <span className="text-xs xs:text-sm sm:text-base font-bold text-white truncate min-w-0 flex-1 text-left">
+                      {news.name}
+                    </span>
+                    <div
+                      className="flex items-center gap-1 xs:gap-1.5 flex-shrink-0 min-w-0"
+                      title="매치 승점(승×3+무) 변화 — 이전에 본 랭킹 대비"
+                    >
+                      <span className="px-1.5 xs:px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 text-[9px] xs:text-[10px] sm:text-xs font-bold whitespace-nowrap truncate max-w-[5rem] xs:max-w-none">
                         {news.tier}
                       </span>
-                      <div className={`flex items-center gap-0.5 xs:gap-1 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded-md xs:rounded-lg text-[9px] xs:text-[10px] sm:text-xs font-bold ${
-                        news.type === 'up' ? 'bg-emerald-500/20 text-emerald-400' :
-                        news.type === 'down' ? 'bg-red-500/20 text-red-400' :
-                        'bg-gray-500/20 text-gray-400'
-                      }`}>
-                        {news.type === 'up' ? '↑' : news.type === 'down' ? '↓' : '━'}
-                        <span>{news.change}</span>
-                      </div>
+                      {news.deltaType === 'up' && (
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs font-bold tabular-nums whitespace-nowrap text-red-400">
+                          +{news.deltaAbs}pt
+                        </span>
+                      )}
+                      {news.deltaType === 'down' && (
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs font-bold tabular-nums whitespace-nowrap text-blue-400">
+                          -{news.deltaAbs}pt
+                        </span>
+                      )}
+                      {news.deltaType === 'same' && (
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs font-bold tabular-nums whitespace-nowrap text-gray-500">
+                          ±0pt
+                        </span>
+                      )}
+                      {news.deltaType === 'unknown' && (
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">
+                          —
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-          <div className="absolute right-1.5 xs:right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10">
-            <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 bg-black/50 backdrop-blur-sm px-1.5 xs:px-2 sm:px-3 py-0.5 xs:py-1 rounded-md xs:rounded-lg font-bold whitespace-nowrap">
-              {t('liveRanking')}
             </div>
           </div>
         </div>

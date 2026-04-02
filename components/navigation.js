@@ -39,13 +39,14 @@ return () => {
   onMouseLeave={handleMouseLeave}
 >
   <button
+    type="button"
     onClick={() => !hasSubmenus && setActiveTab(item.id)}
-    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 relative ${
+    className={`shrink-0 whitespace-nowrap px-[clamp(0.5rem,1.5vw,1rem)] py-[clamp(0.375rem,1vw,0.5rem)] rounded-lg text-[clamp(0.75rem,calc(0.9vw+0.4rem),0.875rem)] font-medium transition-all duration-200 flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] relative ${
       activeTab === item.id ? 'text-white bg-white/5' : 'text-gray-500 hover:text-gray-300'
     }`}
   >
-    <Icon type={item.icon} size={16} className={activeTab === item.id ? `text-${theme.accent}-400` : ''} />
-    {t(item.labelKey)}
+    <Icon type={item.icon} className={`w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0 ${activeTab === item.id ? `text-${theme.accent}-400` : ''}`} />
+    <span className="whitespace-nowrap">{t(item.labelKey)}</span>
     {item.alert && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full" />}
   </button>
 
@@ -176,29 +177,30 @@ return (
 
   return (
 <>
-  <header className="fixed top-0 inset-x-0 z-50 h-12 xs:h-14 sm:h-16 border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-2 xs:px-3 sm:px-4 lg:px-6">
-    <div className="flex items-center gap-2 sm:gap-6">
+  <header className="fixed top-0 inset-x-0 z-50 h-[clamp(2.75rem,7vw,4rem)] min-h-[2.75rem] border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-[clamp(0.375rem,2vw,1.5rem)] gap-2 min-w-0">
+    <div className="flex items-center gap-[clamp(0.375rem,2vw,1.5rem)] min-w-0 flex-1 lg:flex-initial">
       <button 
+        type="button"
         onClick={() => setShowMobileMenu(!showMobileMenu)}
-        className="md:hidden p-1.5 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-white"
+        className="lg:hidden shrink-0 p-1.5 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-white"
       >
         <Icon type={showMobileMenu ? "x" : "menu"} size={18} />
       </button>
 
-      <div className="flex items-center gap-1.5 sm:gap-2 font-bold text-white tracking-tight cursor-pointer" onClick={() => setActiveTab(menuItems[0]?.id || 'dashboard')}>
-        <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center ${
+      <div className="flex items-center gap-[clamp(0.25rem,1.2vw,0.5rem)] font-bold text-white tracking-tight cursor-pointer min-w-0 shrink-0" onClick={() => setActiveTab(menuItems[0]?.id || 'dashboard')}>
+        <div className={`rounded-lg flex items-center justify-center shrink-0 w-[clamp(1.375rem,3.5vw,1.75rem)] h-[clamp(1.375rem,3.5vw,1.75rem)] ${
           theme.accent === 'blue' 
             ? 'bg-blue-500/20 text-blue-500' 
             : theme.accent === 'emerald'
             ? 'bg-emerald-500/20 text-emerald-500'
             : 'bg-purple-500/20 text-purple-500'
         }`}>
-          {role === 'player_common' ? <Icon type="zap" size={14} className="sm:w-4 sm:h-4" fill="currentColor" /> : role === 'player_athlete' ? <Icon type="target" size={14} className="sm:w-4 sm:h-4" /> : <Icon type="home" size={14} className="sm:w-4 sm:h-4" />}
+          {role === 'player_common' ? <Icon type="zap" className="w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)]" fill="currentColor" /> : role === 'player_athlete' ? <Icon type="target" className="w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)]" /> : <Icon type="home" className="w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)]" />}
         </div>
-        <span className="text-xs sm:text-sm">Sportition</span>
+        <span className="text-[clamp(0.7rem,calc(0.8vw+0.45rem),0.875rem)] whitespace-nowrap truncate max-w-[min(8rem,28vw)] sm:max-w-none">Sportition</span>
       </div>
 
-      <nav className="hidden md:flex items-center gap-1">
+      <nav className="hidden lg:flex items-center gap-1 flex-nowrap" aria-label="Main">
         {menuItems.map(item => (
           <NavMenuItem 
             key={item.id}
@@ -212,7 +214,7 @@ return (
       </nav>
     </div>
 
-    <div className="flex items-center gap-1.5 sm:gap-3">
+    <div className="flex items-center gap-[clamp(0.25rem,1.5vw,0.75rem)] shrink-0 min-w-0 flex-shrink-0">
       {role === 'gym' && (
         <button
           onClick={() => window.open('/attendance', '_blank', 'width=1920,height=1080,toolbar=no,location=no,status=no,menubar=no,scrollbars=no')}
@@ -236,12 +238,11 @@ return (
               }}
               onFocus={() => setShowSearchResults(true)}
               placeholder={t('searchPlayers') || '선수 검색...'}
-              className="w-32 sm:w-48 lg:w-64 pl-8 pr-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
+              className="w-[clamp(6.5rem,22vw,16rem)] min-w-0 pl-8 pr-3 py-[clamp(0.25rem,1vw,0.375rem)] bg-white/5 border border-white/10 rounded-lg text-[clamp(0.6875rem,calc(0.5vw+0.55rem),0.875rem)] text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
             />
             <Icon 
               type="search" 
-              size={14} 
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none sm:w-4 sm:h-4" 
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none w-[clamp(0.8125rem,2vw,1rem)] h-[clamp(0.8125rem,2vw,1rem)]" 
             />
             {searchQuery && (
               <button
@@ -251,7 +252,7 @@ return (
                 }}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
               >
-                <Icon type="x" size={14} className="sm:w-4 sm:h-4" />
+                <Icon type="x" className="w-[clamp(0.8125rem,2vw,1rem)] h-[clamp(0.8125rem,2vw,1rem)]" />
               </button>
             )}
           </div>
@@ -315,17 +316,17 @@ return (
       <div className="relative" ref={langRef}>
         <button 
           onClick={() => setShowLangMenu(!showLangMenu)}
-          className="text-gray-400 hover:text-white transition-colors flex items-center gap-1 px-1.5 sm:px-2 py-1.5 rounded-lg hover:bg-white/5"
+          className="text-gray-400 hover:text-white transition-colors flex items-center gap-[clamp(0.125rem,0.8vw,0.375rem)] px-[clamp(0.25rem,1.2vw,0.5rem)] py-[clamp(0.25rem,1vw,0.375rem)] rounded-lg hover:bg-white/5 min-w-0"
         >
-          <Icon type="globe" size={14} className="sm:w-4 sm:h-4" />
-          <span className="text-xs sm:text-sm font-medium hidden xs:inline">{language === 'ko' ? 'KR' : 'EN'}</span>
+          <Icon type="globe" className="w-[clamp(0.8125rem,2vw,1rem)] h-[clamp(0.8125rem,2vw,1rem)] shrink-0" />
+          <span className="text-[clamp(0.65rem,calc(0.5vw+0.5rem),0.875rem)] font-medium hidden xs:inline whitespace-nowrap">{language === 'ko' ? 'KR' : 'EN'}</span>
         </button>
         
         {showLangMenu && (
-          <div className="absolute top-full right-0 mt-1.5 w-28 sm:w-32 bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up">
+          <div className="absolute top-full right-0 mt-1.5 w-[clamp(7rem,35vw,8.5rem)] bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up">
             <button
               onClick={() => { setLanguage('ko'); setShowLangMenu(false); }}
-              className={`w-full px-3 py-2 text-left text-xs sm:text-sm transition-colors flex items-center justify-between ${
+              className={`w-full px-[clamp(0.5rem,2vw,0.75rem)] py-[clamp(0.375rem,1.2vw,0.5rem)] text-left text-[clamp(0.6875rem,calc(0.4vw+0.55rem),0.875rem)] transition-colors flex items-center justify-between ${
                 language === 'ko' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -334,7 +335,7 @@ return (
             </button>
             <button
               onClick={() => { setLanguage('en'); setShowLangMenu(false); }}
-              className={`w-full px-3 py-2 text-left text-xs sm:text-sm transition-colors flex items-center justify-between ${
+              className={`w-full px-[clamp(0.5rem,2vw,0.75rem)] py-[clamp(0.375rem,1.2vw,0.5rem)] text-left text-[clamp(0.6875rem,calc(0.4vw+0.55rem),0.875rem)] transition-colors flex items-center justify-between ${
                 language === 'en' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
@@ -345,35 +346,35 @@ return (
         )}
       </div>
 
-      <div className="h-4 w-[1px] bg-white/10 hidden sm:block" />
+      <div className="h-[clamp(0.875rem,2vw,1rem)] w-px bg-white/10 hidden sm:block shrink-0" />
       
-      <div className="relative" ref={profileRef}>
+      <div className="relative min-w-0" ref={profileRef}>
         <button 
           onClick={() => setShowProfileMenu(!showProfileMenu)}
-          className="flex items-center gap-1.5 sm:gap-2 group hover:bg-white/5 rounded-lg px-1.5 py-1 transition-colors"
+          className="flex items-center gap-[clamp(0.25rem,1.2vw,0.5rem)] group hover:bg-white/5 rounded-lg px-[clamp(0.125rem,1vw,0.375rem)] py-[clamp(0.125rem,0.8vw,0.25rem)] transition-colors max-w-[min(100%,14rem)]"
         >
-          <div className="text-right hidden lg:block">
-            <div className="text-[10px] sm:text-xs font-medium text-white group-hover:text-gray-300 whitespace-nowrap">
+          <div className="text-right hidden lg:block min-w-0 max-w-[clamp(5rem,18vw,12rem)]">
+            <div className="text-[clamp(0.625rem,calc(0.35vw+0.5rem),0.75rem)] font-medium text-white group-hover:text-gray-300 truncate">
               {profile?.nickname || profile?.name || '사용자'}
             </div>
-            <div className={`text-[9px] sm:text-[10px] uppercase whitespace-nowrap ${
+            <div className={`text-[clamp(0.5625rem,calc(0.3vw+0.45rem),0.625rem)] uppercase truncate ${
               theme.accent === 'blue' ? 'text-blue-400' : 'text-emerald-400'
             }`}>
               {profile?.tier || (role === 'gym' ? (language === 'ko' ? '체육관' : 'Gym') : 'Bronze III')}
             </div>
           </div>
-          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border border-white/10 flex items-center justify-center text-[10px] sm:text-xs font-bold text-white">
+          <div className="rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border border-white/10 flex items-center justify-center font-bold text-white shrink-0 w-[clamp(1.5rem,4vw,1.75rem)] h-[clamp(1.5rem,4vw,1.75rem)] text-[clamp(0.5625rem,calc(0.35vw+0.45rem),0.75rem)]">
             {(profile?.nickname || profile?.name || 'U').charAt(0)}
           </div>
         </button>
 
         {showProfileMenu && (
-          <div className="absolute top-full right-0 mt-2 w-48 bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up">
-            <div className="px-4 py-3 border-b border-white/10">
-              <div className="text-sm font-medium text-white mb-0.5">
+          <div className="absolute top-full right-0 mt-2 w-[min(12rem,calc(100vw-2rem))] bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up">
+            <div className="px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] border-b border-white/10">
+              <div className="text-[clamp(0.8125rem,calc(0.35vw+0.65rem),0.875rem)] font-medium text-white mb-0.5 truncate">
                 {profile?.nickname || profile?.name || '사용자'}
               </div>
-              <div className="text-xs text-gray-400 truncate">
+              <div className="text-[clamp(0.65rem,calc(0.25vw+0.55rem),0.75rem)] text-gray-400 truncate">
                 {profile?.email}
               </div>
             </div>
@@ -383,9 +384,9 @@ return (
                 setActiveTab('mypage');
                 setShowProfileMenu(false);
               }}
-              className="w-full px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+              className="w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,calc(0.3vw+0.6rem),0.875rem)] text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
             >
-              <Icon type="user" size={16} />
+              <Icon type="user" className="w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0" />
               <span>{t('myPage') || '마이페이지'}</span>
             </button>
             
@@ -394,9 +395,9 @@ return (
                 setActiveTab('mypage-edit-profile');
                 setShowProfileMenu(false);
               }}
-              className="w-full px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+              className="w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,calc(0.3vw+0.6rem),0.875rem)] text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
             >
-              <Icon type="edit" size={16} />
+              <Icon type="edit" className="w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0" />
               <span>{t('editProfile') || '프로필 수정'}</span>
             </button>
             
@@ -405,9 +406,9 @@ return (
                 setActiveTab('mypage-security');
                 setShowProfileMenu(false);
               }}
-              className="w-full px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+              className="w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,calc(0.3vw+0.6rem),0.875rem)] text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
             >
-              <Icon type="shield" size={16} />
+              <Icon type="shield" className="w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0" />
               <span>{t('accountSecurity') || '계정 보안'}</span>
             </button>
 
@@ -417,9 +418,9 @@ return (
                   onLogout();
                   setShowProfileMenu(false);
                 }}
-                className="w-full px-4 py-3 text-left text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+                className="w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,calc(0.3vw+0.6rem),0.875rem)] text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors flex items-center gap-2"
               >
-                <Icon type="logout" size={16} />
+                <Icon type="logout" className="w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0" />
                 <span>{t('logout') || '로그아웃'}</span>
               </button>
             </div>
@@ -432,11 +433,11 @@ return (
   {showMobileMenu && (
     <>
       <div 
-        className="fixed inset-0 bg-black/60 z-40 md:hidden animate-fade-in"
+        className="fixed inset-0 bg-black/60 z-40 lg:hidden animate-fade-in"
         onClick={() => setShowMobileMenu(false)}
       />
       
-      <div className="fixed top-0 left-0 h-full w-64 sm:w-72 bg-[#0A0A0A] border-r border-white/10 z-50 md:hidden overflow-y-auto animate-fade-in-up">
+      <div className="fixed top-0 left-0 h-full w-64 sm:w-72 bg-[#0A0A0A] border-r border-white/10 z-50 lg:hidden overflow-y-auto animate-fade-in-up">
         <div className="flex items-center justify-between p-3 border-b border-white/10">
           <div className="flex items-center gap-2">
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${

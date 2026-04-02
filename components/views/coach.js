@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
 // 코치 뷰들
@@ -1298,53 +1298,119 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [isSavingResult, setIsSavingResult] = useState(false);
   const [resultSaved, setResultSaved] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [matchRoomStats, setMatchRoomStats] = useState({
+    todayMatches: 0,
+    todayRounds: 0,
+    poolWinRate: 0,
+  });
 
-  // 실제 DB 기준 회원가입 회원 로드 (RLS 영향을 줄이기 위해 공개 뷰 사용)
-  useEffect(() => {
-    const loadRegisteredMembers = async () => {
+  const formatMemberRecord = (wins, losses, draws, totalMatches) => {
+    const w = Number(wins) || 0;
+    const l = Number(losses) || 0;
+    const d = Number(draws) || 0;
+    const t = Number(totalMatches) || w + l + d;
+    if (t === 0) return '전적 없음';
+    return `${w}승 ${d}무 ${l}패`;
+  };
+
+  const normalizeWinRate = (winRate) => {
+    const n = Number(winRate);
+    if (!Number.isFinite(n)) return 0;
+    return Math.round(n * 10) / 10;
+  };
+
+  const loadMatchRoomData = useCallback(async (opts = { showLoading: true }) => {
+    if (opts.showLoading) {
       setIsLoadingMembers(true);
       setMemberLoadError(null);
+    }
 
-      try {
-        const { supabase } = await import('@/lib/supabase');
+    try {
+      const { supabase } = await import('@/lib/supabase');
 
-        const { data: users, error: usersError } = await supabase
-          .from('public_player_profiles')
-          .select('id, name, nickname, display_name, weight, rank')
-          .order('rank', { ascending: true, nullsFirst: false });
+      const { data: users, error: usersError } = await supabase
+        .from('public_player_profiles')
+        .select(
+          'id, name, nickname, display_name, weight, rank, wins, losses, draws, total_matches, win_rate'
+        )
+        .order('rank', { ascending: true, nullsFirst: false });
 
-        if (usersError) throw usersError;
+      if (usersError) throw usersError;
 
-        const avatarPool = ['🥊', '🥋', '⚡', '💪', '🔥', '⭐', '🏅', '🛡️'];
-        const mappedMembers = (users || [])
-          .map((user, index) => ({
-            id: user.id,
-            name: user.display_name || user.name || user.nickname || '이름 미등록',
-            weight: Number.isFinite(Number(user.weight)) ? Number(user.weight) : null,
-            record: '기록 준비중',
-            winRate: 0,
-            avatar: avatarPool[index % avatarPool.length],
-          }))
-          .sort((a, b) => {
-            if (a.weight === null && b.weight === null) return a.name.localeCompare(b.name, 'ko');
-            if (a.weight === null) return 1;
-            if (b.weight === null) return -1;
-            if (a.weight !== b.weight) return a.weight - b.weight;
-            return a.name.localeCompare(b.name, 'ko');
-          });
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
 
-        setAttendedMembers(mappedMembers);
-      } catch (error) {
-        console.error('[MatchRoomView] 회원 로드 실패:', error);
+      const { data: todayRows } = await supabase
+        .from('matches')
+        .select('rounds')
+        .gte('played_at', startOfDay.toISOString())
+        .lte('played_at', endOfDay.toISOString());
+
+      let todayMatches = 0;
+      let todayRounds = 0;
+      if (todayRows?.length) {
+        todayMatches = Math.round(todayRows.length / 2);
+        const sumRounds = todayRows.reduce((s, row) => s + (Number(row.rounds) || 0), 0);
+        todayRounds = Math.round(sumRounds / 2);
+      }
+
+      const avatarPool = ['🥊', '🥋', '⚡', '💪', '🔥', '⭐', '🏅', '🛡️'];
+      const mappedMembers = (users || []).map((user, index) => {
+        const wins = Number(user.wins) || 0;
+        const losses = Number(user.losses) || 0;
+        const draws = Number(user.draws) || 0;
+        const totalMatches = Number(user.total_matches) || wins + losses + draws;
+        return {
+          id: user.id,
+          name: user.display_name || user.name || user.nickname || '이름 미등록',
+          weight: Number.isFinite(Number(user.weight)) ? Number(user.weight) : null,
+          record: formatMemberRecord(wins, losses, draws, totalMatches),
+          winRate: normalizeWinRate(user.win_rate),
+          wins,
+          losses,
+          draws,
+          totalMatches,
+          avatar: avatarPool[index % avatarPool.length],
+        };
+      });
+
+      const sorted = mappedMembers.sort((a, b) => {
+        if (a.weight === null && b.weight === null) return a.name.localeCompare(b.name, 'ko');
+        if (a.weight === null) return 1;
+        if (b.weight === null) return -1;
+        if (a.weight !== b.weight) return a.weight - b.weight;
+        return a.name.localeCompare(b.name, 'ko');
+      });
+
+      const sumWins = sorted.reduce((s, m) => s + (m.wins || 0), 0);
+      const sumTotal = sorted.reduce((s, m) => s + (m.totalMatches || 0), 0);
+      const poolWinRate = sumTotal > 0 ? Math.round((sumWins / sumTotal) * 1000) / 10 : 0;
+
+      setMatchRoomStats({
+        todayMatches,
+        todayRounds,
+        poolWinRate,
+      });
+      setAttendedMembers(sorted);
+    } catch (error) {
+      console.error('[MatchRoomView] 회원 로드 실패:', error);
+      if (opts.showLoading) {
         setMemberLoadError(error.message || '회원 정보를 불러오지 못했습니다.');
         setAttendedMembers([]);
-      } finally {
+        setMatchRoomStats({ todayMatches: 0, todayRounds: 0, poolWinRate: 0 });
+      }
+    } finally {
+      if (opts.showLoading) {
         setIsLoadingMembers(false);
       }
-    };
-
-    loadRegisteredMembers();
+    }
   }, []);
+
+  useEffect(() => {
+    loadMatchRoomData({ showLoading: true });
+  }, [loadMatchRoomData]);
 
   // 타이머 로직
   useEffect(() => {
@@ -1490,6 +1556,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
         });
         if (error) throw error;
         setResultSaved(true);
+        loadMatchRoomData({ showLoading: false });
       } catch (error) {
         console.error('[MatchRoomView] 경기 결과 저장 실패:', error);
         setSaveError(error.message || '경기 결과 저장에 실패했습니다.');
@@ -1499,7 +1566,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     };
 
     persistMatchResult();
-  }, [phase, finishMethod, forcedResult, rscWinner, blueCorner, redCorner, currentRound, resultSaved, scores, resultMethod]);
+  }, [phase, finishMethod, forcedResult, rscWinner, blueCorner, redCorner, currentRound, resultSaved, scores, resultMethod, loadMatchRoomData]);
 
   const resetMatch = () => {
     setPhase('lobby');
@@ -1584,7 +1651,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                   🥊
                 </div>
                 <div className="min-w-0">
-                  <div className="text-base sm:text-xl font-bold text-white">12</div>
+                  <div className="text-base sm:text-xl font-bold text-white">{matchRoomStats.todayMatches}</div>
                   <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('todayMatches')}</div>
                 </div>
               </div>
@@ -1595,7 +1662,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                   ⚡
                 </div>
                 <div className="min-w-0">
-                  <div className="text-base sm:text-xl font-bold text-white">36</div>
+                  <div className="text-base sm:text-xl font-bold text-white">{matchRoomStats.todayRounds}</div>
                   <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('totalRounds')}</div>
                 </div>
               </div>
@@ -1606,8 +1673,10 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                   🏆
                 </div>
                 <div className="min-w-0">
-                  <div className="text-base sm:text-xl font-bold text-white">92%</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('completionRate')}</div>
+                  <div className="text-base sm:text-xl font-bold text-white">
+                    {matchRoomStats.poolWinRate}%
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('winRate')}</div>
                 </div>
               </div>
             </SpotlightCard>

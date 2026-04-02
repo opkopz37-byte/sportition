@@ -781,23 +781,23 @@ return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
-<div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-3 sm:p-6 text-center">
-  <div className="fixed top-3 right-3 sm:top-6 sm:right-6 z-50 flex items-center gap-2 sm:gap-3">
+<div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-[clamp(0.75rem,4vw,1.5rem)] py-[clamp(0.75rem,3vw,1.5rem)] text-center w-full max-w-[100vw] overflow-x-hidden">
+  <div className="fixed z-50 flex items-center gap-[clamp(0.375rem,1.5vw,0.75rem)] top-[clamp(0.5rem,2vw,1.5rem)] right-[clamp(0.5rem,2vw,1.5rem)]">
     <div className="relative" ref={langRef}>
       <button 
         onClick={() => setShowLangMenu(!showLangMenu)}
-        className="px-2 py-1.5 sm:px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white text-xs sm:text-sm font-medium transition-all flex items-center gap-1 sm:gap-2"
+        className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white font-medium transition-all flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] px-[clamp(0.5rem,2vw,1rem)] py-[clamp(0.375rem,1.2vw,0.5rem)] text-[clamp(0.6875rem,calc(1.5vw+0.25rem),0.875rem)] min-h-[2.25rem] sm:min-h-0"
       >
-        <Icon type="globe" size={14} className="sm:w-4 sm:h-4" />
-        <span className="hidden xs:inline">{language === 'ko' ? '한국어' : 'English'}</span>
+        <Icon type="globe" className="w-[clamp(0.875rem,2.5vw,1rem)] h-[clamp(0.875rem,2.5vw,1rem)] shrink-0" />
+        <span className="hidden xs:inline whitespace-nowrap">{language === 'ko' ? '한국어' : 'English'}</span>
         <span className="xs:hidden">{language === 'ko' ? 'KR' : 'EN'}</span>
       </button>
       
       {showLangMenu && (
-        <div className="absolute top-full right-0 mt-2 w-32 bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up">
+        <div className="absolute top-full right-0 mt-1.5 w-[clamp(7.5rem,40vw,8.5rem)] bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up">
           <button
             onClick={() => { setLanguage('ko'); setShowLangMenu(false); }}
-            className={`w-full px-4 py-3 text-left text-sm transition-colors flex items-center justify-between ${
+            className={`w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,1.8vw,0.875rem)] transition-colors flex items-center justify-between ${
               language === 'ko' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
           >
@@ -806,7 +806,7 @@ return () => document.removeEventListener('mousedown', handleClickOutside);
           </button>
           <button
             onClick={() => { setLanguage('en'); setShowLangMenu(false); }}
-            className={`w-full px-4 py-3 text-left text-sm transition-colors flex items-center justify-between ${
+            className={`w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,1.8vw,0.875rem)] transition-colors flex items-center justify-between ${
               language === 'en' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
           >
@@ -819,67 +819,69 @@ return () => document.removeEventListener('mousedown', handleClickOutside);
 
     <button
       onClick={onLoginClick}
-      className="px-2 py-1.5 sm:px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white text-xs sm:text-sm font-medium transition-all flex items-center gap-1 sm:gap-2 group"
+      className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white font-medium transition-all flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] group px-[clamp(0.5rem,2vw,1rem)] py-[clamp(0.375rem,1.2vw,0.5rem)] text-[clamp(0.6875rem,calc(1.5vw+0.25rem),0.875rem)] min-h-[2.25rem] sm:min-h-0"
     >
-      <Icon type="login" size={14} className="sm:w-4 sm:h-4 group-hover:rotate-12 transition-transform" />
-      <span className="hidden xs:inline">{t('login')}</span>
-      <span className="xs:hidden">로그인</span>
+      <Icon type="login" className="w-[clamp(0.875rem,2.5vw,1rem)] h-[clamp(0.875rem,2.5vw,1rem)] shrink-0 group-hover:rotate-12 transition-transform" />
+      <span className="hidden xs:inline whitespace-nowrap">{t('login')}</span>
+      <span className="xs:hidden whitespace-nowrap">로그인</span>
     </button>
   </div>
 
-  <div className="mb-6 xs:mb-8 sm:mb-12 space-y-2 xs:space-y-3 sm:space-y-4 animate-fade-in-up px-3 xs:px-4">
-    <div className="inline-flex items-center gap-1.5 xs:gap-2 px-2 xs:px-2.5 sm:px-3 py-0.5 xs:py-1 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm text-[9px] xs:text-[10px] sm:text-xs text-gray-400 mb-1.5 xs:mb-2 sm:mb-4">
-      <span className="w-1 h-1 xs:w-1.5 xs:h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500 animate-pulse"></span>
+  <div className="mb-[clamp(1.25rem,4vw,3rem)] space-y-[clamp(0.5rem,2vw,1rem)] animate-fade-in-up w-full max-w-[min(42rem,100%)] px-[clamp(0.25rem,2vw,0.5rem)]">
+    <div className="inline-flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] px-[clamp(0.5rem,2vw,0.75rem)] py-[clamp(0.125rem,0.8vw,0.25rem)] rounded-full border border-white/10 bg-white/5 backdrop-blur-sm text-[clamp(0.5625rem,calc(1.2vw+0.2rem),0.75rem)] text-gray-400 mb-[clamp(0.375rem,1.5vw,1rem)]">
+      <span className="rounded-full bg-blue-500 animate-pulse shrink-0 w-[clamp(0.25rem,1vw,0.5rem)] h-[clamp(0.25rem,1vw,0.5rem)]" />
       Sportition {t('version')} 2.0
     </div>
-    <h1 className="text-2xl xs:text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight text-white leading-tight">
+    <h1 className="font-bold tracking-tight text-white leading-[1.12] text-[clamp(1.375rem,calc(5vw+0.5rem),4.5rem)] break-keep">
       <span className="block">{t('buildYourLegacy')}</span>
       <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-white">
         {t('buildLegacy')}
       </span>
     </h1>
-    <p className="text-gray-400 max-w-lg mx-auto text-xs xs:text-sm sm:text-lg whitespace-pre-line leading-relaxed">
+    <p className="text-gray-400 max-w-[min(36rem,92vw)] mx-auto whitespace-pre-line leading-relaxed text-[clamp(0.75rem,calc(1.6vw+0.35rem),1.125rem)]">
       {t('landingDesc')}
     </p>
   </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 xs:gap-4 sm:gap-6 w-full max-w-4xl px-3 xs:px-4 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-[clamp(0.75rem,2.5vw,1.5rem)] w-full max-w-4xl animate-fade-in-up px-[clamp(0.25rem,1.5vw,0.5rem)]" style={{ animationDelay: '200ms' }}>
     <SpotlightCard 
       onClick={() => onSelectRole('player_common')}
       theme="blue"
-      className="p-4 xs:p-5 sm:p-8 group text-left h-40 xs:h-48 sm:h-64 flex flex-col justify-between hover:bg-white/[0.02]"
+      className="p-[clamp(1rem,3vw,2rem)] group text-left min-h-[clamp(11rem,32vh,16rem)] flex flex-col justify-between hover:bg-white/[0.02]"
     >
-      <div>
-        <div className="w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 mb-2 xs:mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
-          <Icon type="zap" size={18} className="xs:w-5 xs:h-5 sm:w-6 sm:h-6" />
+      <div className="min-w-0">
+        <div className="rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 mb-[clamp(0.5rem,2vw,1rem)] group-hover:scale-110 transition-transform w-[clamp(2.25rem,6vw,3rem)] h-[clamp(2.25rem,6vw,3rem)]">
+          <Icon type="zap" className="w-[clamp(1.125rem,3vw,1.5rem)] h-[clamp(1.125rem,3vw,1.5rem)]" />
         </div>
-        <h3 className="text-lg xs:text-xl sm:text-2xl font-bold text-white mb-1 xs:mb-1.5 sm:mb-2 group-hover:text-blue-400 transition-colors">{t('player')}</h3>
-        <p className="text-gray-500 text-[11px] xs:text-xs sm:text-sm whitespace-pre-line leading-relaxed">
+        <h3 className="font-bold text-white mb-[clamp(0.25rem,1vw,0.5rem)] group-hover:text-blue-400 transition-colors text-[clamp(1rem,calc(2.4vw+0.25rem),1.5rem)] break-keep">{t('player')}</h3>
+        <p className="text-gray-500 whitespace-pre-line leading-relaxed text-[clamp(0.6875rem,calc(1.35vw+0.3rem),0.875rem)]">
           {t('playerDesc')}
         </p>
       </div>
-      <div className="flex items-center text-[11px] xs:text-xs sm:text-sm text-gray-400 group-hover:text-white transition-colors">
-        {t('enterDashboard')} <Icon type="arrowRight" size={12} className="xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 ml-1.5 xs:ml-2 group-hover:translate-x-1 transition-transform" />
+      <div className="flex items-center text-gray-400 group-hover:text-white transition-colors mt-2 text-[clamp(0.6875rem,calc(1.35vw+0.3rem),0.875rem)]">
+        <span className="truncate">{t('enterDashboard')}</span>
+        <Icon type="arrowRight" className="ml-[clamp(0.375rem,1vw,0.5rem)] shrink-0 w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)] group-hover:translate-x-1 transition-transform" />
       </div>
     </SpotlightCard>
 
     <SpotlightCard 
       onClick={() => onSelectRole('gym')} 
       theme="blue"
-      className="p-4 xs:p-5 sm:p-8 group text-left h-40 xs:h-48 sm:h-64 flex flex-col justify-between hover:bg-white/[0.02]"
+      className="p-[clamp(1rem,3vw,2rem)] group text-left min-h-[clamp(11rem,32vh,16rem)] flex flex-col justify-between hover:bg-white/[0.02]"
       style={{ '--spotlight-color': '168, 85, 247' }}
     >
-      <div>
-        <div className="w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 mb-2 xs:mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
-          <Icon type="home" size={18} className="xs:w-5 xs:h-5 sm:w-6 sm:h-6" />
+      <div className="min-w-0">
+        <div className="rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 mb-[clamp(0.5rem,2vw,1rem)] group-hover:scale-110 transition-transform w-[clamp(2.25rem,6vw,3rem)] h-[clamp(2.25rem,6vw,3rem)]">
+          <Icon type="home" className="w-[clamp(1.125rem,3vw,1.5rem)] h-[clamp(1.125rem,3vw,1.5rem)]" />
         </div>
-        <h3 className="text-lg xs:text-xl sm:text-2xl font-bold text-white mb-1 xs:mb-1.5 sm:mb-2 group-hover:text-purple-400 transition-colors">{t('gym')}</h3>
-        <p className="text-gray-500 text-[11px] xs:text-xs sm:text-sm whitespace-pre-line leading-relaxed">
+        <h3 className="font-bold text-white mb-[clamp(0.25rem,1vw,0.5rem)] group-hover:text-purple-400 transition-colors text-[clamp(1rem,calc(2.4vw+0.25rem),1.5rem)] break-keep">{t('gym')}</h3>
+        <p className="text-gray-500 whitespace-pre-line leading-relaxed text-[clamp(0.6875rem,calc(1.35vw+0.3rem),0.875rem)]">
           {t('gymDesc')}
         </p>
       </div>
-      <div className="flex items-center text-[11px] xs:text-xs sm:text-sm text-gray-400 group-hover:text-white transition-colors">
-        {t('openGym')} <Icon type="arrowRight" size={12} className="xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 ml-1.5 xs:ml-2 group-hover:translate-x-1 transition-transform" />
+      <div className="flex items-center text-gray-400 group-hover:text-white transition-colors mt-2 text-[clamp(0.6875rem,calc(1.35vw+0.3rem),0.875rem)]">
+        <span className="truncate">{t('openGym')}</span>
+        <Icon type="arrowRight" className="ml-[clamp(0.375rem,1vw,0.5rem)] shrink-0 w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)] group-hover:translate-x-1 transition-transform" />
       </div>
     </SpotlightCard>
   </div>
