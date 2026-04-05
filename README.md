@@ -51,6 +51,19 @@ npm run build
 npm start
 ```
 
+`npm run build`는 Next.js 프로덕션 빌드입니다. OpenNext가 내부에서 이 스크립트를 호출하므로 **여기서는 `next build`만** 두는 것이 맞습니다(무한 재귀 방지).
+
+#### Cloudflare Workers (Git / Workers Builds)
+
+대시보드 **Settings → Build**에서 다음을 맞춥니다. Workers Builds는 [Wrangler의 `build.command`를 사용하지 않습니다](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
+
+| 항목 | 값 |
+|------|-----|
+| **Build command** | `npm run build:cloudflare` |
+| **Deploy command** | `npx wrangler deploy` (기본값 그대로 가능) |
+
+`npm run build`만 쓰면 `.open-next`가 없어 배포 단계에서 *compiled Open Next config* 오류가 납니다.
+
 ## 📁 프로젝트 구조
 
 ```

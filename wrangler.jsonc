@@ -2,10 +2,6 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
   "name": "sportition-nextjs",
-  // wrangler deploy 전에 OpenNext 산출물(.open-next) 생성 — CI에서 build가 next build만 돌아도 배포 단계에서 보완됨
-  "build": {
-    "command": "npm run build:cloudflare"
-  },
   "compatibility_date": "2025-04-01",
   "compatibility_flags": [
     "nodejs_compat",
