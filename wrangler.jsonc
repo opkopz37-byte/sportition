@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   // Workers Builds(Git) 빌드 커맨드는 대시보드에서 npm run build:cloudflare 로 설정. wrangler build.command는 CI에서 무시됨.
   "main": ".open-next/worker.js",
-  "name": "sportition-nextjs",
+  "name": "sportition",
   "compatibility_date": "2025-04-01",
   "compatibility_flags": [
     "nodejs_compat",
@@ -16,7 +16,7 @@
     {
       "binding": "WORKER_SELF_REFERENCE",
       // 반드시 위의 "name"과 동일해야 함 (열려 있으면 self-reference 배포 실패)
-      "service": "sportition-nextjs"
+      "service": "sportition"
     }
   ],
   "r2_buckets": [],

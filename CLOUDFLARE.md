@@ -47,6 +47,7 @@ npm run deploy
 
 ## 4. `wrangler.jsonc` 메모
 
+- **`name`**: Cloudflare Workers Builds에 연결된 **Worker 이름과 동일**해야 합니다 (예: `sportition`). 대시보드 프로젝트명과 다르면 self-reference·배포 매칭 오류가 납니다.
 - **`main`**: `.open-next/worker.js` — OpenNext 빌드 후에만 존재
 - **`assets.directory`**: `.open-next/assets`
 - **`WORKER_SELF_REFERENCE`**: `service` 값은 `name`과 동일해야 함
