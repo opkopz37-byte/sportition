@@ -2,6 +2,16 @@
 const nextConfig = {
   reactStrictMode: true,
 
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+        pathname: '/**',
+      },
+    ],
+  },
+
   /**
    * macOS 등에서 Watchpack EMFILE(너무 많은 파일 감시)로 `next dev` 컴파일이 실패하면
    * HTML 500 · layout.css / main-app.js 등 /_next/* 404가 연쇄로 보일 수 있음.

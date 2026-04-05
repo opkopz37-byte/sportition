@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -13,11 +13,7 @@ const InventoryView = ({ t = (key) => key, setActiveTab }) => {
   const [filterType, setFilterType] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
 
-  useEffect(() => {
-    loadCards();
-  }, [user, filterRarity, filterType]);
-
-  const loadCards = async () => {
+  const loadCards = useCallback(async () => {
     if (!user?.id) return;
 
     setLoading(true);
@@ -28,7 +24,7 @@ const InventoryView = ({ t = (key) => key, setActiveTab }) => {
       if (filterType) filters.card_type = filterType;
 
       const { data, error } = await getUserCards(user.id, filters);
-      
+
       if (error) {
         console.error('[Inventory] 카드 로드 에러:', error);
       } else {
@@ -40,7 +36,11 @@ const InventoryView = ({ t = (key) => key, setActiveTab }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, filterRarity, filterType]);
+
+  useEffect(() => {
+    loadCards();
+  }, [loadCards]);
 
   const handleUpgrade = async (cardId) => {
     try {

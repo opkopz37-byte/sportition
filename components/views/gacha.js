@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -13,17 +13,13 @@ const GachaView = ({ t = (key) => key, setActiveTab }) => {
   const [pullResults, setPullResults] = useState(null);
   const [showResults, setShowResults] = useState(false);
 
-  useEffect(() => {
-    loadInventory();
-  }, [user]);
-
-  const loadInventory = async () => {
+  const loadInventory = useCallback(async () => {
     if (!user?.id) return;
 
     try {
       const { getUserInventory } = await import('@/lib/supabase');
       const { data, error } = await getUserInventory(user.id);
-      
+
       if (error) {
         console.error('[Gacha] 인벤토리 로드 에러:', error);
       } else {
@@ -34,7 +30,11 @@ const GachaView = ({ t = (key) => key, setActiveTab }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    loadInventory();
+  }, [loadInventory]);
 
   const handlePull = async (pullCount) => {
     if (isPulling || !user?.id) return;

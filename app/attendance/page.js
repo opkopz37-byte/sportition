@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { searchUserByPhone, kioskCheckAttendance } from '@/lib/supabase';
 
 export default function AttendancePage() {
@@ -37,7 +38,7 @@ export default function AttendancePage() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [phoneInput]);
+  }, [phoneInput, handleCheckIn, handleReset]);
 
   const handleNumberClick = (num) => {
     if (phoneInput.length < 4) {
@@ -49,59 +50,61 @@ export default function AttendancePage() {
     setPhoneInput(phoneInput.slice(0, -1));
   };
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setPhoneInput('');
     setSearchResults([]);
     setSelectedMember(null);
     setShowSuccess(false);
     setError('');
-  };
+  }, []);
 
-  const handleCheckIn = async () => {
-    if (phoneInput.length === 4) {
-      setError('');
-      
-      const { data: users, error: searchError } = await searchUserByPhone(phoneInput);
-      
-      if (searchError) {
-        setError('검색 중 오류가 발생했습니다.');
+  const processAttendance = useCallback(
+    async (member) => {
+      const { error: attendanceError, message } = await kioskCheckAttendance(
+        member.id,
+        member.membership_type
+      );
+
+      if (attendanceError) {
+        setError(message || '출석 체크에 실패했습니다.');
+        setTimeout(() => {
+          handleReset();
+        }, 3000);
         return;
       }
 
-      if (!users || users.length === 0) {
-        setError('등록된 회원 정보가 없습니다.');
-        setTimeout(() => {
-          handleReset();
-        }, 2000);
-      } else if (users.length === 1) {
-        await processAttendance(users[0]);
-      } else {
-        setSearchResults(users);
-      }
-    }
-  };
+      setSelectedMember(member);
+      setShowSuccess(true);
 
-  const processAttendance = async (member) => {
-    const { data, error: attendanceError, message } = await kioskCheckAttendance(
-      member.id,
-      member.membership_type
-    );
-
-    if (attendanceError) {
-      setError(message || '출석 체크에 실패했습니다.');
       setTimeout(() => {
         handleReset();
       }, 3000);
+    },
+    [handleReset]
+  );
+
+  const handleCheckIn = useCallback(async () => {
+    if (phoneInput.length !== 4) return;
+    setError('');
+
+    const { data: users, error: searchError } = await searchUserByPhone(phoneInput);
+
+    if (searchError) {
+      setError('검색 중 오류가 발생했습니다.');
       return;
     }
 
-    setSelectedMember(member);
-    setShowSuccess(true);
-    
-    setTimeout(() => {
-      handleReset();
-    }, 3000);
-  };
+    if (!users || users.length === 0) {
+      setError('등록된 회원 정보가 없습니다.');
+      setTimeout(() => {
+        handleReset();
+      }, 2000);
+    } else if (users.length === 1) {
+      await processAttendance(users[0]);
+    } else {
+      setSearchResults(users);
+    }
+  }, [phoneInput, handleReset, processAttendance]);
 
   const formatTime = (date) => {
     const year = date.getFullYear();
@@ -154,11 +157,14 @@ export default function AttendancePage() {
           </button>
         </div>
 
-        <div className="w-full md:w-1/2 relative overflow-hidden">
-          <img 
+        <div className="w-full md:w-1/2 relative overflow-hidden min-h-[40vh] md:min-h-0 md:h-full">
+          <Image
             src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80"
             alt="Gym"
-            className="w-full h-full object-cover"
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 50vw"
+            priority
           />
           <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/50" />
           
@@ -229,11 +235,14 @@ export default function AttendancePage() {
         </button>
       </div>
 
-      <div className="w-full md:w-1/2 relative overflow-hidden hidden md:block">
-        <img 
+      <div className="w-full md:w-1/2 relative overflow-hidden hidden md:block md:h-full min-h-0">
+        <Image
           src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80"
           alt="Gym"
-          className="w-full h-full object-cover"
+          fill
+          className="object-cover"
+          sizes="50vw"
+          priority
         />
         <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/50" />
         

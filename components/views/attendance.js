@@ -1,8 +1,66 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
+
+function calculateStreak(records) {
+  if (!records || records.length === 0) return 0;
+
+  const sortedDates = records
+    .map((r) => new Date(r.check_in_time).toISOString().split('T')[0])
+    .sort((a, b) => new Date(b) - new Date(a));
+
+  let streak = 0;
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+  if (sortedDates[0] !== today && sortedDates[0] !== yesterday) {
+    return 0;
+  }
+
+  let currentDate = new Date(sortedDates[0]);
+
+  for (let i = 0; i < sortedDates.length; i++) {
+    const recordDate = new Date(sortedDates[i]);
+    const diffDays = Math.floor((currentDate - recordDate) / 86400000);
+
+    if (diffDays <= 1) {
+      streak++;
+      currentDate = recordDate;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+function calculateLongestStreak(records) {
+  if (!records || records.length === 0) return 0;
+
+  const sortedDates = records
+    .map((r) => new Date(r.check_in_time).toISOString().split('T')[0])
+    .sort((a, b) => new Date(a) - new Date(b));
+
+  let maxStreak = 1;
+  let currentStreak = 1;
+
+  for (let i = 1; i < sortedDates.length; i++) {
+    const prevDate = new Date(sortedDates[i - 1]);
+    const currDate = new Date(sortedDates[i]);
+    const diffDays = Math.floor((currDate - prevDate) / 86400000);
+
+    if (diffDays === 1) {
+      currentStreak++;
+      maxStreak = Math.max(maxStreak, currentStreak);
+    } else {
+      currentStreak = 1;
+    }
+  }
+
+  return maxStreak;
+}
 
 const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => {
   const { user, profile, refreshProfile } = useAuth();
@@ -19,13 +77,7 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
     skillPointsEarned: 0
   });
 
-  useEffect(() => {
-    if (user) {
-      loadAttendanceData();
-    }
-  }, [user]);
-
-  const loadAttendanceData = async () => {
+  const loadAttendanceData = useCallback(async () => {
     if (!user?.id) return;
 
     try {
@@ -77,66 +129,13 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
     } catch (error) {
       console.error('[Attendance] 출석 데이터 로드 에러:', error);
     }
-  };
+  }, [user]);
 
-  const calculateStreak = (records) => {
-    if (!records || records.length === 0) return 0;
-    
-    const sortedDates = records
-      .map(r => new Date(r.check_in_time).toISOString().split('T')[0])
-      .sort((a, b) => new Date(b) - new Date(a));
-    
-    let streak = 0;
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    
-    // 오늘 또는 어제 출석이 있어야 연속 출석으로 인정
-    if (sortedDates[0] !== today && sortedDates[0] !== yesterday) {
-      return 0;
+  useEffect(() => {
+    if (user) {
+      loadAttendanceData();
     }
-    
-    let currentDate = new Date(sortedDates[0]);
-    
-    for (let i = 0; i < sortedDates.length; i++) {
-      const recordDate = new Date(sortedDates[i]);
-      const diffDays = Math.floor((currentDate - recordDate) / 86400000);
-      
-      if (diffDays <= 1) {
-        streak++;
-        currentDate = recordDate;
-      } else {
-        break;
-      }
-    }
-    
-    return streak;
-  };
-
-  const calculateLongestStreak = (records) => {
-    if (!records || records.length === 0) return 0;
-    
-    const sortedDates = records
-      .map(r => new Date(r.check_in_time).toISOString().split('T')[0])
-      .sort((a, b) => new Date(a) - new Date(b));
-    
-    let maxStreak = 1;
-    let currentStreak = 1;
-    
-    for (let i = 1; i < sortedDates.length; i++) {
-      const prevDate = new Date(sortedDates[i - 1]);
-      const currDate = new Date(sortedDates[i]);
-      const diffDays = Math.floor((currDate - prevDate) / 86400000);
-      
-      if (diffDays === 1) {
-        currentStreak++;
-        maxStreak = Math.max(maxStreak, currentStreak);
-      } else {
-        currentStreak = 1;
-      }
-    }
-    
-    return maxStreak;
-  };
+  }, [user, loadAttendanceData]);
 
   const handleCheckAttendance = async () => {
     if (todayChecked || isChecking || !user?.id) return;
