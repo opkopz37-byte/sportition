@@ -1,9 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
+import {
+  TERMS_OF_SERVICE_FULL_TEXT,
+  TERMS_DOCUMENT_TITLE_KO,
+} from '@/lib/legal/termsOfService';
 // 마이페이지 뷰들
 
 const MyPageView = ({ setActiveTab, t }) => {
@@ -130,6 +135,7 @@ const MyPageView = ({ setActiveTab, t }) => {
         <div className="space-y-3">
           {[
             { id: 'edit-profile', label: t('editProfile') },
+            { id: 'terms', label: t('termsOfService') },
             { id: 'privacy', label: t('privacySettings') },
             { id: 'notifications', label: t('notifications') },
             { id: 'security', label: t('accountSecurity') }
@@ -494,6 +500,21 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
 
       <div className="space-y-4">
         <SpotlightCard className="p-6">
+          <h3 className="text-lg font-bold text-white mb-3">{TERMS_DOCUMENT_TITLE_KO}</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            이용약관 전문은 개인정보 수집·이용 동의 본문과 동일합니다.{' '}
+            <Link href="/terms" className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer">
+              전체 페이지
+            </Link>
+          </p>
+          <div className="max-h-[min(50vh,22rem)] overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-4">
+            <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm leading-relaxed text-gray-300">
+              {TERMS_OF_SERVICE_FULL_TEXT}
+            </pre>
+          </div>
+        </SpotlightCard>
+
+        <SpotlightCard className="p-6">
           <h3 className="text-lg font-bold text-white mb-6">프로필 공개 범위</h3>
           
           <div className="space-y-4">
@@ -754,6 +775,24 @@ const AccountSecurityView = ({ setActiveTab, t = (key) => key }) => {
               </div>
             </div>
           )}
+        </SpotlightCard>
+
+        <SpotlightCard className="p-6">
+          <h3 className="text-lg font-bold text-white mb-2">이용약관 · 개인정보 동의 전문</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            회원가입 시 동의한 내용과 동일합니다.{' '}
+            <button
+              type="button"
+              onClick={() => setActiveTab('mypage-terms')}
+              className="text-blue-400 hover:text-blue-300 underline"
+            >
+              전체 보기
+            </button>
+            {' · '}
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+              새 창
+            </a>
+          </p>
         </SpotlightCard>
 
         <SpotlightCard className="p-6">
@@ -1390,6 +1429,9 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
             <div className="text-center mb-4">
               <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-1">
                 {opponent.tier || 'Unranked'}
+              </div>
+              <div className="text-sm text-blue-300 font-semibold mb-0.5">
+                {t('victoryPoints') || '승점'} {opponent.match_points ?? opponent.tier_points ?? 0}
               </div>
               <div className="text-sm text-gray-400">전국 랭킹 #{opponent.rank || '-'}</div>
             </div>

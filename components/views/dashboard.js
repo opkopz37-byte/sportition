@@ -1,12 +1,53 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
+import { getNextTierInfo, getTierRingProgress } from '@/lib/tierLadder';
 // 대시보드 뷰
 
 const LIVE_MATCH_POINTS_SNAPSHOT_KEY = 'sportition_live_match_points_v1';
+const TRAINING_PLANS_STORAGE_KEY = 'sportition_calendar_plans_v1';
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function ymdFromParts(year, monthIndex, day) {
+  return `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
+}
+
+function localYmdFromIso(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return ymdFromParts(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function attendanceRecordYmd(rec) {
+  if (rec.attendance_date) {
+    const s = String(rec.attendance_date);
+    if (s.length >= 10) return s.slice(0, 10);
+  }
+  return localYmdFromIso(rec.check_in_time);
+}
+
+function weekYmdKeys(anchorYmd) {
+  const [y, m, d] = anchorYmd.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const day = date.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + mondayOffset);
+  const keys = [];
+  for (let i = 0; i < 7; i++) {
+    const x = new Date(monday);
+    x.setDate(monday.getDate() + i);
+    keys.push(ymdFromParts(x.getFullYear(), x.getMonth(), x.getDate()));
+  }
+  return keys;
+}
 
 /** 티어보드와 동일한 getMatchLeaderboard 상위 N명 기준, 이전 방문 대비 승점(매치 포인트) 변화 */
 function buildLiveRankingNews(leaderboardTop) {
@@ -78,10 +119,21 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [calendarViewMode, setCalendarViewMode] = useState('day');
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [showWorkoutModal, setShowWorkoutModal] = useState(false);
-  const [showDetailPage, setShowDetailPage] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarModalKey, setCalendarModalKey] = useState(null);
+  const [calendarPlanDraft, setCalendarPlanDraft] = useState('');
+  const [rawMatches, setRawMatches] = useState([]);
+  const [skillProgressWithNodes, setSkillProgressWithNodes] = useState([]);
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
+
+  const tierBoardUi = useMemo(() => {
+    const mp = profile?.match_points ?? profile?.tier_points ?? 0;
+    return {
+      mp,
+      ring: getTierRingProgress(mp),
+      next: getNextTierInfo(mp),
+    };
+  }, [profile?.match_points, profile?.tier_points]);
 
   useEffect(() => {
     console.log('[Dashboard] 컴포넌트 마운트/업데이트');
@@ -92,16 +144,23 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
       if (user?.id) {
         console.log('[Dashboard] 사용자 데이터 로드 시작:', user.id);
         const supabaseModule = await import('@/lib/supabase');
-        const { getUserStatistics, getUserAttendance, getUserMatches, getMatchLeaderboard } = supabaseModule;
+        const {
+          getUserStatistics,
+          getUserAttendance,
+          getUserMatches,
+          getMatchLeaderboard,
+          getUserSkillNodeProgressWithNodes,
+        } = supabaseModule;
 
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const lookback = new Date();
+        lookback.setDate(lookback.getDate() - 400);
 
-        const [statsResult, attendanceResult, lbResult, matchesResult] = await Promise.all([
+        const [statsResult, attendanceResult, lbResult, matchesResult, skillProgressResult] = await Promise.all([
           getUserStatistics(user.id),
-          getUserAttendance(user.id, thirtyDaysAgo.toISOString()),
+          getUserAttendance(user.id, lookback.toISOString()),
           getMatchLeaderboard(5),
-          getUserMatches(user.id, 20),
+          getUserMatches(user.id, 200),
+          getUserSkillNodeProgressWithNodes(user.id),
         ]);
 
         if (statsResult.data) {
@@ -127,6 +186,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
         }
 
         if (matchesResult.data) {
+          setRawMatches(matchesResult.data);
           const formattedMatches = matchesResult.data.map((match) => {
             const playedAt = match.played_at ? new Date(match.played_at) : null;
             const dateLabel = playedAt && !Number.isNaN(playedAt.getTime())
@@ -138,6 +198,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
               opponentId: match.opponent?.id || match.opponent_id || null,
               opponent: match.opponent_name || match.opponent?.nickname || match.opponent?.name || '상대 미상',
               date: dateLabel,
+              played_at: match.played_at,
               result,
               method: match.method || 'decision',
               score: match.score || '-',
@@ -147,7 +208,14 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
           });
           setMatchHistory(formattedMatches);
         } else {
+          setRawMatches([]);
           setMatchHistory([]);
+        }
+
+        if (skillProgressResult.data) {
+          setSkillProgressWithNodes(skillProgressResult.data);
+        } else {
+          setSkillProgressWithNodes([]);
         }
       }
     };
@@ -181,28 +249,130 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
   };
   
   const calendarDays = getCalendarDays(currentYear, currentMonth);
-  
-  const attendanceDays = attendance
-    .filter(record => {
-      const date = new Date(record.check_in_time);
-      return date.getFullYear() === currentYear && date.getMonth() === currentMonth;
-    })
-    .map(record => new Date(record.check_in_time).getDate());
-  
+
+  const attendanceDays = useMemo(() => {
+    return attendance
+      .filter((record) => {
+        const ds = attendanceRecordYmd(record);
+        if (!ds) return false;
+        const [y, m] = ds.split('-').map(Number);
+        return y === currentYear && m - 1 === currentMonth;
+      })
+      .map((record) => {
+        const ds = attendanceRecordYmd(record);
+        return parseInt(ds.split('-')[2], 10);
+      });
+  }, [attendance, currentYear, currentMonth]);
+
   const workoutDays = attendanceDays;
-  const today = new Date().getDate();
 
-  // 샘플 훈련 데이터 (상세 정보 포함)
-  const workoutData = {};
+  const matchDaysInMonth = useMemo(() => {
+    const s = new Set();
+    (rawMatches || []).forEach((m) => {
+      const k = localYmdFromIso(m.played_at);
+      if (!k) return;
+      const [y, mo, da] = k.split('-').map(Number);
+      if (y === currentYear && mo - 1 === currentMonth) s.add(da);
+    });
+    return s;
+  }, [rawMatches, currentYear, currentMonth]);
 
-  const handleDateClick = (day) => {
-    if (day && workoutData[day]) { // 운동 데이터가 있는 날짜만 클릭 가능
-      console.log('날짜 클릭:', day);
-      setSelectedDate(day);
-      setShowWorkoutModal(true);
-      setShowDetailPage(false);
+  const skillDaysInMonth = useMemo(() => {
+    const s = new Set();
+    (skillProgressWithNodes || []).forEach((row) => {
+      if (!row.updated_at) return;
+      const k = localYmdFromIso(row.updated_at);
+      if (!k) return;
+      const [y, mo, da] = k.split('-').map(Number);
+      if (y === currentYear && mo - 1 === currentMonth) s.add(da);
+    });
+    return s;
+  }, [skillProgressWithNodes, currentYear, currentMonth]);
+
+  const realNow = new Date();
+  const isTodayCell = (day) =>
+    !!day &&
+    currentYear === realNow.getFullYear() &&
+    currentMonth === realNow.getMonth() &&
+    day === realNow.getDate();
+
+  const modalAttendance = useMemo(() => {
+    if (!calendarModalKey) return [];
+    return attendance.filter((r) => attendanceRecordYmd(r) === calendarModalKey);
+  }, [attendance, calendarModalKey]);
+
+  const modalMatches = useMemo(() => {
+    if (!calendarModalKey) return [];
+    return (rawMatches || []).filter((m) => localYmdFromIso(m.played_at) === calendarModalKey);
+  }, [rawMatches, calendarModalKey]);
+
+  const modalSkills = useMemo(() => {
+    if (!calendarModalKey) return [];
+    return (skillProgressWithNodes || []).filter((row) => {
+      if (!row.investment_count || row.investment_count < 1) return false;
+      return localYmdFromIso(row.updated_at) === calendarModalKey;
+    });
+  }, [skillProgressWithNodes, calendarModalKey]);
+
+  const weekKeysAroundModal = useMemo(
+    () => (calendarModalKey ? weekYmdKeys(calendarModalKey) : []),
+    [calendarModalKey]
+  );
+
+  const weekSummary = useMemo(() => {
+    if (!calendarModalKey || weekKeysAroundModal.length === 0) return { att: 0, matches: 0 };
+    const set = new Set(weekKeysAroundModal);
+    let att = 0;
+    attendance.forEach((r) => {
+      const y = attendanceRecordYmd(r);
+      if (y && set.has(y)) att += 1;
+    });
+    let matches = 0;
+    (rawMatches || []).forEach((m) => {
+      const y = localYmdFromIso(m.played_at);
+      if (y && set.has(y)) matches += 1;
+    });
+    return { att, matches };
+  }, [calendarModalKey, weekKeysAroundModal, attendance, rawMatches]);
+
+  const handleCalendarDayClick = (day) => {
+    if (!day) return;
+    const key = ymdFromParts(currentYear, currentMonth, day);
+    setCalendarModalKey(key);
+    let plans = {};
+    try {
+      const raw = localStorage.getItem(TRAINING_PLANS_STORAGE_KEY);
+      if (raw) plans = JSON.parse(raw);
+    } catch {
+      plans = {};
     }
+    setCalendarPlanDraft(typeof plans[key] === 'string' ? plans[key] : '');
+    setShowCalendarModal(true);
   };
+
+  const persistCalendarPlan = () => {
+    if (!calendarModalKey) return;
+    let plans = {};
+    try {
+      const raw = localStorage.getItem(TRAINING_PLANS_STORAGE_KEY);
+      if (raw) plans = JSON.parse(raw);
+    } catch {
+      plans = {};
+    }
+    plans[calendarModalKey] = calendarPlanDraft;
+    localStorage.setItem(TRAINING_PLANS_STORAGE_KEY, JSON.stringify(plans));
+  };
+
+  const modalWeekdayLabel = useMemo(() => {
+    if (!calendarModalKey) return '';
+    const [y, m, d] = calendarModalKey.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const idx = dt.getDay();
+    const labels = lang === 'ko'
+      ? ['일', '월', '화', '수', '목', '금', '토']
+      : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return labels[idx];
+  }, [calendarModalKey, lang]);
 
   // 자동 슬라이드 효과 - 1위부터 5위까지 보여주고 다시 1위로 (Hook을 최상위에 배치)
   useEffect(() => {
@@ -222,178 +392,164 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
     );
   }, [rankingNews.length]);
 
-  // 상세 페이지 렌더링
-  if (showDetailPage && selectedDate && workoutData[selectedDate]) {
-    return (
-      <div className="animate-fade-in-up space-y-6">
-        {/* 헤더 */}
-        <div className="mb-8 flex items-center justify-between">
-          <button 
-            onClick={() => setShowDetailPage(false)}
-            className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all group"
-          >
-            <Icon type="arrowLeft" size={20} className="text-gray-400 group-hover:text-white group-hover:-translate-x-1 transition-all" />
-            <span className="text-white font-bold">{t('backButton')}</span>
-          </button>
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-white mb-2">
-              🗓️ {workoutData[selectedDate].date} ({workoutData[selectedDate].dayOfWeek})
-            </h1>
-            <p className="text-gray-400">상세 트레이닝 리포트</p>
+  const calendarDayModal =
+    showCalendarModal && calendarModalKey ? (
+      <div
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+        onClick={() => setShowCalendarModal(false)}
+      >
+        <div
+          className="bg-[#0A0A0A] border border-white/20 rounded-2xl max-w-[95vw] sm:max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-5 sm:p-6 border-b border-white/10 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-white">
+                  {calendarModalKey} ({modalWeekdayLabel})
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">{t('calendarDaySummary')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCalendarModal(false)}
+                className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
+                aria-label={t('calendarClose')}
+              >
+                <span className="text-xl">✕</span>
+              </button>
+            </div>
           </div>
-          <div className="w-40"></div>
-        </div>
 
-        {/* 전체 통계 */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-          <SpotlightCard className="p-2.5 sm:p-4 border-l-4 border-blue-500">
-            <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">총 운동 시간</div>
-            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-white mb-0.5 whitespace-nowrap">{workoutData[selectedDate].totalTime}분</div>
-            <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">일일 목표 대비 120%</div>
-          </SpotlightCard>
-          <SpotlightCard className="p-2.5 sm:p-4 border-l-4 border-red-500">
-            <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">소모 칼로리</div>
-            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-white mb-0.5 whitespace-nowrap">{workoutData[selectedDate].calories}kcal</div>
-            <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">목표 800kcal 달성</div>
-          </SpotlightCard>
-          <SpotlightCard className="p-2.5 sm:p-4 border-l-4 border-purple-500">
-            <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">운동 종목</div>
-            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-white mb-0.5 whitespace-nowrap">{workoutData[selectedDate].exercises.length}개</div>
-            <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">균형잡힌 루틴</div>
-          </SpotlightCard>
-          <SpotlightCard className="p-2.5 sm:p-4 border-l-4 border-yellow-500">
-            <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">만족도</div>
-            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-yellow-400 whitespace-nowrap">
-              {workoutData[selectedDate].satisfaction}/5
-            </div>
-            <div className="text-[9px] sm:text-[10px] text-gray-500">
-              {'⭐'.repeat(workoutData[selectedDate].satisfaction || 0)}
-            </div>
-          </SpotlightCard>
-        </div>
-
-        {/* 운동 상세 내역 */}
-        <SpotlightCard className="p-4 sm:p-8">
-          <h3 className="text-xl sm:text-3xl font-bold text-white mb-4 sm:mb-8 flex items-center gap-2 sm:gap-3">
-            <span className="text-2xl sm:text-3xl">📋</span>
-            <span>운동 상세 내역</span>
-          </h3>
-          <div className="space-y-4 sm:space-y-8">
-            {workoutData[selectedDate].exercises.map((exercise, idx) => (
-              <div key={idx} className="p-4 sm:p-6 bg-gradient-to-r from-white/5 to-white/[0.02] border-2 border-white/10 rounded-2xl hover:border-white/30 transition-all">
-                <div className="flex items-center gap-3 sm:gap-6 mb-4 sm:mb-6">
-                  <div className="w-14 h-14 sm:w-20 sm:h-20 flex-shrink-0 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center text-3xl sm:text-6xl">
-                    {exercise.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-lg sm:text-3xl font-bold text-white mb-1 sm:mb-2 truncate">{exercise.name}</h4>
-                    <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-                      {exercise.intensity && (
-                        <span className={`px-2 sm:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm font-bold ${
-                          exercise.intensity === 'very-high' ? 'bg-red-500/20 text-red-400 border-2 border-red-500/50' :
-                          exercise.intensity === 'high' ? 'bg-orange-500/20 text-orange-400 border-2 border-orange-500/50' :
-                          exercise.intensity === 'medium' ? 'bg-yellow-500/20 text-yellow-400 border-2 border-yellow-500/50' :
-                          'bg-green-500/20 text-green-400 border-2 border-green-500/50'
-                        }`}>
-                          강도: {exercise.intensity === 'very-high' ? '매우 높음' :
-                               exercise.intensity === 'high' ? '높음' :
-                               exercise.intensity === 'medium' ? '중간' : '낮음'}
+          <div className="p-5 sm:p-6 overflow-y-auto max-h-[calc(90vh-100px)] space-y-5">
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                <span>✅</span> {t('calendarAttendanceSection')}
+              </h3>
+              {modalAttendance.length > 0 ? (
+                <ul className="space-y-2 text-sm text-gray-300">
+                  {modalAttendance.map((r) => (
+                    <li key={r.id} className="flex flex-wrap gap-x-2 gap-y-1">
+                      <span className="text-emerald-400 font-medium">{t('calendarAttendanceYes')}</span>
+                      {r.check_in_time && (
+                        <span className="text-gray-500">
+                          {new Date(r.check_in_time).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
                         </span>
                       )}
-                      {exercise.duration && (
-                        <span className="text-gray-400 text-sm sm:text-lg">⏱️ {exercise.duration}분</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 세부 정보 그리드 */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
-                  {exercise.sets && (
-                    <div className="p-2 sm:p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                      <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">세트</div>
-                      <div className="text-base sm:text-xl lg:text-2xl font-bold text-blue-400">{exercise.sets}</div>
-                    </div>
-                  )}
-                  {exercise.reps && (
-                    <div className="p-2 sm:p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-                      <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">총 반복</div>
-                      <div className="text-base sm:text-xl lg:text-2xl font-bold text-purple-400">{exercise.reps}</div>
-                    </div>
-                  )}
-                  {exercise.weight && (
-                    <div className="p-2 sm:p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                      <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">중량</div>
-                      <div className="text-base sm:text-xl lg:text-2xl font-bold text-red-400">{exercise.weight}</div>
-                    </div>
-                  )}
-                  {exercise.totalWeight && (
-                    <div className="p-2 sm:p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-                      <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">총 중량</div>
-                      <div className="text-base sm:text-xl lg:text-2xl font-bold text-orange-400 whitespace-nowrap">{exercise.totalWeight}kg</div>
-                    </div>
-                  )}
-                  {exercise.distance && (
-                    <div className="p-2 sm:p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                      <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">거리</div>
-                      <div className="text-base sm:text-xl lg:text-2xl font-bold text-emerald-400 whitespace-nowrap">{exercise.distance}km</div>
-                    </div>
-                  )}
-                  {exercise.calories && (
-                    <div className="p-2 sm:p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                      <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">칼로리</div>
-                      <div className="text-base sm:text-xl lg:text-2xl font-bold text-red-400 whitespace-nowrap">{exercise.calories}kcal</div>
-                    </div>
-                  )}
-                  {exercise.pace && (
-                    <div className="p-2 sm:p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
-                      <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 whitespace-nowrap">페이스</div>
-                      <div className="text-base sm:text-xl lg:text-2xl font-bold text-cyan-400 whitespace-nowrap">{exercise.pace}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </SpotlightCard>
-
-        {/* 메모 및 코치 */}
-        <div className="grid grid-cols-2 gap-6">
-          <SpotlightCard className="p-8">
-            <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-              <span>📝</span>
-              <span>메모</span>
-            </h3>
-            <div className="p-6 bg-white/5 rounded-xl text-gray-300 text-lg leading-relaxed">
-              {workoutData[selectedDate].note}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500">{t('calendarAttendanceNo')}</p>
+              )}
             </div>
-          </SpotlightCard>
 
-          {workoutData[selectedDate].coach && (
-            <SpotlightCard className="p-8">
-              <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                <span>👨‍🏫</span>
-                <span>담당 코치</span>
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                <span>🎯</span> {t('calendarSkillsSection')}
               </h3>
-              <div className="flex items-center gap-6 p-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-3xl shadow-lg">
-                  {workoutData[selectedDate].coach.charAt(0)}
-                </div>
-                <div>
-                  <div className="text-sm text-gray-400 mb-1">담당 코치</div>
-                  <div className="text-2xl font-bold text-white">{workoutData[selectedDate].coach}</div>
-                </div>
-              </div>
-            </SpotlightCard>
-          )}
+              {modalSkills.length > 0 ? (
+                <ul className="space-y-2">
+                  {modalSkills.map((row) => {
+                    const label =
+                      lang === 'ko'
+                        ? row.node?.name || `#${row.node_id}`
+                        : row.node?.name_en || row.node?.name || `#${row.node_id}`;
+                    return (
+                      <li key={String(row.node_id)} className="text-sm text-gray-200 flex justify-between gap-2">
+                        <span className="text-left">{label}</span>
+                        <span className="text-gray-500 tabular-nums flex-shrink-0">
+                          {t('calendarSkillInvestCount')} {row.investment_count}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500">{t('calendarNoSkillsThatDay')}</p>
+              )}
+              <p className="text-[10px] text-gray-600 mt-2 leading-relaxed">{t('calendarSkillInvestNote')}</p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                <span>🥊</span> {t('calendarMatchSection')}
+              </h3>
+              {modalMatches.length > 0 ? (
+                <ul className="space-y-3">
+                  {modalMatches.map((m) => {
+                    const res =
+                      m.result === 'win' || m.result === 'loss' || m.result === 'draw' ? m.result : 'draw';
+                    const opp = m.opponent_name || m.opponent?.nickname || m.opponent?.name || '—';
+                    return (
+                      <li key={m.id} className="text-sm border border-white/5 rounded-lg p-3 bg-black/20">
+                        <div className="font-bold text-white">vs. {opp}</div>
+                        <div className="text-gray-400 mt-1 flex flex-wrap gap-2 text-xs sm:text-sm">
+                          <span
+                            className={
+                              res === 'win' ? 'text-blue-400' : res === 'loss' ? 'text-red-400' : 'text-gray-400'
+                            }
+                          >
+                            {res === 'win' ? t('win') : res === 'loss' ? t('loss') : t('draw')}
+                          </span>
+                          <span className="text-gray-600">·</span>
+                          <span>{m.method || '—'}</span>
+                          <span className="text-gray-600">·</span>
+                          <span>{m.score || '—'}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500">{t('calendarNoMatchThatDay')}</p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
+              <h3 className="text-sm font-bold text-white mb-2">{t('calendarWeekSummary')}</h3>
+              <p className="text-sm text-gray-300">
+                {lang === 'ko' ? (
+                  <>
+                    이번 주: 출석 {weekSummary.att}건 · 매치 {weekSummary.matches}건
+                  </>
+                ) : (
+                  <>
+                    This week: {weekSummary.att} attendance day(s) · {weekSummary.matches} match(es)
+                  </>
+                )}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <h3 className="text-sm font-bold text-white mb-2">{t('calendarPlanSection')}</h3>
+              <textarea
+                value={calendarPlanDraft}
+                onChange={(e) => setCalendarPlanDraft(e.target.value)}
+                placeholder={t('calendarPlanPlaceholder')}
+                rows={4}
+                className="w-full rounded-lg bg-black/40 border border-white/10 px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-y min-h-[96px]"
+              />
+              <button
+                type="button"
+                onClick={persistCalendarPlan}
+                className="mt-3 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-bold hover:opacity-90"
+              >
+                {t('calendarPlanSave')}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    );
-  }
+    ) : null;
 
   // ── 체육관 전용 대시보드 ──────────────────────────────────
   if (role === 'gym' || profile?.role === 'gym') {
     return (
+      <>
       <div className="animate-fade-in-up space-y-3 xs:space-y-4 sm:space-y-6">
         {/* 헤더 */}
         <div className="mb-4 xs:mb-6 sm:mb-8">
@@ -546,21 +702,26 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
               <div key={d} className="text-center text-[9px] xs:text-[10px] text-gray-500 py-1 font-medium">{d}</div>
             ))}
             {calendarDays.map((day, i) => (
-              <div
+              <button
+                type="button"
                 key={i}
+                disabled={!day}
+                onClick={() => day && handleCalendarDayClick(day)}
                 className={`aspect-square flex items-center justify-center rounded-md xs:rounded-lg text-[10px] xs:text-xs font-medium transition-all
-                  ${!day ? '' :
-                    attendanceDays.includes(day) ? 'bg-purple-500/30 text-purple-300 border border-purple-500/30' :
-                    day === today && currentMonth === new Date().getMonth() ? 'bg-white/10 text-white border border-white/20' :
-                    'text-gray-400'
+                  ${!day ? 'invisible' :
+                    attendanceDays.includes(day) ? 'bg-purple-500/30 text-purple-300 border border-purple-500/30 hover:bg-purple-500/40' :
+                    isTodayCell(day) ? 'bg-white/10 text-white border border-white/20 hover:bg-white/15' :
+                    'text-gray-400 hover:bg-white/10'
                   }`}
               >
                 {day}
-              </div>
+              </button>
             ))}
           </div>
         </SpotlightCard>
       </div>
+      {calendarDayModal}
+      </>
     );
   }
   // ── 체육관 전용 대시보드 끝 ──────────────────────────────
@@ -674,7 +835,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                     <>
                       <span className="font-bold text-yellow-400 whitespace-nowrap">{profile.tier}</span>
                       <span className="hidden xs:inline">•</span>
-                      <span className="whitespace-nowrap text-[9px] xs:text-[10px] sm:text-xs">{profile?.tier_points || 0} {t('points') || '포인트'}</span>
+                      <span className="whitespace-nowrap text-[9px] xs:text-[10px] sm:text-xs">{tierBoardUi.mp} {t('victoryPoints') || '승점'}</span>
                       <span className="hidden xs:inline">•</span>
                     </>
                   )}
@@ -950,19 +1111,22 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                 {/* 날짜 그리드 */}
                 <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-4 sm:mb-6">
                   {calendarDays.map((day, i) => {
-                    const isToday = day === today;
+                    const todayCell = day && isTodayCell(day);
                     const hasWorkout = workoutDays.includes(day);
                     const hasAttendance = attendanceDays.includes(day);
-                    
+                    const hasMatch = day && matchDaysInMonth.has(day);
+                    const hasSkill = day && skillDaysInMonth.has(day);
+
                     return (
                       <button
+                        type="button"
                         key={i}
-                        onClick={() => day && handleDateClick(day)}
+                        onClick={() => day && handleCalendarDayClick(day)}
                         disabled={!day}
                         className={`aspect-square flex items-center justify-center text-xs sm:text-sm rounded-lg transition-all relative ${
                           day === null
                             ? 'invisible'
-                            : isToday
+                            : todayCell
                             ? 'bg-blue-500 text-white font-bold cursor-pointer hover:bg-blue-600 shadow-lg ring-2 ring-blue-400/50'
                             : hasWorkout
                             ? 'bg-yellow-400/80 text-black font-bold cursor-pointer hover:bg-yellow-500 shadow-md'
@@ -972,35 +1136,48 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                         }`}
                       >
                         {day}
-                        {/* 오늘 표시 */}
-                        {isToday && (
-                          <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-white animate-pulse"></div>
+                        {todayCell && (
+                          <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-white animate-pulse" />
                         )}
-                        {/* 운동/출석 표시 작은 점 */}
-                        {!isToday && hasWorkout && (
-                          <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 transform -translate-x-1/2 w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full bg-black"></div>
+                        {day && hasMatch && (
+                          <div
+                            className="absolute bottom-0.5 left-0.5 sm:bottom-1 sm:left-1 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-red-500"
+                            title={t('calendarLegendMatch')}
+                          />
                         )}
-                        {!isToday && hasAttendance && !hasWorkout && (
-                          <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 transform -translate-x-1/2 w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full bg-white"></div>
+                        {day && hasSkill && (
+                          <div
+                            className="absolute bottom-0.5 right-0.5 sm:bottom-1 sm:right-1 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-violet-400"
+                            title={t('calendarLegendSkill')}
+                          />
+                        )}
+                        {!todayCell && hasWorkout && !hasMatch && !hasSkill && (
+                          <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 transform -translate-x-1/2 w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full bg-black" />
+                        )}
+                        {!todayCell && hasAttendance && !hasWorkout && (
+                          <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 transform -translate-x-1/2 w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full bg-white" />
                         )}
                       </button>
                     );
                   })}
                 </div>
 
-                {/* 하단 범례 */}
                 <div className="space-y-2 text-xs pt-4 border-t border-white/5">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-lg bg-blue-500 ring-2 ring-blue-400/50"></div>
-                    <span className="text-gray-400">오늘</span>
+                    <div className="w-3 h-3 rounded-lg bg-blue-500 ring-2 ring-blue-400/50" />
+                    <span className="text-gray-400">{t('currentDay')}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-lg bg-yellow-400/80"></div>
-                    <span className="text-gray-400">운동 완료</span>
+                    <div className="w-3 h-3 rounded-lg bg-yellow-400/80" />
+                    <span className="text-gray-400">{lang === 'ko' ? '출석(트레이닝)' : 'Attendance'}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-lg bg-emerald-500/70"></div>
-                    <span className="text-gray-400">출석</span>
+                    <span className="w-3 h-3 inline-block rounded-full bg-red-500" />
+                    <span className="text-gray-400">{t('calendarLegendMatch')}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 inline-block rounded-full bg-violet-400" />
+                    <span className="text-gray-400">{t('calendarLegendSkill')}</span>
                   </div>
                 </div>
               </div>
@@ -1059,7 +1236,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                   strokeWidth="6"
                   fill="none"
                   strokeDasharray={`${2 * Math.PI * 40}`}
-                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - ((profile?.tier_points || 0) / 1000))}`}
+                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - tierBoardUi.ring)}`}
                   stroke="url(#tierGradient)"
                   strokeLinecap="round"
                   className="xs:hidden"
@@ -1071,7 +1248,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                   strokeWidth="7"
                   fill="none"
                   strokeDasharray={`${2 * Math.PI * 48}`}
-                  strokeDashoffset={`${2 * Math.PI * 48 * (1 - ((profile?.tier_points || 0) / 1000))}`}
+                  strokeDashoffset={`${2 * Math.PI * 48 * (1 - tierBoardUi.ring)}`}
                   stroke="url(#tierGradient)"
                   strokeLinecap="round"
                   className="hidden xs:block sm:hidden"
@@ -1083,7 +1260,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                   strokeWidth="8"
                   fill="none"
                   strokeDasharray={`${2 * Math.PI * 56}`}
-                  strokeDashoffset={`${2 * Math.PI * 56 * (1 - ((profile?.tier_points || 0) / 1000))}`}
+                  strokeDashoffset={`${2 * Math.PI * 56 * (1 - tierBoardUi.ring)}`}
                   stroke="url(#tierGradient)"
                   strokeLinecap="round"
                   className="hidden sm:block"
@@ -1098,9 +1275,13 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
               <div className="absolute flex flex-col items-center">
                 <div className="text-[10px] xs:text-xs text-gray-400 whitespace-nowrap">{profile?.tier || 'Bronze III'}</div>
                 <div className="text-xl xs:text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-                  {profile?.tier_points || 0}
+                  {tierBoardUi.mp}
                 </div>
-                <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5 xs:mt-1">/ 1,000</div>
+                <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5 xs:mt-1 text-center max-w-[10rem]">
+                  {tierBoardUi.next.nextLabel
+                    ? `${tierBoardUi.next.nextLabel} · +${tierBoardUi.next.pointsToNext}`
+                    : (t('maxTier') || '최고 티어')}
+                </div>
               </div>
             </div>
 
@@ -1108,15 +1289,13 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
               <div className="p-2 xs:p-3 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-lg border border-blue-500/30 text-center">
                 <div className="text-[10px] xs:text-xs text-gray-400 mb-0.5 xs:mb-1 whitespace-nowrap">{t('nextTier')}</div>
                 <div className="text-xs xs:text-sm font-bold text-blue-400 whitespace-nowrap truncate">
-                  {profile?.tier === 'Bronze III' ? 'Bronze II' : 
-                   profile?.tier === 'Bronze II' ? 'Bronze I' :
-                   profile?.tier === 'Bronze I' ? 'Silver III' : 'Next Tier'}
+                  {tierBoardUi.next.nextLabel || (t('maxTier') || 'Master I')}
                 </div>
               </div>
               <div className="p-2 xs:p-3 bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-lg border border-emerald-500/30 text-center">
                 <div className="text-[10px] xs:text-xs text-gray-400 mb-0.5 xs:mb-1 whitespace-nowrap">{t('pointsNeeded')}</div>
                 <div className="text-base xs:text-lg font-bold text-emerald-400">
-                  +{Math.max(0, 1000 - (profile?.tier_points || 0))}
+                  {tierBoardUi.next.nextLabel ? `+${tierBoardUi.next.pointsToNext}` : '—'}
                 </div>
               </div>
             </div>
@@ -1219,276 +1398,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
         </div>
       </div>
 
-      {/* 운동 모달 */}
-      {showWorkoutModal && selectedDate && workoutData[selectedDate] && !showDetailPage && (
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-          onClick={() => setShowWorkoutModal(false)}
-        >
-          <div 
-            className="bg-[#0A0A0A] border border-white/20 rounded-2xl max-w-[95vw] sm:max-w-5xl w-full max-h-[90vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 모달 헤더 */}
-            <div className="p-6 border-b border-white/10 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-3xl font-bold text-white mb-1">
-                    {workoutData[selectedDate].date} ({workoutData[selectedDate].dayOfWeek})
-                  </h2>
-                  <p className="text-gray-400">복싱 훈련 요약</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => setShowDetailPage(true)}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold rounded-xl transition-all hover:scale-105"
-                  >
-                    📊 자세히 보기
-                  </button>
-                  <button 
-                    onClick={() => setShowWorkoutModal(false)}
-                    className="w-12 h-12 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"
-                  >
-                    <span className="text-2xl">✕</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 모달 내용 */}
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {/* 통계 카드 */}
-              <div className="grid grid-cols-4 gap-4 mb-6">
-                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
-                  <div className="text-sm text-gray-400 mb-1">총 훈련 시간</div>
-                  <div className="text-2xl font-bold text-blue-400">{workoutData[selectedDate].totalTime}분</div>
-                </div>
-                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-                  <div className="text-sm text-gray-400 mb-1">소모 칼로리</div>
-                  <div className="text-2xl font-bold text-red-400">{workoutData[selectedDate].calories}kcal</div>
-                </div>
-                <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
-                  <div className="text-sm text-gray-400 mb-1">훈련 종목</div>
-                  <div className="text-2xl font-bold text-purple-400">{workoutData[selectedDate].exercises.length}개</div>
-                </div>
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
-                  <div className="text-sm text-gray-400 mb-1">만족도</div>
-                  <div className="text-2xl font-bold text-yellow-400">
-                    {'⭐'.repeat(workoutData[selectedDate].satisfaction || 0)}
-                  </div>
-                </div>
-              </div>
-
-              {/* 운동 리스트 */}
-              <div className="space-y-4 mb-6">
-                {workoutData[selectedDate].exercises.map((exercise, idx) => (
-                  <div key={idx} className="p-5 bg-gradient-to-r from-white/5 to-white/[0.02] border border-white/10 rounded-xl hover:border-white/30 transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className="text-4xl">{exercise.icon}</div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h4 className="text-xl font-bold text-white">{exercise.name}</h4>
-                          {exercise.intensity && (
-                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                              exercise.intensity === 'very-high' ? 'bg-red-500/20 text-red-400' :
-                              exercise.intensity === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                              exercise.intensity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                              'bg-green-500/20 text-green-400'
-                            }`}>
-                              {exercise.intensity === 'very-high' ? '매우 높음' :
-                               exercise.intensity === 'high' ? '높음' :
-                               exercise.intensity === 'medium' ? '중간' : '낮음'}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-400">
-                          {exercise.duration && <span>⏱️ {exercise.duration}분</span>}
-                          {exercise.sets && <span>🔢 {exercise.sets} 세트</span>}
-                          {exercise.distance && <span>📏 {exercise.distance}km</span>}
-                          {exercise.calories && <span>🔥 {exercise.calories}kcal</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* 메모 */}
-              <div className="p-5 bg-white/5 border border-white/10 rounded-xl mb-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xl">📝</span>
-                  <h4 className="text-lg font-bold text-white">메모</h4>
-                </div>
-                <p className="text-gray-300">{workoutData[selectedDate].note}</p>
-              </div>
-
-              {/* 담당 코치 */}
-              {workoutData[selectedDate].coach && (
-                <div className="p-5 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xl">
-                      {workoutData[selectedDate].coach.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-400">담당 코치</div>
-                      <div className="text-xl font-bold text-white">{workoutData[selectedDate].coach}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 상세 페이지 */}
-      {showDetailPage && selectedDate && workoutData[selectedDate] && (
-        <div className="fixed inset-0 bg-black z-50 overflow-y-auto">
-          <div className="min-h-screen p-6">
-            <div className="max-w-7xl mx-auto">
-              {/* 헤더 */}
-              <div className="mb-6 flex items-center justify-between">
-                <button 
-                  onClick={() => setShowDetailPage(false)}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all"
-                >
-                  <Icon type="arrowLeft" size={20} className="text-white" />
-                  <span className="text-white">{t('backButton')}</span>
-                </button>
-                <h1 className="text-3xl font-bold text-white">
-                  🗓️ {workoutData[selectedDate].date} ({workoutData[selectedDate].dayOfWeek}) 상세 리포트
-                </h1>
-                <div className="w-32"></div> {/* 레이아웃 균형 */}
-              </div>
-
-              {/* 전체 통계 */}
-              <div className="grid grid-cols-4 gap-4 mb-6">
-                <SpotlightCard className="p-5 border-l-4 border-blue-500">
-                  <div className="text-sm text-gray-400 mb-1">총 운동 시간</div>
-                  <div className="text-3xl font-bold text-white">{workoutData[selectedDate].totalTime}분</div>
-                </SpotlightCard>
-                <SpotlightCard className="p-3 sm:p-4 border-l-4 border-red-500">
-                  <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5">소모 칼로리</div>
-                  <div className="text-lg sm:text-xl lg:text-2xl font-bold text-white whitespace-nowrap">{workoutData[selectedDate].calories}kcal</div>
-                </SpotlightCard>
-                <SpotlightCard className="p-3 sm:p-4 border-l-4 border-purple-500">
-                  <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5">운동 종목</div>
-                  <div className="text-lg sm:text-xl lg:text-2xl font-bold text-white whitespace-nowrap">{workoutData[selectedDate].exercises.length}개</div>
-                </SpotlightCard>
-                <SpotlightCard className="p-3 sm:p-4 border-l-4 border-yellow-500">
-                  <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5">만족도</div>
-                  <div className="text-lg sm:text-xl lg:text-2xl font-bold text-white">
-                    {'⭐'.repeat(workoutData[selectedDate].satisfaction || 0)}
-                  </div>
-                </SpotlightCard>
-              </div>
-
-              {/* 운동 상세 */}
-              <SpotlightCard className="p-3 sm:p-5 mb-4 sm:mb-6">
-                <h3 className="text-base sm:text-lg lg:text-xl font-bold text-white mb-3 sm:mb-5">📋 운동 상세 내역</h3>
-                <div className="space-y-3 sm:space-y-5">
-                  {workoutData[selectedDate].exercises.map((exercise, idx) => (
-                    <div key={idx} className="p-3 sm:p-5 bg-gradient-to-r from-white/5 to-white/[0.02] border border-white/10 rounded-lg sm:rounded-xl">
-                      <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-                        <div className="text-2xl sm:text-3xl lg:text-4xl">{exercise.icon}</div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-sm sm:text-base lg:text-lg font-bold text-white mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{exercise.name}</h4>
-                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                            {exercise.intensity && (
-                              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
-                                exercise.intensity === 'very-high' ? 'bg-red-500/20 text-red-400' :
-                                exercise.intensity === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                                exercise.intensity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                'bg-green-500/20 text-green-400'
-                              }`}>
-                                {exercise.intensity === 'very-high' ? '매우 높음' :
-                                 exercise.intensity === 'high' ? '높음' :
-                                 exercise.intensity === 'medium' ? '중간' : '낮음'}
-                              </span>
-                            )}
-                            {exercise.duration && <span className="text-gray-400 text-[10px] sm:text-xs whitespace-nowrap">{exercise.duration}분</span>}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 세부 정보 */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-2 sm:mt-3">
-                        {exercise.sets && (
-                          <div className="p-2 sm:p-3 bg-blue-500/10 rounded-lg">
-                            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">세트</div>
-                            <div className="text-base sm:text-lg font-bold text-blue-400">{exercise.sets}</div>
-                          </div>
-                        )}
-                        {exercise.reps && (
-                          <div className="p-2 sm:p-3 bg-purple-500/10 rounded-lg">
-                            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">총 반복</div>
-                            <div className="text-base sm:text-lg font-bold text-purple-400">{exercise.reps}</div>
-                          </div>
-                        )}
-                        {exercise.weight && (
-                          <div className="p-2 sm:p-3 bg-red-500/10 rounded-lg">
-                            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">중량</div>
-                            <div className="text-base sm:text-lg font-bold text-red-400">{exercise.weight}</div>
-                          </div>
-                        )}
-                        {exercise.totalWeight && (
-                          <div className="p-2 sm:p-3 bg-orange-500/10 rounded-lg">
-                            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">총 중량</div>
-                            <div className="text-base sm:text-lg font-bold text-orange-400 whitespace-nowrap">{exercise.totalWeight}kg</div>
-                          </div>
-                        )}
-                        {exercise.distance && (
-                          <div className="p-2 sm:p-3 bg-emerald-500/10 rounded-lg">
-                            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">거리</div>
-                            <div className="text-base sm:text-lg font-bold text-emerald-400 whitespace-nowrap">{exercise.distance}km</div>
-                          </div>
-                        )}
-                        {exercise.calories && (
-                          <div className="p-2 sm:p-3 bg-red-500/10 rounded-lg">
-                            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">칼로리</div>
-                            <div className="text-base sm:text-lg font-bold text-red-400 whitespace-nowrap">{exercise.calories}kcal</div>
-                          </div>
-                        )}
-                        {exercise.pace && (
-                          <div className="p-2 sm:p-3 bg-cyan-500/10 rounded-lg">
-                            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">페이스</div>
-                            <div className="text-base sm:text-lg font-bold text-cyan-400 whitespace-nowrap">{exercise.pace}</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </SpotlightCard>
-
-              {/* 메모 및 코치 */}
-              <div className="grid grid-cols-2 gap-6">
-                <SpotlightCard className="p-6">
-                  <h3 className="text-xl font-bold text-white mb-4">📝 메모</h3>
-                  <div className="p-4 bg-white/5 rounded-lg text-gray-300">
-                    {workoutData[selectedDate].note}
-                  </div>
-                </SpotlightCard>
-
-                {workoutData[selectedDate].coach && (
-                  <SpotlightCard className="p-6">
-                    <h3 className="text-xl font-bold text-white mb-4">👨‍🏫 담당 코치</h3>
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-2xl">
-                        {workoutData[selectedDate].coach.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="text-xl font-bold text-white">{workoutData[selectedDate].coach}</div>
-                        <div className="text-sm text-gray-400">담당 코치</div>
-                      </div>
-                    </div>
-                  </SpotlightCard>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {calendarDayModal}
     </div>
   );
 };

@@ -2,6 +2,10 @@
 -- 스킬 포인트로 트리 노드에 투자(찍기) — 클라이언트는 "포인트 사용"으로 표시
 -- (내부 테이블명 user_skill_unlocks / RPC unlock_skill_node 는 호환용으로 유지)
 -- 적용: Supabase SQL Editor 또는 psql에서 한 번 실행
+--
+-- 비포크 노드를 같은 노드에 최대 5번까지 찍으려면 이후 sql/08_skill_promotion.sql(또는
+-- sql/10, sql/11)의 invest_skill_node 정의를 반드시 적용해야 합니다. 07만 적용된 DB에서는
+-- unlock_skill_node가 1회만 허용합니다.
 -- ============================================================
 
 -- 노드별 필요 포인트 (기본 1, 루트만 0)

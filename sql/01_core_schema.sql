@@ -16,6 +16,7 @@ CREATE TABLE public.users (
   boxing_style    TEXT,
   gym_name        TEXT,
   gym_location    TEXT,
+  gym_user_id     UUID REFERENCES public.users(id) ON DELETE SET NULL,
   skill_points    INTEGER NOT NULL DEFAULT 0,
   tier            TEXT DEFAULT 'Bronze III',
   tier_points     INTEGER DEFAULT 0,

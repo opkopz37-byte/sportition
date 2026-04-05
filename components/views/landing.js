@@ -1,9 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
 import { signIn } from '@/lib/supabase';
+import TermsOfServiceModal from '@/components/legal/TermsOfServiceModal';
+import {
+  OPTIONAL_MARKETING_CONSENT_FULL_TEXT,
+  OPTIONAL_MARKETING_CONSENT_TITLE_KO,
+} from '@/lib/legal/termsOfService';
 
 // 로그인 모달
 const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => key }) => {
@@ -140,7 +146,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     confirmPassword: '',
     agreeTerms: false,
     agreePrivacy: false,
-    
+    agreeMarketing: false,
+
     // Step 2: 프로필 정보
     nickname: '',
     phone: '',
@@ -158,6 +165,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState({ checks: {}, strength: 0 });
   const [showPassword, setShowPassword] = useState(false);
+  /** null | 'full' 필수 약관 전문 | 'optional' 선택(마케팅) 동의 전문 */
+  const [termsModalView, setTermsModalView] = useState(null);
 
   // 비밀번호 변경 시 강도 체크
   const handlePasswordChange = (value) => {
@@ -269,6 +278,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
         gender: formData.gender,
         height: formData.height || null,
         weight: formData.weight || null,
+        marketing_consent: formData.agreeMarketing === true,
       };
 
       // 역할별 추가 데이터
@@ -516,30 +526,127 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
             )}
           </div>
 
-          {/* 약관 동의 */}
-          <div className="space-y-2 pt-2">
-            <label className="flex items-start gap-2 cursor-pointer group">
+          {/* 약관 동의 — 전문은 lib/legal/termsOfService.js 의 TERMS_OF_SERVICE_FULL_TEXT */}
+          <div className="space-y-3 pt-2">
+            <label className="flex items-start gap-3 cursor-pointer group rounded-lg border border-white/10 bg-white/[0.03] p-3">
               <input
                 type="checkbox"
-                checked={formData.agreeTerms}
-                onChange={(e) => setFormData({...formData, agreeTerms: e.target.checked})}
-                className="mt-0.5 w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                checked={
+                  formData.agreeTerms &&
+                  formData.agreePrivacy &&
+                  formData.agreeMarketing
+                }
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setFormData({
+                    ...formData,
+                    agreeTerms: on,
+                    agreePrivacy: on,
+                    agreeMarketing: on,
+                  });
+                }}
+                className="mt-0.5 w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 shrink-0"
               />
-              <span className="text-sm text-gray-400 group-hover:text-white transition-colors">
-                [필수] 이용약관에 동의합니다
+              <span className="text-sm font-medium text-white group-hover:text-white transition-colors">
+                전체 동의 (필수·선택 항목 포함)
               </span>
             </label>
-            <label className="flex items-start gap-2 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={formData.agreePrivacy}
-                onChange={(e) => setFormData({...formData, agreePrivacy: e.target.checked})}
-                className="mt-0.5 w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
-              />
-              <span className="text-sm text-gray-400 group-hover:text-white transition-colors">
-                [필수] 개인정보 수집 및 이용에 동의합니다 (핸드폰 번호 포함)
-              </span>
-            </label>
+
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-200/95 tracking-wide">
+                필수 동의
+              </p>
+              <label className="flex items-start gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={formData.agreeTerms}
+                  onChange={(e) =>
+                    setFormData({ ...formData, agreeTerms: e.target.checked })
+                  }
+                  className="mt-0.5 w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 shrink-0"
+                />
+                <span className="text-sm text-gray-300 group-hover:text-white transition-colors flex-1">
+                  <span className="text-amber-300/90 font-medium">[필수]</span> 이용약관에 동의합니다
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setTermsModalView('full');
+                    }}
+                    className="ml-1.5 text-blue-400 hover:text-blue-300 underline text-xs align-baseline"
+                  >
+                    전문 보기
+                  </button>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={formData.agreePrivacy}
+                  onChange={(e) =>
+                    setFormData({ ...formData, agreePrivacy: e.target.checked })
+                  }
+                  className="mt-0.5 w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 shrink-0"
+                />
+                <span className="text-sm text-gray-300 group-hover:text-white transition-colors flex-1">
+                  <span className="text-amber-300/90 font-medium">[필수]</span> 개인정보 수집 및 이용에 동의합니다 (휴대폰 번호 포함)
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setTermsModalView('full');
+                    }}
+                    className="ml-1.5 text-blue-400 hover:text-blue-300 underline text-xs align-baseline"
+                  >
+                    전문 보기
+                  </button>
+                </span>
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-400 tracking-wide">
+                선택 동의
+              </p>
+              <label className="flex items-start gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={formData.agreeMarketing}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      agreeMarketing: e.target.checked,
+                    })
+                  }
+                  className="mt-0.5 w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 shrink-0"
+                />
+                <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors flex-1 leading-relaxed">
+                  <span className="text-gray-500 font-medium">[선택]</span> 이벤트·혜택·서비스 안내를 이메일·문자·앱 알림 등으로 받습니다. 동의하지 않아도 회원가입 및 기본 서비스 이용은 가능합니다.{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setTermsModalView('optional');
+                    }}
+                    className="text-blue-400 hover:text-blue-300 underline text-xs align-baseline whitespace-nowrap"
+                  >
+                    전문 보기
+                  </button>
+                </span>
+              </label>
+            </div>
+
+            <p className="text-[11px] text-gray-500 pl-0.5">
+              이용약관 전문은 「개인정보 수집·이용 동의」 본문과 동일합니다.{' '}
+              <Link
+                href="/terms"
+                className="text-blue-400/90 hover:text-blue-300 underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                새 창에서 페이지로 보기
+              </Link>
+            </p>
           </div>
 
           <button
@@ -760,6 +867,21 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       )}
     </SpotlightCard>
   </div>
+
+  <TermsOfServiceModal
+    open={termsModalView !== null}
+    onClose={() => setTermsModalView(null)}
+    title={
+      termsModalView === 'optional'
+        ? OPTIONAL_MARKETING_CONSENT_TITLE_KO
+        : undefined
+    }
+    content={
+      termsModalView === 'optional'
+        ? OPTIONAL_MARKETING_CONSENT_FULL_TEXT
+        : undefined
+    }
+  />
 </div>
   );
 };
@@ -884,6 +1006,15 @@ return () => document.removeEventListener('mousedown', handleClickOutside);
         <Icon type="arrowRight" className="ml-[clamp(0.375rem,1vw,0.5rem)] shrink-0 w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)] group-hover:translate-x-1 transition-transform" />
       </div>
     </SpotlightCard>
+  </div>
+
+  <div className="mt-[clamp(1.5rem,4vw,2.5rem)] pb-[clamp(0.75rem,2vw,1rem)]">
+    <Link
+      href="/terms"
+      className="text-[clamp(0.625rem,calc(1.2vw+0.25rem),0.75rem)] text-gray-500 hover:text-gray-300 underline underline-offset-2"
+    >
+      이용약관 · 개인정보 수집·이용 동의 전문
+    </Link>
   </div>
 </div>
   );

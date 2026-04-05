@@ -1,8 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
+
+/** 체육관: gym_user_id 일치 또는 gym_name 일치 (둘 다 있으면 하나만 맞아도 표시) */
+function isSameGymContext(profile, gymUserId, gymName) {
+  if (!profile || profile.role === 'admin') return true;
+  const gname = String(profile.gym_name || '').trim();
+  const reqName = String(gymName || '').trim();
+  if (gymUserId && gymUserId === profile.id) return true;
+  if (gname && reqName && gname === reqName) return true;
+  return false;
+}
 
 const ApprovalView = ({ t = (key) => key }) => {
   const { user, profile } = useAuth();
@@ -23,6 +33,24 @@ const ApprovalView = ({ t = (key) => key }) => {
   const [chosenBranchId, setChosenBranchId] = useState(null);
   const [promoNotes, setPromoNotes] = useState('');
   const [processingPromo, setProcessingPromo] = useState(false);
+
+  // 카드 승인: 뷰·RLS가 체육관에 맞는 행만 주면 클라이언트 재필터는 빈 목록을 만들 수 있음
+  const scopedApprovalQueue = useMemo(() => {
+    if (!profile) return approvalQueue;
+    if (profile.role === 'admin' || profile.role === 'gym') return approvalQueue;
+    return approvalQueue.filter((a) =>
+      isSameGymContext(profile, a.applicant_gym_user_id, a.applicant_gym_name)
+    );
+  }, [approvalQueue, profile]);
+
+  // 승단: RLS가 체육관 행만 넘김 — 여기서 한 번 더 걸면 gym_user_id 불일치 시 빈 목록이 됨
+  const scopedPromotionQueue = useMemo(() => {
+    if (!profile) return promotionQueue;
+    if (profile.role === 'admin' || profile.role === 'gym') return promotionQueue;
+    return promotionQueue.filter((r) =>
+      isSameGymContext(profile, r.gym_user_id, r.gym_name)
+    );
+  }, [promotionQueue, profile]);
 
   const loadApprovalQueue = useCallback(async () => {
     if (!user?.id) return;
@@ -265,7 +293,7 @@ const ApprovalView = ({ t = (key) => key }) => {
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">대기 중</div>
                 <div className="text-2xl font-bold text-yellow-400">
-                  {approvalQueue.filter((a) => a.status === 'pending').length}
+                  {scopedApprovalQueue.filter((a) => a.status === 'pending').length}
                 </div>
               </div>
             </SpotlightCard>
@@ -274,7 +302,7 @@ const ApprovalView = ({ t = (key) => key }) => {
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">승인 완료</div>
                 <div className="text-2xl font-bold text-green-400">
-                  {approvalQueue.filter((a) => a.status === 'approved').length}
+                  {scopedApprovalQueue.filter((a) => a.status === 'approved').length}
                 </div>
               </div>
             </SpotlightCard>
@@ -283,7 +311,7 @@ const ApprovalView = ({ t = (key) => key }) => {
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">거절됨</div>
                 <div className="text-2xl font-bold text-red-400">
-                  {approvalQueue.filter((a) => a.status === 'rejected').length}
+                  {scopedApprovalQueue.filter((a) => a.status === 'rejected').length}
                 </div>
               </div>
             </SpotlightCard>
@@ -324,9 +352,9 @@ const ApprovalView = ({ t = (key) => key }) => {
             </button>
           </div>
 
-          {approvalQueue.length > 0 ? (
+          {scopedApprovalQueue.length > 0 ? (
             <div className="space-y-3">
-              {approvalQueue.map((request) => {
+              {scopedApprovalQueue.map((request) => {
                 const badge = getRarityBadge(request.rarity);
                 const statusBadge = getStatusBadge(request.status);
 
@@ -438,7 +466,7 @@ const ApprovalView = ({ t = (key) => key }) => {
                             : 'text-red-400'
                     }`}
                   >
-                    {promotionQueue.filter((r) => r.status === st).length}
+                    {scopedPromotionQueue.filter((r) => r.status === st).length}
                   </div>
                 </div>
               </SpotlightCard>
@@ -460,9 +488,9 @@ const ApprovalView = ({ t = (key) => key }) => {
             ))}
           </div>
 
-          {promotionQueue.length > 0 ? (
+          {scopedPromotionQueue.length > 0 ? (
             <div className="space-y-3">
-              {promotionQueue.map((req) => {
+              {scopedPromotionQueue.map((req) => {
                 const statusBadge = getStatusBadge(req.status);
                 const memberName = req.member?.nickname || req.member?.name || '회원';
                 const forkName = req.fork?.name || '갈림길 노드';
@@ -485,7 +513,12 @@ const ApprovalView = ({ t = (key) => key }) => {
                         <p className="text-xs text-gray-400">
                           갈림길: {forkName} (#{req.fork?.node_number ?? '—'}) · {formatDate(req.requested_at)}
                         </p>
-                        <p className="text-[11px] text-gray-500 mt-1">소속: {req.gym_name || '—'}</p>
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          소속: {req.gym_name || '—'}
+                          {req.gym_user_id && profile?.id === req.gym_user_id ? (
+                            <span className="text-emerald-400/90"> · 체육관 계정과 연동</span>
+                          ) : null}
+                        </p>
                       </div>
 
                       {(req.status === 'pending' || req.status === 'reviewing') && (

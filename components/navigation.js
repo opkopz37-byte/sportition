@@ -177,12 +177,12 @@ return (
 
   return (
 <>
-  <header className="fixed top-0 inset-x-0 z-50 h-[clamp(2.75rem,7vw,4rem)] min-h-[2.75rem] border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-[clamp(0.375rem,2vw,1.5rem)] gap-2 min-w-0">
-    <div className="flex items-center gap-[clamp(0.375rem,2vw,1.5rem)] min-w-0 flex-1 lg:flex-initial">
+  <header className="fixed top-0 inset-x-0 z-50 min-h-[clamp(2.75rem,7vw,4rem)] border-b border-white/5 bg-black/50 backdrop-blur-xl flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-[clamp(0.375rem,2vw,1.5rem)] py-2 min-w-0">
+    <div className="flex items-center gap-[clamp(0.375rem,2vw,1.5rem)] min-w-0 flex-1 basis-0 min-[520px]:basis-auto xl:flex-initial">
       <button 
         type="button"
         onClick={() => setShowMobileMenu(!showMobileMenu)}
-        className="lg:hidden shrink-0 p-1.5 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-white"
+        className="xl:hidden shrink-0 p-1.5 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-white"
       >
         <Icon type={showMobileMenu ? "x" : "menu"} size={18} />
       </button>
@@ -200,7 +200,7 @@ return (
         <span className="text-[clamp(0.7rem,calc(0.8vw+0.45rem),0.875rem)] whitespace-nowrap truncate max-w-[min(8rem,28vw)] sm:max-w-none">Sportition</span>
       </div>
 
-      <nav className="hidden lg:flex items-center gap-1 flex-nowrap" aria-label="Main">
+      <nav className="hidden xl:flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0 max-w-[min(100%,52rem)] py-0.5" aria-label="Main">
         {menuItems.map(item => (
           <NavMenuItem 
             key={item.id}
@@ -214,7 +214,7 @@ return (
       </nav>
     </div>
 
-    <div className="flex items-center gap-[clamp(0.25rem,1.5vw,0.75rem)] shrink-0 min-w-0 flex-shrink-0">
+    <div className="flex items-center gap-[clamp(0.25rem,1.5vw,0.75rem)] shrink-0 min-w-0 flex-shrink-0 flex-wrap sm:flex-nowrap justify-end w-full min-[520px]:w-auto">
       {role === 'gym' && (
         <button
           onClick={() => window.open('/attendance', '_blank', 'width=1920,height=1080,toolbar=no,location=no,status=no,menubar=no,scrollbars=no')}
@@ -238,7 +238,7 @@ return (
               }}
               onFocus={() => setShowSearchResults(true)}
               placeholder={t('searchPlayers') || '선수 검색...'}
-              className="w-[clamp(6.5rem,22vw,16rem)] min-w-0 pl-8 pr-3 py-[clamp(0.25rem,1vw,0.375rem)] bg-white/5 border border-white/10 rounded-lg text-[clamp(0.6875rem,calc(0.5vw+0.55rem),0.875rem)] text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
+              className="w-full min-[420px]:w-[clamp(8rem,28vw,14rem)] xl:w-[clamp(9rem,18vw,16rem)] min-w-0 pl-8 pr-3 py-[clamp(0.25rem,1vw,0.375rem)] bg-white/5 border border-white/10 rounded-lg text-[clamp(0.6875rem,calc(0.5vw+0.55rem),0.875rem)] text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
             />
             <Icon 
               type="search" 
@@ -353,7 +353,7 @@ return (
           onClick={() => setShowProfileMenu(!showProfileMenu)}
           className="flex items-center gap-[clamp(0.25rem,1.2vw,0.5rem)] group hover:bg-white/5 rounded-lg px-[clamp(0.125rem,1vw,0.375rem)] py-[clamp(0.125rem,0.8vw,0.25rem)] transition-colors max-w-[min(100%,14rem)]"
         >
-          <div className="text-right hidden lg:block min-w-0 max-w-[clamp(5rem,18vw,12rem)]">
+          <div className="text-right hidden xl:block min-w-0 max-w-[clamp(5rem,18vw,12rem)]">
             <div className="text-[clamp(0.625rem,calc(0.35vw+0.5rem),0.75rem)] font-medium text-white group-hover:text-gray-300 truncate">
               {profile?.nickname || profile?.name || '사용자'}
             </div>
@@ -433,11 +433,11 @@ return (
   {showMobileMenu && (
     <>
       <div 
-        className="fixed inset-0 bg-black/60 z-40 lg:hidden animate-fade-in"
+        className="fixed inset-0 bg-black/60 z-40 xl:hidden animate-fade-in"
         onClick={() => setShowMobileMenu(false)}
       />
       
-      <div className="fixed top-0 left-0 h-full w-64 sm:w-72 bg-[#0A0A0A] border-r border-white/10 z-50 lg:hidden overflow-y-auto animate-fade-in-up">
+      <div className="fixed top-0 left-0 h-full w-64 sm:w-72 bg-[#0A0A0A] border-r border-white/10 z-50 xl:hidden overflow-y-auto animate-fade-in-up">
         <div className="flex items-center justify-between p-3 border-b border-white/10">
           <div className="flex items-center gap-2">
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${

@@ -10,6 +10,7 @@ import { ActiveSkillsView } from '@/components/views/skills';
 import { TierBoardView } from '@/components/views/ranking';
 import { StyleStatsView } from '@/components/views/statistics';
 import { MyPageView, EditProfileView, PrivacySettingsView, NotificationsView, AccountSecurityView, ActivityHistoryView, OpponentProfileView, AchievementsView } from '@/components/views/mypage';
+import TermsOfServiceInlineView from '@/components/legal/TermsOfServiceInlineView';
 import { CoachInsightsView, PlayersManagementView, MatchRoomView, AdminManagementView } from '@/components/views/coach';
 import { AttendanceView } from '@/components/views/attendance';
 import { ApprovalView } from '@/components/views/approval';
@@ -18,7 +19,7 @@ import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 
 export default function SportitionApp() {
-  const { user, profile, isAuthenticated, loading } = useAuth();
+  const { user, profile, isAuthenticated, loading, refreshProfile } = useAuth();
   const [currentPage, setCurrentPage] = useState('landing');
   const [role, setRole] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -56,25 +57,28 @@ export default function SportitionApp() {
     ));
   };
 
-  // 인증 상태 변화 감지 및 자동 화면 전환
+  // 인증 상태 변화 감지 및 자동 화면 전환 (세션만 있으면 앱으로 — 프로필은 비동기로 늦을 수 있음)
   useEffect(() => {
     if (loading) {
       console.log('[Auth Effect] 인증 상태 로딩 중...');
       return;
     }
 
-    if (isAuthenticated && profile) {
-      console.log('[Auth Effect] 로그인 상태 - 프로필:', profile);
+    if (isAuthenticated && user) {
+      console.log('[Auth Effect] 로그인 상태 - user:', user?.id, 'profile:', profile?.role);
       if (currentPage !== 'app') {
         console.log('[Auth Effect] 앱으로 이동');
-        setRole(profile.role);
+        if (profile?.role) setRole(profile.role);
         setCurrentPage('app');
         setIsLoginModalOpen(false);
-        
-        // 역할에 따라 초기 탭 설정
-        if (profile.role === 'player_common' || profile.role === 'player_athlete') {
-          setActiveTab('dashboard');
-        } else if (profile.role === 'gym') {
+
+        const r = profile?.role;
+        if (
+          r === 'player_common' ||
+          r === 'player_athlete' ||
+          r === 'gym' ||
+          r === 'admin'
+        ) {
           setActiveTab('dashboard');
         }
       }
@@ -87,7 +91,14 @@ export default function SportitionApp() {
         setActiveTab('dashboard');
       }
     }
-  }, [isAuthenticated, profile, loading, currentPage]);
+  }, [isAuthenticated, user, profile, loading, currentPage]);
+
+  // 프로필이 세션보다 늦게 도착해도 role state와 맞춤 (effectiveRole용)
+  useEffect(() => {
+    if (profile?.role) {
+      setRole(profile.role);
+    }
+  }, [profile]);
 
   // 역할 변경 시 activeTab 설정
   useEffect(() => {
@@ -210,6 +221,26 @@ export default function SportitionApp() {
     );
   }
 
+  // 세션은 있는데 users 행이 없거나 로드 실패 시 (RLS 등) — 랜딩에 붙지 않도록 별도 안내
+  if (currentPage === 'app' && isAuthenticated && user && !profile && !loading) {
+    return (
+      <div className="relative min-h-screen bg-black text-white flex flex-col items-center justify-center px-4">
+        <BackgroundGrid theme={{ accent: 'blue' }} />
+        <div className="relative z-10 text-center max-w-md">
+          <p className="text-gray-200 mb-2 font-medium">프로필을 불러오지 못했습니다.</p>
+          <p className="text-gray-500 text-sm mb-6">네트워크·DB 권한을 확인하거나 잠시 후 다시 시도해 주세요.</p>
+          <button
+            type="button"
+            onClick={() => refreshProfile()}
+            className="px-5 py-2.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-200 font-bold text-sm"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // 앱 화면 (역할이 선택되었을 때)
   if (currentPage === 'app') {
     console.log('앱 페이지 렌더링 시도, role:', role, 'activeTab:', activeTab);
@@ -280,6 +311,7 @@ export default function SportitionApp() {
       case 'mypage': return <MyPageView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-edit-profile': return <EditProfileView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-privacy': return <PrivacySettingsView setActiveTab={setActiveTab} t={t} />;
+      case 'mypage-terms': return <TermsOfServiceInlineView setActiveTab={setActiveTab} backTab="mypage" />;
       case 'mypage-notifications': return <NotificationsView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-security': return <AccountSecurityView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-activity': return <ActivityHistoryView setActiveTab={setActiveTab} t={t} />;

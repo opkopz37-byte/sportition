@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
+import { useAuth } from '@/lib/AuthContext';
 // 코치 뷰들
 
 const CoachInsightsView = ({ t = (key) => key, setActiveTab, skillRequests, updateSkillRequestStatus }) => (
@@ -559,13 +560,81 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab, skillRequests, upda
   </div>
 );
 
+/** users + statistics 조인 행 → 회원관리 UI 객체 */
+function mapGymMemberRow(row) {
+  const stats = row.statistics || {};
+  const priv = row.user_private_profiles;
+  const tr = row.tier_rankings;
+  const wins = Number(stats.wins) || 0;
+  const losses = Number(stats.losses) || 0;
+  const draws = Number(stats.draws) || 0;
+  const totalMatches = Number(stats.total_matches) || 0;
+  const totalAttendance = Number(stats.total_attendance) || 0;
+  const displayName = row.nickname || row.name || '이름 미등록';
+  const membershipKo =
+    {
+      basic: '베이직',
+      standard: '스탠다드',
+      premium: '프리미엄',
+    }[row.membership_type] || (row.membership_type ? String(row.membership_type) : '—');
+  const genderKo =
+    row.gender === 'male' ? '남성' : row.gender === 'female' ? '여성' : '—';
+  const joinDate = row.created_at ? new Date(row.created_at).toISOString().slice(0, 10) : '—';
+  const birthStr = priv?.birth_date ? String(priv.birth_date).slice(0, 10) : '—';
+  const hasActivity = totalAttendance > 0 || totalMatches > 0;
+  const rankOrPoints =
+    typeof tr?.rank === 'number' && tr.rank > 0 ? tr.rank : (Number(row.tier_points) || 0);
+  const winRatePct =
+    totalMatches > 0 ? Math.round((wins / totalMatches) * 1000) / 10 : 0;
+  const rankLabel =
+    typeof tr?.rank === 'number' && tr.rank > 0
+      ? `랭크 #${tr.rank}`
+      : `${Number(row.tier_points) || 0}pt`;
+
+  return {
+    id: row.id,
+    gymUserId: row.gym_user_id || null,
+    name: displayName,
+    status: hasActivity ? 'active' : 'inactive',
+    tier: row.tier || '—',
+    level: rankOrPoints,
+    rankLabel,
+    attendance: totalAttendance,
+    lastVisit: '—',
+    phone: priv?.phone || '—',
+    membershipType: membershipKo,
+    email: row.email || '—',
+    birthDate: birthStr,
+    gender: genderKo,
+    weight: row.weight != null ? Number(row.weight) : null,
+    height: row.height != null ? row.height : null,
+    joinDate,
+    address: '—',
+    emergencyContact: priv?.representative_phone || '—',
+    notes: row.boxing_style ? `스타일: ${row.boxing_style}` : '—',
+    wins,
+    losses,
+    draws,
+    totalMatches,
+    winRate: winRatePct,
+    recentRecords: [],
+    achievements: [],
+    skills: [],
+  };
+}
+
 // 회원 관리 페이지 (코치)
 const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
+  const { profile } = useAuth();
+  const [registeringMember, setRegisteringMember] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // all, active, inactive
   const [selectedMember, setSelectedMember] = useState(null); // 상세보기 모달용
   const [showNewMemberModal, setShowNewMemberModal] = useState(false); // 신규회원 등록 모달
-  const [newMemberForm, setNewMemberForm] = useState({
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState(null);
+  const newMemberInitial = {
     name: '',
     email: '',
     phone: '',
@@ -577,102 +646,103 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
     emergencyContact: '',
     membershipType: '베이직',
     notes: '',
-  });
-  
-  const members = [
-    { 
-      id: 1, name: '김철수', status: 'active', tier: 'Master I', level: 247, attendance: 156, 
-      lastVisit: '2024-02-07', phone: '010-1234-5678', membershipType: '프리미엄',
-      email: 'chulsoo@example.com', birthDate: '1995-03-15', gender: '남성', 
-      weight: 72, height: 178, joinDate: '2023-01-15', address: '서울시 강남구',
-      emergencyContact: '010-9876-5432', notes: '무릎 부상 주의',
-      recentRecords: [
-        { date: '2024-02-07', type: '경기', detail: '스파링 매치 승리 (판정)' },
-        { date: '2024-02-06', type: '훈련', detail: '미트 트레이닝 90분' },
-        { date: '2024-02-05', type: '상담', detail: '전략 코칭 세션' },
-      ],
-      achievements: ['30일 연속 훈련', '레벨 200 달성', 'Master 티어 달성', 'KO 승리 10회'],
-      skills: [
-        { name: '펀치력', level: 85 },
-        { name: '스피드', level: 92 },
-        { name: '스태미나', level: 78 },
-        { name: '방어력', level: 82 },
-      ]
-    },
-    { 
-      id: 2, name: '이영희', status: 'active', tier: 'Master II', level: 218, attendance: 148, 
-      lastVisit: '2024-02-07', phone: '010-2345-6789', membershipType: '스탠다드',
-      email: 'younghee@example.com', birthDate: '1992-07-22', gender: '여성',
-      weight: 58, height: 165, joinDate: '2023-02-20', address: '서울시 서초구',
-      emergencyContact: '010-8765-4321', notes: '요가 선호',
-      recentRecords: [
-        { date: '2024-02-07', type: '훈련', detail: '섀도우 복싱 60분' },
-        { date: '2024-02-06', type: '경기', detail: '스파링 매치 (무승부)' },
-      ],
-      achievements: ['레벨 200 달성', 'Master 티어 달성', '완벽한 디펜스 5회'],
-      skills: [
-        { name: '펀치력', level: 70 },
-        { name: '스피드', level: 88 },
-        { name: '스태미나', level: 82 },
-        { name: '방어력', level: 85 },
-      ]
-    },
-    { 
-      id: 3, name: '박민준', status: 'active', tier: 'Master III', level: 205, attendance: 142, 
-      lastVisit: '2024-02-06', phone: '010-3456-7890', membershipType: '프리미엄',
-      email: 'minjun@example.com', birthDate: '1998-11-10', gender: '남성',
-      weight: 80, height: 182, joinDate: '2023-03-10', address: '서울시 송파구',
-      emergencyContact: '010-7654-3210', notes: '파워리프팅 집중',
-      recentRecords: [
-        { date: '2024-02-06', type: '경기', detail: 'KO 승리 (2라운드)' },
-      ],
-      achievements: ['레벨 200 달성', 'KO 파워하우스'],
-      skills: [
-        { name: '펀치력', level: 92 },
-        { name: '스피드', level: 68 },
-        { name: '스태미나', level: 75 },
-        { name: '방어력', level: 60 },
-      ]
-    },
-    { 
-      id: 4, name: '최서연', status: 'inactive', tier: 'Diamond I', level: 193, attendance: 135, 
-      lastVisit: '2024-02-01', phone: '010-4567-8901', membershipType: '베이직',
-      email: 'seoyeon@example.com', birthDate: '1996-05-30', gender: '여성',
-      weight: 55, height: 160, joinDate: '2023-04-05', address: '서울시 마포구',
-      emergencyContact: '010-6543-2109', notes: '휴면 회원',
-      recentRecords: [],
-      achievements: [],
-      skills: [
-        { name: '펀치력', level: 65 },
-        { name: '스피드', level: 70 },
-        { name: '스태미나', level: 68 },
-        { name: '방어력', level: 72 },
-      ]
-    },
-    { 
-      id: 5, name: '정지훈', status: 'active', tier: 'Diamond II', level: 187, attendance: 130, 
-      lastVisit: '2024-02-07', phone: '010-5678-9012', membershipType: '프리미엄',
-      email: 'jihun@example.com', birthDate: '1994-09-18', gender: '남성',
-      weight: 75, height: 175, joinDate: '2023-05-15', address: '서울시 강동구',
-      emergencyContact: '010-5432-1098', notes: '헤비백 훈련 선호',
-      recentRecords: [
-        { date: '2024-02-07', type: '훈련', detail: '헤비백 트레이닝 120분' },
-      ],
-      achievements: ['30일 연속 훈련', '강력한 펀치 마스터'],
-      skills: [
-        { name: '펀치력', level: 90 },
-        { name: '스피드', level: 75 },
-        { name: '스태미나', level: 85 },
-        { name: '방어력', level: 70 },
-      ]
-    },
-  ];
+  };
+  const [newMemberForm, setNewMemberForm] = useState(newMemberInitial);
+
+  const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
+
+  const loadMembers = useCallback(async () => {
+    if (!gymName) {
+      setMembers([]);
+      setMembersError(null);
+      setMembersLoading(false);
+      return;
+    }
+    setMembersLoading(true);
+    setMembersError(null);
+    try {
+      const { getGymMembersForGym } = await import('@/lib/supabase');
+      const { data, error } = await getGymMembersForGym({
+        gymUserId: profile?.id,
+        gymName,
+      });
+      if (error) {
+        setMembersError(error.message || '회원 목록을 불러오지 못했습니다.');
+        setMembers([]);
+      } else {
+        setMembers((data || []).map(mapGymMemberRow));
+      }
+    } catch (e) {
+      setMembersError(e.message || '회원 목록을 불러오지 못했습니다.');
+      setMembers([]);
+    } finally {
+      setMembersLoading(false);
+    }
+  }, [gymName, profile?.id]);
+
+  useEffect(() => {
+    loadMembers();
+  }, [loadMembers]);
 
   const filteredMembers = members.filter(m => {
     const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || m.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
+
+  const handleRegisterNewMember = async () => {
+    if (!profile?.id || !gymName) {
+      alert('체육관 프로필(체육관명)이 없습니다. 마이페이지에서 설정해 주세요.');
+      return;
+    }
+    const email = newMemberForm.email.trim();
+    const name = newMemberForm.name.trim();
+    if (!email || !name) {
+      alert('이름과 이메일은 필수입니다.');
+      return;
+    }
+    if (!newMemberForm.birthDate) {
+      alert('생년월일을 입력해 주세요. 초기 비밀번호(YYYYMMDD)로 사용됩니다.');
+      return;
+    }
+    const pwd = newMemberForm.birthDate.replace(/-/g, '');
+    if (!/^\d{8}$/.test(pwd)) {
+      alert('생년월일을 확인해 주세요.');
+      return;
+    }
+    const membershipMap = { 베이직: 'basic', 스탠다드: 'standard', 프리미엄: 'premium' };
+    const genderMap = { 남성: 'male', 여성: 'female' };
+
+    setRegisteringMember(true);
+    try {
+      const { signUp } = await import('@/lib/supabase');
+      const { error } = await signUp(email, pwd, {
+        name,
+        role: 'player_common',
+        gym_name: gymName,
+        gym_user_id: profile.id,
+        phone: newMemberForm.phone.trim() || undefined,
+        birth_date: newMemberForm.birthDate,
+        representative_phone: newMemberForm.emergencyContact.trim() || undefined,
+        membership_type: membershipMap[newMemberForm.membershipType] || 'basic',
+        gender: genderMap[newMemberForm.gender] || 'male',
+        height: newMemberForm.height ? parseInt(newMemberForm.height, 10) : undefined,
+        weight: newMemberForm.weight ? parseFloat(newMemberForm.weight) : undefined,
+      });
+      if (error) {
+        alert(error.message || '등록에 실패했습니다.');
+        return;
+      }
+      alert('회원 계정이 생성되었습니다. 생년월일(YYYYMMDD)을 초기 비밀번호로 안내해 주세요.');
+      setShowNewMemberModal(false);
+      setNewMemberForm({ ...newMemberInitial });
+      await loadMembers();
+    } catch (e) {
+      alert(e.message || '등록에 실패했습니다.');
+    } finally {
+      setRegisteringMember(false);
+    }
+  };
 
   return (
     <div className="animate-fade-in-up">
@@ -690,6 +760,15 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
           <span className="xs:hidden">신규등록</span>
         </button>
       </PageHeader>
+
+      {!gymName && (
+        <SpotlightCard className="p-4 mb-4 border border-amber-500/30 bg-amber-500/10">
+          <p className="text-sm text-amber-100/90">
+            소속 회원만 보려면 <strong className="text-white">마이페이지 프로필</strong>에 이 체육관과 동일한{' '}
+            <strong className="text-white">체육관 이름</strong>이 입력되어 있어야 합니다. 회원도 가입·프로필에서 같은 이름으로 소속을 맞춰 주세요.
+          </p>
+        </SpotlightCard>
+      )}
 
       {/* 검색 및 필터 */}
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
@@ -754,7 +833,21 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
       {/* 회원 목록 */}
       <SpotlightCard className="overflow-hidden">
         <div className="divide-y divide-white/5">
-          {filteredMembers.map((member) => (
+          {membersLoading && (
+            <div className="p-12 text-center text-gray-400">회원 정보를 불러오는 중...</div>
+          )}
+          {!membersLoading && membersError && (
+            <div className="p-12 text-center text-red-400">{membersError}</div>
+          )}
+          {!membersLoading && !membersError && !gymName && (
+            <div className="p-12 text-center text-gray-400">체육관 이름이 없어 목록을 불러올 수 없습니다.</div>
+          )}
+          {!membersLoading && !membersError && gymName && filteredMembers.length === 0 && (
+            <div className="p-12 text-center text-gray-400">
+              이 체육관(<span className="text-white font-medium">{gymName}</span>)에 소속으로 등록된 회원이 없습니다. 회원 프로필의 소속 체육관명이 정확히 일치하는지 확인하세요.
+            </div>
+          )}
+          {!membersLoading && !membersError && gymName && filteredMembers.map((member) => (
             <div key={member.id} className="p-2 sm:p-4 hover:bg-white/5 transition-all cursor-pointer">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3 flex-1 w-full min-w-0">
@@ -778,7 +871,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                       <span className="hidden sm:inline">•</span>
                       <span className="whitespace-nowrap">🏆 {member.tier}</span>
                       <span className="hidden sm:inline">•</span>
-                      <span className="whitespace-nowrap">Lv.{member.level}</span>
+                      <span className="whitespace-nowrap">{member.rankLabel || `Lv.${member.level}`}</span>
                       <span className="hidden sm:inline">•</span>
                       <span className="whitespace-nowrap">📅 {member.attendance}일</span>
                     </div>
@@ -828,7 +921,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 text-[9px] xs:text-[10px] sm:text-xs text-gray-400 flex-wrap">
                       <span className="whitespace-nowrap">🏆 {selectedMember.tier}</span>
                       <span className="hidden xs:inline">•</span>
-                      <span className="whitespace-nowrap">Lv.{selectedMember.level}</span>
+                      <span className="whitespace-nowrap">{selectedMember.rankLabel || `Lv.${selectedMember.level}`}</span>
                       <span className="hidden xs:inline">•</span>
                       <span className="whitespace-nowrap">출석 {selectedMember.attendance}일</span>
                     </div>
@@ -856,6 +949,20 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
                       <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">이메일</span>
                       <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium overflow-hidden text-ellipsis text-right">{selectedMember.email}</span>
+                    </div>
+                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">회원 DB ID</span>
+                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-mono break-all text-right">{selectedMember.id}</span>
+                    </div>
+                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">체육관 연동</span>
+                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium text-right max-w-[60%]">
+                        {selectedMember.gymUserId
+                          ? selectedMember.gymUserId === profile?.id
+                            ? '이 체육관 계정과 연동'
+                            : '다른 체육관 계정'
+                          : '이름만 일치(레거시)'}
+                      </span>
                     </div>
                     <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
                       <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">연락처</span>
@@ -898,13 +1005,17 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     <div className="p-1.5 xs:p-2 sm:p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
                       <div className="flex justify-between items-center">
                         <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400">체중</span>
-                        <span className="text-sm xs:text-base sm:text-xl font-bold text-blue-400">{selectedMember.weight}kg</span>
+                        <span className="text-sm xs:text-base sm:text-xl font-bold text-blue-400">
+                          {selectedMember.weight != null ? `${selectedMember.weight}kg` : '—'}
+                        </span>
                       </div>
                     </div>
                     <div className="p-1.5 xs:p-2 sm:p-3 bg-purple-500/10 rounded-lg border border-purple-500/30">
                       <div className="flex justify-between items-center">
                         <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400">신장</span>
-                        <span className="text-sm xs:text-base sm:text-xl font-bold text-purple-400">{selectedMember.height}cm</span>
+                        <span className="text-sm xs:text-base sm:text-xl font-bold text-purple-400">
+                          {selectedMember.height != null ? `${selectedMember.height}cm` : '—'}
+                        </span>
                       </div>
                     </div>
                     <div className="p-1.5 xs:p-2 sm:p-3 bg-white/5 rounded-lg">
@@ -914,28 +1025,49 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                   </div>
                 </SpotlightCard>
 
-                {/* 능력치 */}
+                {/* 전적 / 능력치 (DB에는 세부 능력치 없음 → 전적 표시) */}
                 <SpotlightCard className="p-2.5 xs:p-3 sm:p-5 col-span-1 sm:col-span-2">
                   <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
                     <span className="text-xs xs:text-sm sm:text-base">⚡</span>
-                    <span>능력치</span>
+                    <span>{selectedMember.skills?.length ? '능력치' : '전적·통계'}</span>
                   </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 xs:gap-2 sm:gap-3">
-                    {selectedMember.skills.map((skill) => (
-                      <div key={skill.name} className="p-1.5 xs:p-2 sm:p-3 bg-white/5 rounded-lg">
-                        <div className="flex justify-between items-center mb-1 gap-2">
-                          <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{skill.name}</span>
-                          <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-bold whitespace-nowrap">{skill.level}%</span>
+                  {selectedMember.skills?.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 xs:gap-2 sm:gap-3">
+                      {selectedMember.skills.map((skill) => (
+                        <div key={skill.name} className="p-1.5 xs:p-2 sm:p-3 bg-white/5 rounded-lg">
+                          <div className="flex justify-between items-center mb-1 gap-2">
+                            <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{skill.name}</span>
+                            <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-bold whitespace-nowrap">{skill.level}%</span>
+                          </div>
+                          <div className="w-full bg-gray-800 rounded-full h-1 xs:h-1.5">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
+                              style={{ width: `${skill.level}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="w-full bg-gray-800 rounded-full h-1 xs:h-1.5">
-                          <div 
-                            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
-                            style={{ width: `${skill.level}%` }}
-                          />
-                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="p-2 sm:p-3 bg-blue-500/10 rounded-lg border border-blue-500/20 text-center">
+                        <div className="text-[9px] text-gray-400">승</div>
+                        <div className="text-lg font-bold text-blue-400">{selectedMember.wins ?? 0}</div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="p-2 sm:p-3 bg-gray-500/10 rounded-lg border border-white/10 text-center">
+                        <div className="text-[9px] text-gray-400">무</div>
+                        <div className="text-lg font-bold text-white">{selectedMember.draws ?? 0}</div>
+                      </div>
+                      <div className="p-2 sm:p-3 bg-red-500/10 rounded-lg border border-red-500/20 text-center">
+                        <div className="text-[9px] text-gray-400">패</div>
+                        <div className="text-lg font-bold text-red-400">{selectedMember.losses ?? 0}</div>
+                      </div>
+                      <div className="p-2 sm:p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-center">
+                        <div className="text-[9px] text-gray-400">승률</div>
+                        <div className="text-lg font-bold text-emerald-400">{selectedMember.winRate ?? 0}%</div>
+                      </div>
+                    </div>
+                  )}
                 </SpotlightCard>
 
                 {/* 업적 */}
@@ -1009,11 +1141,11 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
       {/* 신규 회원 등록 모달 */}
       {showNewMemberModal && (
         <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 xs:p-3 sm:p-4 animate-fade-in overflow-y-auto"
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 animate-fade-in overflow-y-auto"
           onClick={() => setShowNewMemberModal(false)}
         >
           <div 
-            className="bg-[#0A0A0A] border border-white/20 rounded-2xl max-w-[calc(100vw-16px)] xs:max-w-[calc(100vw-24px)] sm:max-w-6xl w-full max-h-[95vh] xs:max-h-[92vh] sm:max-h-[90vh] flex flex-col my-auto"
+            className="bg-[#0A0A0A] border border-white/20 rounded-2xl w-full max-w-[min(1440px,calc(100vw-24px))] h-[80vh] max-h-[80vh] flex flex-col my-auto shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* 모달 헤더 */}
@@ -1047,7 +1179,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     <span>기본 정보</span>
                     <span className="text-red-400">*</span>
                   </h3>
-                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2 xs:gap-3 sm:gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 xs:gap-4 sm:gap-6">
                     <div>
                       <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">
                         이름 <span className="text-red-400">*</span>
@@ -1223,48 +1355,23 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
             {/* 모달 푸터 */}
             <div className="p-6 border-t border-white/10 bg-white/5 flex gap-4">
               <button 
+                type="button"
                 onClick={() => {
                   setShowNewMemberModal(false);
-                  setNewMemberForm({
-                    name: '',
-                    email: '',
-                    phone: '',
-                    birthDate: '',
-                    gender: '남성',
-                    weight: '',
-                    height: '',
-                    address: '',
-                    emergencyContact: '',
-                    membershipType: '베이직',
-                    notes: '',
-                  });
+                  setNewMemberForm({ ...newMemberInitial });
                 }}
-                className="flex-1 py-4 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-lg transition-all"
+                className="flex-1 py-4 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-lg transition-all disabled:opacity-50"
+                disabled={registeringMember}
               >
                 취소
               </button>
               <button 
-                onClick={() => {
-                  // TODO: 회원 등록 로직
-                  alert('회원이 등록되었습니다!');
-                  setShowNewMemberModal(false);
-                  setNewMemberForm({
-                    name: '',
-                    email: '',
-                    phone: '',
-                    birthDate: '',
-                    gender: '남성',
-                    weight: '',
-                    height: '',
-                    address: '',
-                    emergencyContact: '',
-                    membershipType: '베이직',
-                    notes: '',
-                  });
-                }}
-                className="flex-1 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl font-bold text-lg transition-all hover:scale-[1.02] shadow-lg shadow-blue-500/30"
+                type="button"
+                onClick={handleRegisterNewMember}
+                disabled={registeringMember}
+                className="flex-1 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl font-bold text-lg transition-all hover:scale-[1.02] shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:hover:scale-100"
               >
-                ✓ 등록 완료
+                {registeringMember ? '등록 중…' : '✓ 등록 완료'}
               </button>
             </div>
           </div>
@@ -1273,6 +1380,25 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
     </div>
   );
 };
+
+/**
+ * statistics(또는 public_player_profiles) 기반 전적으로 청 코너 예상 승률(%).
+ * 각 선수의 역사적 승률 w/t를 강도로 두고 P(청) = s_b / (s_b + s_r) (단순 로짓/브들리-테리형).
+ * 경기 수 0이면 0.5로 두어 50:50에 가깝게.
+ */
+function computeExpectedBlueWinPercent(blue, red) {
+  const strength = (m) => {
+    const t = Number(m?.totalMatches) || 0;
+    const w = Number(m?.wins) || 0;
+    if (t <= 0) return 0.5;
+    return w / t;
+  };
+  const sb = strength(blue);
+  const sr = strength(red);
+  const den = sb + sr;
+  if (den <= 0) return 50;
+  return Math.round((sb / den) * 1000) / 10;
+}
 
 // 매칭 룸 페이지 (코치)
 const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
@@ -1362,12 +1488,16 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
         const losses = Number(user.losses) || 0;
         const draws = Number(user.draws) || 0;
         const totalMatches = Number(user.total_matches) || wins + losses + draws;
+        const winRate =
+          totalMatches > 0
+            ? Math.round((wins / totalMatches) * 1000) / 10
+            : normalizeWinRate(user.win_rate);
         return {
           id: user.id,
           name: user.display_name || user.name || user.nickname || '이름 미등록',
           weight: Number.isFinite(Number(user.weight)) ? Number(user.weight) : null,
           record: formatMemberRecord(wins, losses, draws, totalMatches),
-          winRate: normalizeWinRate(user.win_rate),
+          winRate,
           wins,
           losses,
           draws,
@@ -1778,23 +1908,31 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             </SpotlightCard>
           </div>
 
-          {/* 예상 승률 */}
-          {blueCorner && redCorner && (
-            <SpotlightCard className="p-2 sm:p-3 mb-3 sm:mb-4 bg-gradient-to-r from-blue-500/10 to-red-500/10 border border-white/20">
-              <div className="flex items-center justify-between gap-1 sm:gap-2">
-                <div className="text-blue-400 font-bold text-xs sm:text-sm whitespace-nowrap">{blueCorner.name}</div>
-                <div className="text-center flex-1 min-w-0 mx-1 sm:mx-2">
-                  <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 whitespace-nowrap">{t('expectedWinRate')}</div>
-                  <div className="flex items-center justify-center gap-1 sm:gap-2">
-                    <span className="text-blue-400 font-bold text-sm sm:text-base">55%</span>
-                    <span className="text-gray-500 text-xs">:</span>
-                    <span className="text-red-400 font-bold text-sm sm:text-base">45%</span>
+          {/* 예상 승률 (DB 전적 기반) */}
+          {blueCorner && redCorner && (() => {
+            const bluePct = computeExpectedBlueWinPercent(blueCorner, redCorner);
+            const redPct = Math.round((100 - bluePct) * 10) / 10;
+            return (
+              <SpotlightCard className="p-2 sm:p-3 mb-3 sm:mb-4 bg-gradient-to-r from-blue-500/10 to-red-500/10 border border-white/20">
+                <div className="flex items-center justify-between gap-1 sm:gap-2">
+                  <div className="text-blue-400 font-bold text-xs sm:text-sm whitespace-nowrap truncate max-w-[38%]">
+                    {blueCorner.name}
+                  </div>
+                  <div className="text-center flex-1 min-w-0 mx-1 sm:mx-2">
+                    <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 whitespace-nowrap">{t('expectedWinRate')}</div>
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
+                      <span className="text-blue-400 font-bold text-sm sm:text-base tabular-nums">{bluePct}%</span>
+                      <span className="text-gray-500 text-xs">:</span>
+                      <span className="text-red-400 font-bold text-sm sm:text-base tabular-nums">{redPct}%</span>
+                    </div>
+                  </div>
+                  <div className="text-red-400 font-bold text-xs sm:text-sm whitespace-nowrap truncate max-w-[38%] text-right">
+                    {redCorner.name}
                   </div>
                 </div>
-                <div className="text-red-400 font-bold text-xs sm:text-sm whitespace-nowrap">{redCorner.name}</div>
-              </div>
-            </SpotlightCard>
-          )}
+              </SpotlightCard>
+            );
+          })()}
 
           {/* MATCH START 버튼 */}
           {blueCorner && redCorner && (

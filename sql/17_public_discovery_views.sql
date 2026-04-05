@@ -1,37 +1,9 @@
 -- ============================================================
--- SPORTITION MVP3 VIEWS
--- Public player/profile views and convenience joins.
+-- 17: 공개 조회용 뷰 (security_invoker = false)
+-- approval_queue_detailed / public_player_profiles 가 users RLS에
+-- 막혀 빈 이름·빈 목록이 나오는 문제를 완화합니다.
+-- Supabase SQL 에디터에서 한 번 실행하면 됩니다.
 -- ============================================================
-
-DROP VIEW IF EXISTS public.skill_points_ranking;
-
-CREATE OR REPLACE VIEW public.user_cards_detailed
-WITH (security_invoker = true)
-AS
-SELECT
-  uc.id,
-  uc.user_id,
-  uc.card_id,
-  uc.level,
-  uc.fragment_count,
-  uc.is_equipped,
-  uc.equipped_node_id,
-  uc.obtained_at,
-  sc.name AS card_name,
-  sc.name_en AS card_name_en,
-  sc.rarity,
-  sc.card_type,
-  sc.max_level,
-  sc.image_url,
-  sm.name AS master_name,
-  sm.nickname AS master_nickname,
-  sm.animal_motif
-FROM public.user_cards uc
-JOIN public.skill_cards sc ON uc.card_id = sc.id
-LEFT JOIN public.skill_masters sm ON sc.master_id = sm.id;
-
-GRANT SELECT ON public.user_cards_detailed TO authenticated;
-REVOKE ALL ON public.user_cards_detailed FROM anon;
 
 CREATE OR REPLACE VIEW public.approval_queue_detailed
 WITH (security_invoker = false)

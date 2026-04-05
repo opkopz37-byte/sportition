@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
+import { tierFamilyFromLabel } from '@/lib/tierLadder';
 
 const ITEMS_PER_PAGE = 50;
 const RECENT_MATCHES_COLLAPSED = 1;
@@ -83,7 +84,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
 
   const filteredPlayers = selectedTier === 'All'
     ? players
-    : players.filter((player) => player.tier?.includes(selectedTier));
+    : players.filter((player) => tierFamilyFromLabel(player.tier) === selectedTier);
 
   const totalPages = Math.max(1, Math.ceil(filteredPlayers.length / ITEMS_PER_PAGE));
   const paginatedPlayers = filteredPlayers.slice(
@@ -95,7 +96,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
     <div className="animate-fade-in-up">
       <PageHeader
         title={t('tierBoard')}
-        description={`매치 전적 기준 랭킹 · 전체 ${players.length.toLocaleString()}명`}
+        description={`승점 = 승×3 + 무×1 · 티어는 승점 구간으로 산정 · 전체 ${players.length.toLocaleString()}명`}
       />
 
       <div className="mb-4 sm:mb-5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2">
@@ -139,7 +140,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
           </div>
             <div className="text-right flex-shrink-0">
               <div className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                {(profile?.wins || 0) * 3 + (profile?.draws || 0)}
+                {profile?.match_points ?? (profile?.wins || 0) * 3 + (profile?.draws || 0)}
               </div>
               <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500">승점</div>
             </div>
