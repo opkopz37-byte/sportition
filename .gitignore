@@ -26,6 +26,7 @@ yarn-error.log*
 # local env files (비밀값 — 커밋 금지)
 .env
 .env*.local
+.dev.vars
 
 # vercel
 .vercel

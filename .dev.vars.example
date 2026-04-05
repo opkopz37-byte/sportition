@@ -1,0 +1,2 @@
+# 로컬 `opennextjs-cloudflare preview` 시 복사해 `.dev.vars`로 사용 (커밋하지 않음)
+NEXTJS_ENV=development
