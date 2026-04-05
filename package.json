@@ -2,14 +2,19 @@
   "name": "sportition-nextjs",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18.17.0"
+  },
   "scripts": {
     "dev": "bash scripts/dev.sh",
     "dev:clean": "node -e \"try{require('fs').rmSync('.next',{recursive:true,force:true})}catch(e){}\" && bash scripts/dev.sh",
     "dev:plain": "next dev -H 127.0.0.1 -p 3000",
     "build": "next build",
     "build:cloudflare": "opennextjs-cloudflare build",
+    "verify:cloudflare": "npm run build:cloudflare",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && wrangler deploy",
+    "deploy:cloudflare": "npm run deploy",
     "start": "next start",
     "lint": "next lint",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"

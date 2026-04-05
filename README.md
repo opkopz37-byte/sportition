@@ -64,6 +64,10 @@ npm start
 
 `npm run build`만 쓰면 `.open-next`가 없어 배포 단계에서 *compiled Open Next config* 오류가 납니다.
 
+로컬에서 CI와 같이 OpenNext 빌드만 먼저 검증하려면: **`npm run verify:cloudflare`** (내부적으로 `npm run build:cloudflare`와 동일).
+
+배포 절차·환경 변수·트러블슈팅 전체는 **[CLOUDFLARE.md](./CLOUDFLARE.md)** 를 참고하세요.
+
 ## 📁 프로젝트 구조
 
 ```
@@ -92,6 +96,7 @@ sportition-mvp3/
 ├── public/                # 정적 파일
 ├── .env.example           # 환경 변수 템플릿 (복사 → .env.local)
 ├── DATABASE_SCHEMA.md     # 데이터베이스 스키마
+├── CLOUDFLARE.md          # Cloudflare Workers 배포·점검
 ├── SUPABASE_SETUP.md      # Supabase 설정 가이드
 ├── MOBILE_RESPONSIVE.md   # 모바일 반응형 가이드
 └── package.json          # 프로젝트 설정
