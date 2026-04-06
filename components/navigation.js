@@ -34,7 +34,7 @@ return () => {
 
   return (
 <div 
-  className="relative"
+  className="relative z-[100]"
   onMouseEnter={handleMouseEnter}
   onMouseLeave={handleMouseLeave}
 >
@@ -51,12 +51,13 @@ return () => {
   </button>
 
   {hasSubmenus && isOpen && (
-    <div className="absolute top-full left-0 mt-2 w-48 bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up z-50">
+    <div className="absolute top-full left-0 mt-1.5 min-w-[12rem] w-max max-w-[min(100vw-1rem,20rem)] bg-[#0A0A0A] border border-white/10 rounded-lg shadow-2xl animate-fade-in-up z-[200] py-1">
       {item.submenus.map((submenu) => (
         <button
           key={submenu.id}
+          type="button"
           onClick={() => setActiveTab(`${item.id}-${submenu.id}`)}
-          className="w-full px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-between group"
+          className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-between gap-2 group whitespace-nowrap"
         >
           <span>{t(submenu.labelKey)}</span>
           <Icon type="chevronRight" size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -177,8 +178,8 @@ return (
 
   return (
 <>
-  <header className="fixed top-0 inset-x-0 z-50 min-h-[clamp(2.75rem,7vw,4rem)] border-b border-white/5 bg-black/50 backdrop-blur-xl flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-[clamp(0.375rem,2vw,1.5rem)] py-2 min-w-0">
-    <div className="flex items-center gap-[clamp(0.375rem,2vw,1.5rem)] min-w-0 flex-1 basis-0 min-[520px]:basis-auto xl:flex-initial">
+  <header className="fixed top-0 inset-x-0 z-50 min-h-[clamp(2.75rem,7vw,4rem)] border-b border-white/5 bg-black/50 backdrop-blur-xl flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-[clamp(0.375rem,2vw,1.5rem)] py-2 min-w-0 overflow-visible">
+    <div className="flex items-center gap-[clamp(0.375rem,2vw,1.5rem)] min-w-0 flex-1 basis-0 min-[520px]:basis-auto xl:flex-initial overflow-visible">
       <button 
         type="button"
         onClick={() => setShowMobileMenu(!showMobileMenu)}
@@ -200,7 +201,7 @@ return (
         <span className="text-[clamp(0.7rem,calc(0.8vw+0.45rem),0.875rem)] whitespace-nowrap truncate max-w-[min(8rem,28vw)] sm:max-w-none">Sportition</span>
       </div>
 
-      <nav className="hidden xl:flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0 max-w-[min(100%,52rem)] py-0.5" aria-label="Main">
+      <nav className="hidden xl:flex flex-wrap items-center gap-x-0.5 gap-y-1 justify-start overflow-visible min-w-0 flex-1 xl:max-w-none py-0.5" aria-label="Main">
         {menuItems.map(item => (
           <NavMenuItem 
             key={item.id}
@@ -214,7 +215,7 @@ return (
       </nav>
     </div>
 
-    <div className="flex items-center gap-[clamp(0.25rem,1.5vw,0.75rem)] shrink-0 min-w-0 flex-shrink-0 flex-wrap sm:flex-nowrap justify-end w-full min-[520px]:w-auto">
+    <div className="flex items-center gap-[clamp(0.25rem,1.5vw,0.75rem)] shrink-0 min-w-0 flex-shrink-0 flex-wrap sm:flex-nowrap justify-end w-full min-[520px]:w-auto overflow-visible">
       {role === 'gym' && (
         <button
           onClick={() => window.open('/attendance', '_blank', 'width=1920,height=1080,toolbar=no,location=no,status=no,menubar=no,scrollbars=no')}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
@@ -594,6 +594,7 @@ function mapGymMemberRow(row) {
   return {
     id: row.id,
     gymUserId: row.gym_user_id || null,
+    userRole: row.role || 'player_common',
     name: displayName,
     status: hasActivity ? 'active' : 'inactive',
     tier: row.tier || '—',
@@ -629,6 +630,8 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
   const [registeringMember, setRegisteringMember] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // all, active, inactive
+  /** 'all' | 'athlete' — 모든 회원 vs 선수(player_athlete)만 */
+  const [memberRoleScope, setMemberRoleScope] = useState('all');
   const [selectedMember, setSelectedMember] = useState(null); // 상세보기 모달용
   const [showNewMemberModal, setShowNewMemberModal] = useState(false); // 신규회원 등록 모달
   const [members, setMembers] = useState([]);
@@ -684,7 +687,83 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
     loadMembers();
   }, [loadMembers]);
 
-  const filteredMembers = members.filter(m => {
+  /** 출석/통계 DB 변경 시 목록 즉시 반영 (키오스크 등 다른 창 포함) */
+  useEffect(() => {
+    if (!gymName) return;
+    let channel;
+    let cancelled = false;
+
+    const start = async () => {
+      try {
+        const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
+        if (typeof isSupabaseConfigured !== 'function' || !isSupabaseConfigured() || cancelled) return;
+        const supabase = getSupabase();
+        channel = supabase
+          .channel(`gym-members-live-${gymName}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'attendance' },
+            () => loadMembers()
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'statistics' },
+            () => loadMembers()
+          )
+          .subscribe();
+      } catch (e) {
+        console.warn('[PlayersManagement] realtime subscribe:', e);
+      }
+    };
+    start();
+
+    const poll = setInterval(() => {
+      if (!cancelled && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadMembers();
+      }
+    }, 20000);
+
+    const onVis = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') loadMembers();
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis);
+      import('@/lib/supabase').then(({ getSupabase }) => {
+        if (channel) getSupabase().removeChannel(channel);
+      });
+    };
+  }, [gymName, loadMembers]);
+
+  /** 목록 새로고침 후 열린 상세 모달도 최신 출석·통계 반영 */
+  useEffect(() => {
+    setSelectedMember((prev) => {
+      if (!prev) return prev;
+      const updated = members.find((m) => m.id === prev.id);
+      if (!updated) return prev;
+      if (
+        prev.attendance === updated.attendance &&
+        prev.status === updated.status &&
+        prev.winRate === updated.winRate &&
+        prev.totalMatches === updated.totalMatches
+      ) {
+        return prev;
+      }
+      return updated;
+    });
+  }, [members]);
+
+  const scopeMembers = useMemo(() => {
+    if (memberRoleScope === 'athlete') {
+      return members.filter((m) => m.userRole === 'player_athlete');
+    }
+    return members;
+  }, [members, memberRoleScope]);
+
+  const filteredMembers = scopeMembers.filter((m) => {
     const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || m.status === filterStatus;
     return matchesSearch && matchesStatus;
@@ -771,60 +850,85 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
       )}
 
       {/* 검색 및 필터 */}
-      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
-        <div className="flex-1">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('searchMemberName')}
-            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all text-sm sm:text-base"
-          />
+      <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('searchMemberName')}
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all text-sm sm:text-base"
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            {[
+              { key: 'all', label: t('allMembers') },
+              { key: 'active', label: t('activeMembers') },
+              { key: 'inactive', label: t('dormant') },
+            ].map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => setFilterStatus(filter.key)}
+                className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold transition-all text-[11px] sm:text-sm whitespace-nowrap ${
+                  filterStatus === filter.key
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex gap-1.5 sm:gap-2">
-          {[
-            { key: 'all', label: t('allMembers') },
-            { key: 'active', label: t('activeMembers') },
-            { key: 'inactive', label: t('dormant') },
-          ].map((filter) => (
-            <button
-              key={filter.key}
-              onClick={() => setFilterStatus(filter.key)}
-              className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold transition-all text-[11px] sm:text-sm whitespace-nowrap ${
-                filterStatus === filter.key
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white/5 text-gray-400 hover:bg-white/10'
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">구분</span>
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            {[
+              { key: 'all', label: t('memberScopeAll') },
+              { key: 'athlete', label: t('memberScopeAthletes') },
+            ].map((row) => (
+              <button
+                key={row.key}
+                type="button"
+                onClick={() => setMemberRoleScope(row.key)}
+                className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold transition-all text-[11px] sm:text-sm whitespace-nowrap ${
+                  memberRoleScope === row.key
+                    ? 'bg-purple-500/90 text-white'
+                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                }`}
+              >
+                {row.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 선수 통계 */}
+      {/* 선수 통계 — 선택한 구분(모든 회원 / 선수) 기준, DB 갱신 시 자동 반영 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-5">
         <SpotlightCard className="p-2.5 sm:p-3">
           <div className="text-center">
-            <div className="text-xl sm:text-2xl font-bold text-white mb-0.5">{members.length}</div>
+            <div className="text-xl sm:text-2xl font-bold text-white mb-0.5">{scopeMembers.length}</div>
             <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{t('totalMembersCount')}</div>
           </div>
         </SpotlightCard>
         <SpotlightCard className="p-2.5 sm:p-3">
           <div className="text-center">
-            <div className="text-xl sm:text-2xl font-bold text-emerald-400 mb-0.5">{members.filter(m => m.status === 'active').length}</div>
+            <div className="text-xl sm:text-2xl font-bold text-emerald-400 mb-0.5">{scopeMembers.filter((m) => m.status === 'active').length}</div>
             <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{t('activeMembers')}</div>
           </div>
         </SpotlightCard>
         <SpotlightCard className="p-2.5 sm:p-3">
           <div className="text-center">
-            <div className="text-xl sm:text-2xl font-bold text-red-400 mb-0.5">{members.filter(m => m.status === 'inactive').length}</div>
+            <div className="text-xl sm:text-2xl font-bold text-red-400 mb-0.5">{scopeMembers.filter((m) => m.status === 'inactive').length}</div>
             <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{t('dormant')}</div>
           </div>
         </SpotlightCard>
         <SpotlightCard className="p-2.5 sm:p-3">
           <div className="text-center">
-            <div className="text-xl sm:text-2xl font-bold text-purple-400 mb-0.5">{members.filter(m => m.membershipType === '프리미엄').length}</div>
+            <div className="text-xl sm:text-2xl font-bold text-purple-400 mb-0.5">{scopeMembers.filter((m) => m.membershipType === '프리미엄').length}</div>
             <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{t('premium')}</div>
           </div>
         </SpotlightCard>

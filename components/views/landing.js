@@ -11,6 +11,48 @@ import {
   OPTIONAL_MARKETING_CONSENT_TITLE_KO,
 } from '@/lib/legal/termsOfService';
 
+/** 숫자만 입력해도 010-1234-5678 / 02-1234-5678 형태로 표시 */
+function formatKoreanPhone(raw) {
+  const d = String(raw).replace(/\D/g, '').slice(0, 11);
+  if (!d) return '';
+  if (d.startsWith('02')) {
+    if (d.length <= 2) return d;
+    if (d.length <= 6) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (d.length <= 10) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`;
+  }
+  if (d.startsWith('01')) {
+    if (d.length <= 3) return d;
+    // 11자리(010-xxxx-xxxx) vs 10자리(011-xxx-xxxx 등)
+    if (d.length <= 10) {
+      if (d.length <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
+      return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6, 10)}`;
+    }
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
+  }
+  if (d.length <= 3) return d;
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
+}
+
+const BIRTH_YEAR_MIN = 1910;
+const BIRTH_YEAR_MAX = 2026;
+const BIRTH_YEAR_OPTIONS = Array.from(
+  { length: BIRTH_YEAR_MAX - BIRTH_YEAR_MIN + 1 },
+  (_, i) => BIRTH_YEAR_MAX - i
+);
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
+const BIRTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
+
+function isValidCalendarDate(y, m, d) {
+  const yi = Number(y);
+  const mi = Number(m);
+  const di = Number(d);
+  if (!yi || !mi || !di) return false;
+  const dt = new Date(yi, mi - 1, di);
+  return dt.getFullYear() === yi && dt.getMonth() === mi - 1 && dt.getDate() === di;
+}
+
 // 로그인 모달
 const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => key }) => {
   const [email, setEmail] = useState('');
@@ -151,7 +193,9 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     // Step 2: 프로필 정보
     nickname: '',
     phone: '',
-    birthDate: '',
+    birthYear: '',
+    birthMonth: '',
+    birthDay: '',
     gender: '',
     height: '',
     weight: '',
@@ -159,7 +203,6 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     gymName: '', // 일반/선수
     gymLocation: '', // 체육관만
     representativePhone: '', // 체육관만
-    membershipType: 'basic' // 일반/선수만
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -217,8 +260,12 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       return false;
     }
 
-    if (!formData.birthDate) {
-      setError('생년월일을 입력해주세요.');
+    if (!formData.birthYear || !formData.birthMonth || !formData.birthDay) {
+      setError('생년월일을 모두 선택해주세요.');
+      return false;
+    }
+    if (!isValidCalendarDate(formData.birthYear, formData.birthMonth, formData.birthDay)) {
+      setError('올바른 생년월일을 선택해주세요.');
       return false;
     }
 
@@ -269,11 +316,16 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       const { signUp } = await import('@/lib/supabase');
       
       console.log('[SignUp] 회원가입 폼 데이터:', formData);
+
+      const y = String(formData.birthYear).padStart(4, '0');
+      const m = String(formData.birthMonth).padStart(2, '0');
+      const d = String(formData.birthDay).padStart(2, '0');
+      const birthDateIso = `${y}-${m}-${d}`;
       
       const userData = {
         name: formData.nickname,
         phone: formData.phone,
-        birth_date: formData.birthDate,
+        birth_date: birthDateIso,
         role: formData.role,
         gender: formData.gender,
         height: formData.height || null,
@@ -281,16 +333,14 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
         marketing_consent: formData.agreeMarketing === true,
       };
 
-      // 역할별 추가 데이터
+      // 역할별 추가 데이터 (멤버십은 가입 시 UI 없음 → 기본 베이직)
       if (formData.role === 'player_common') {
-        // 일반 회원
         userData.gym_name = formData.gymName || null;
-        userData.membership_type = formData.membershipType;
+        userData.membership_type = 'basic';
       } else if (formData.role === 'player_athlete') {
-        // 선수
         userData.boxing_style = formData.boxingStyle || null;
         userData.gym_name = formData.gymName || null;
-        userData.membership_type = formData.membershipType;
+        userData.membership_type = 'basic';
       } else if (formData.role === 'gym') {
         // 체육관
         userData.gym_name = formData.gymName;
@@ -681,8 +731,12 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
             <label className="block text-sm font-medium text-gray-400 mb-2">핸드폰 번호 *</label>
             <input
               type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
               value={formData.phone}
-              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              onChange={(e) =>
+                setFormData({ ...formData, phone: formatKoreanPhone(e.target.value) })
+              }
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
               placeholder="010-1234-5678"
               disabled={loading}
@@ -692,13 +746,56 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
 
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">생년월일 *</label>
-            <input
-              type="date"
-              value={formData.birthDate}
-              onChange={(e) => setFormData({...formData, birthDate: e.target.value})}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-              disabled={loading}
-            />
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1">연도</label>
+                <select
+                  value={formData.birthYear}
+                  onChange={(e) => setFormData({ ...formData, birthYear: e.target.value })}
+                  className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all text-sm"
+                  disabled={loading}
+                >
+                  <option value="">선택</option>
+                  {BIRTH_YEAR_OPTIONS.map((y) => (
+                    <option key={y} value={String(y)}>
+                      {y}년
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1">월</label>
+                <select
+                  value={formData.birthMonth}
+                  onChange={(e) => setFormData({ ...formData, birthMonth: e.target.value })}
+                  className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all text-sm"
+                  disabled={loading}
+                >
+                  <option value="">선택</option>
+                  {MONTH_OPTIONS.map((mo) => (
+                    <option key={mo} value={String(mo)}>
+                      {mo}월
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1">일</label>
+                <select
+                  value={formData.birthDay}
+                  onChange={(e) => setFormData({ ...formData, birthDay: e.target.value })}
+                  className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all text-sm"
+                  disabled={loading}
+                >
+                  <option value="">선택</option>
+                  {BIRTH_DAY_OPTIONS.map((day) => (
+                    <option key={day} value={String(day)}>
+                      {day}일
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -791,27 +888,6 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                   disabled={loading}
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">멤버십 타입</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {['basic', 'standard', 'premium'].map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setFormData({...formData, membershipType: type})}
-                      disabled={loading}
-                      className={`p-2 rounded-lg border transition-all text-xs ${
-                        formData.membershipType === type
-                          ? 'border-blue-500 bg-blue-500/10 text-white'
-                          : 'border-white/10 bg-white/5 text-gray-400'
-                      }`}
-                    >
-                      {type === 'basic' ? '베이직' : type === 'standard' ? '스탠다드' : '프리미엄'}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </>
           )}
 
@@ -846,8 +922,14 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                 <label className="block text-sm font-medium text-gray-400 mb-2">대표 연락처 *</label>
                 <input
                   type="tel"
+                  inputMode="numeric"
                   value={formData.representativePhone}
-                  onChange={(e) => setFormData({...formData, representativePhone: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      representativePhone: formatKoreanPhone(e.target.value),
+                    })
+                  }
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
                   placeholder="02-1234-5678"
                   disabled={loading}
