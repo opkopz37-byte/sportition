@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { PageHeader, SpotlightCard } from '@/components/ui';
+import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
 import { tierFamilyFromLabel, computeMatchPoints } from '@/lib/tierLadder';
@@ -38,6 +38,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
   const [recentMatches, setRecentMatches] = useState([]);
   const [recentMatchesExpanded, setRecentMatchesExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [playerSearch, setPlayerSearch] = useState('');
 
   useEffect(() => {
     const loadPlayers = async () => {
@@ -85,9 +86,20 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
 
   const canExpandRecentMatches = recentMatches.length > RECENT_MATCHES_COLLAPSED;
 
-  const filteredPlayers = selectedTier === 'All'
-    ? players
-    : players.filter((player) => tierFamilyFromLabel(player.tier) === selectedTier);
+  const filteredPlayers = useMemo(() => {
+    let list =
+      selectedTier === 'All'
+        ? players
+        : players.filter((player) => tierFamilyFromLabel(player.tier) === selectedTier);
+    const q = playerSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((p) => {
+      const name = String(p.display_name || '').toLowerCase();
+      const gym = String(p.gym_name || '').toLowerCase();
+      const style = String(p.boxing_style || '').toLowerCase();
+      return name.includes(q) || gym.includes(q) || style.includes(q);
+    });
+  }, [players, selectedTier, playerSearch]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPlayers.length / ITEMS_PER_PAGE));
   const paginatedPlayers = filteredPlayers.slice(
@@ -101,6 +113,45 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
         title={t('tierBoard')}
         description={`${t('tierBoardSubtitleRule')} · ${(t('tierBoardTotalPlayers') || '').replace('{n}', players.length.toLocaleString())}`}
       />
+
+      <div className="mb-4 sm:mb-5">
+        <label htmlFor="tier-board-player-search" className="sr-only">
+          {t('tierBoardSearchPlaceholder')}
+        </label>
+        <div className="relative">
+          <span
+            className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-gray-500"
+            aria-hidden
+          >
+            <Icon type="search" size={18} className="opacity-80" />
+          </span>
+          <input
+            id="tier-board-player-search"
+            type="search"
+            value={playerSearch}
+            onChange={(e) => {
+              setPlayerSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder={t('tierBoardSearchPlaceholder')}
+            autoComplete="off"
+            className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-2.5 pl-10 pr-10 text-sm text-white shadow-inner placeholder:text-gray-500 focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+          />
+          {playerSearch ? (
+            <button
+              type="button"
+              onClick={() => {
+                setPlayerSearch('');
+                setCurrentPage(1);
+              }}
+              className="absolute right-2 top-1/2 z-[1] -translate-y-1/2 rounded-lg p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
+              aria-label={t('tierBoardSearchClear')}
+            >
+              <Icon type="x" size={16} />
+            </button>
+          ) : null}
+        </div>
+      </div>
 
       <div className="mb-4 sm:mb-5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2">
         {TIERS.map((tier) => (
