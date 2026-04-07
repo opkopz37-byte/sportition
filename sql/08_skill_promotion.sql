@@ -11,11 +11,11 @@ ALTER TABLE public.skill_tree_nodes
 COMMENT ON COLUMN public.skill_tree_nodes.is_fork IS '갈림길 노드: 승단 신청 대상';
 COMMENT ON COLUMN public.skill_tree_nodes.fork_branch_node_numbers IS '관장이 선택할 분기 자식 node_number 배열 (보통 2개)';
 
--- 예시: 인파이터 분기 노드 10 → 11 또는 13
+-- 예시: 인파이터 갈림길 노드 101 → 102(맷집) 또는 104(체력)
 UPDATE public.skill_tree_nodes
 SET is_fork = true,
-    fork_branch_node_numbers = ARRAY[11, 13]
-WHERE node_number = 10;
+    fork_branch_node_numbers = ARRAY[102, 104]
+WHERE node_number = 101;
 
 -- ---------------------------------------------------------------------------
 -- 사용자별 노드 투자(찍기) 및 승단 실패 횟수

@@ -4,14 +4,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
-import { tierFamilyFromLabel } from '@/lib/tierLadder';
+import { tierFamilyFromLabel, computeMatchPoints } from '@/lib/tierLadder';
 
 const ITEMS_PER_PAGE = 50;
 const RECENT_MATCHES_COLLAPSED = 1;
 const RECENT_MATCHES_EXPANDED = 5;
-const TIERS = ['All', 'Master', 'Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze'];
+/** 상위 티어 우선 (필터 탭 순서) */
+const TIERS = ['All', 'Challenger', 'Grandmaster', 'Master', 'Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze'];
 
 const getTierColor = (tier = '') => {
+  if (tier.includes('Challenger')) return { bg: 'from-red-600/25 to-orange-500/20', text: 'text-red-300', border: 'border-red-500/50' };
+  if (tier.includes('Grandmaster')) return { bg: 'from-amber-500/25 to-rose-500/20', text: 'text-amber-300', border: 'border-amber-400/50' };
   if (tier.includes('Master')) return { bg: 'from-purple-500/20 to-pink-500/20', text: 'text-purple-400', border: 'border-purple-500/50' };
   if (tier.includes('Diamond')) return { bg: 'from-blue-500/20 to-cyan-500/20', text: 'text-blue-400', border: 'border-blue-500/50' };
   if (tier.includes('Platinum')) return { bg: 'from-emerald-500/20 to-green-500/20', text: 'text-emerald-400', border: 'border-emerald-500/50' };
@@ -96,7 +99,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
     <div className="animate-fade-in-up">
       <PageHeader
         title={t('tierBoard')}
-        description={`승점 = 승×3 + 무×1 · 티어는 승점 구간으로 산정 · 전체 ${players.length.toLocaleString()}명`}
+        description={`${t('tierBoardSubtitleRule')} · ${(t('tierBoardTotalPlayers') || '').replace('{n}', players.length.toLocaleString())}`}
       />
 
       <div className="mb-4 sm:mb-5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2">
@@ -140,9 +143,9 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
           </div>
             <div className="text-right flex-shrink-0">
               <div className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                {profile?.match_points ?? (profile?.wins || 0) * 3 + (profile?.draws || 0)}
+                {profile?.match_points ?? computeMatchPoints(profile?.wins, profile?.draws, profile?.losses)}
               </div>
-              <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500">승점</div>
+              <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500">{t('victoryPoints')}</div>
             </div>
           </div>
       </SpotlightCard>
@@ -207,7 +210,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
             <div className="col-span-1">#</div>
             <div className="col-span-3">선수명</div>
             <div className="col-span-2">티어</div>
-            <div className="col-span-2">승점</div>
+            <div className="col-span-2">{t('victoryPoints')}</div>
             <div className="col-span-3">스타일</div>
             <div className="col-span-1 text-right">승률</div>
           </div>
@@ -255,7 +258,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold text-blue-400">{player.match_points || 0}</div>
-                      <div className="text-[9px] text-gray-500">승점</div>
+                      <div className="text-[9px] text-gray-500">{t('victoryPoints')}</div>
                     </div>
                   </div>
 
@@ -305,7 +308,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
 
                   <div className="col-span-2">
                     <div className="font-bold text-sm sm:text-base text-white whitespace-nowrap">{(player.match_points || 0).toLocaleString()}</div>
-                    <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">승점</div>
+                    <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">{t('victoryPoints')}</div>
                   </div>
 
                   <div className="col-span-3">

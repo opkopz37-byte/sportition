@@ -361,7 +361,13 @@ export default function SportitionApp() {
         t={t}
       />
 
-      <main className="relative z-10 pt-16 xs:pt-18 sm:pt-24 px-2 xs:px-3 sm:px-4 lg:px-6 pb-12 xs:pb-14 sm:pb-20 max-w-7xl mx-auto min-h-screen">
+      <main
+        className={
+          activeTab === 'roadmap-active-skills'
+            ? 'relative z-10 pt-16 xs:pt-18 sm:pt-24 pb-8 sm:pb-10 w-full max-w-none min-h-screen'
+            : 'relative z-10 pt-16 xs:pt-18 sm:pt-24 px-2 xs:px-3 sm:px-4 lg:px-6 pb-12 xs:pb-14 sm:pb-20 max-w-7xl mx-auto min-h-screen'
+        }
+      >
         {renderView()}
       </main>
     </div>

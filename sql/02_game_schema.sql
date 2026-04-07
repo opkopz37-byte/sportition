@@ -54,9 +54,21 @@ CREATE TABLE public.skill_tree_nodes (
   node_type      TEXT,
   required_cards INTEGER DEFAULT 1,
   parent_nodes   INTEGER[],
+  display_title  TEXT,
+  source_name    TEXT,
+  description    TEXT,
+  training_intent  TEXT,
+  flow_summary   TEXT,
+  /** 맵 범례 선 색: 공통·C/G/A/I/K/N/R/T (목업 엑셀 열과 동일 체계) */
+  map_lane       TEXT,
+  map_subtitle   TEXT,
+  is_milestone   BOOLEAN NOT NULL DEFAULT false,
   created_at     TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT skill_tree_nodes_zone_check CHECK (zone IN ('tutorial', 'infighter', 'outboxer', 'legendary')),
-  CONSTRAINT skill_tree_nodes_type_check CHECK (node_type IN ('basic', 'socket', 'legendary_socket'))
+  CONSTRAINT skill_tree_nodes_type_check CHECK (node_type IN ('basic', 'socket', 'legendary_socket')),
+  CONSTRAINT skill_tree_nodes_map_lane_check CHECK (
+    map_lane IS NULL OR map_lane IN ('common', 'c', 'g', 'a', 'ik', 'n', 'r', 't')
+  )
 );
 
 CREATE INDEX idx_nodes_zone ON public.skill_tree_nodes(zone);

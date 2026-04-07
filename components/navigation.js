@@ -215,7 +215,7 @@ return (
       </nav>
     </div>
 
-    <div className="flex items-center gap-[clamp(0.25rem,1.5vw,0.75rem)] shrink-0 min-w-0 flex-shrink-0 flex-wrap sm:flex-nowrap justify-end w-full min-[520px]:w-auto overflow-visible">
+    <div className="flex items-center gap-[clamp(0.25rem,1.5vw,0.75rem)] min-w-0 flex-1 sm:flex-1 justify-end flex-wrap sm:flex-nowrap w-full min-[520px]:w-auto overflow-visible">
       {role === 'gym' && (
         <button
           onClick={() => window.open('/attendance', '_blank', 'width=1920,height=1080,toolbar=no,location=no,status=no,menubar=no,scrollbars=no')}
@@ -228,8 +228,8 @@ return (
       )}
 
       {isPlayerRole && (
-        <div className="relative" ref={searchRef}>
-          <div className="relative">
+        <div className="relative flex-1 min-w-0 max-w-none min-[520px]:max-w-md xl:max-w-lg 2xl:max-w-xl" ref={searchRef}>
+          <div className="relative w-full">
             <input
               type="text"
               value={searchQuery}
@@ -239,7 +239,7 @@ return (
               }}
               onFocus={() => setShowSearchResults(true)}
               placeholder={t('searchPlayers') || '선수 검색...'}
-              className="w-full min-[420px]:w-[clamp(8rem,28vw,14rem)] xl:w-[clamp(9rem,18vw,16rem)] min-w-0 pl-8 pr-3 py-[clamp(0.25rem,1vw,0.375rem)] bg-white/5 border border-white/10 rounded-lg text-[clamp(0.6875rem,calc(0.5vw+0.55rem),0.875rem)] text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
+              className="w-full min-w-[12rem] pl-9 pr-9 py-2 sm:py-2.5 bg-white/[0.07] border border-white/20 rounded-xl text-sm sm:text-[15px] text-white placeholder-gray-400 shadow-inner shadow-black/20 focus:outline-none focus:border-blue-400/60 focus:bg-white/10 focus:ring-1 focus:ring-blue-500/30 transition-all"
             />
             <Icon 
               type="search" 

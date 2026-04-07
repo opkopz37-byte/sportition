@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
-import { getNextTierInfo, getTierRingProgress } from '@/lib/tierLadder';
+import { computeMatchPoints, getNextTierInfo, getTierRingProgress } from '@/lib/tierLadder';
 // 대시보드 뷰
 
 const LIVE_MATCH_POINTS_SNAPSHOT_KEY = 'sportition_live_match_points_v1';
@@ -127,13 +127,17 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
 
   const tierBoardUi = useMemo(() => {
-    const mp = profile?.match_points ?? profile?.tier_points ?? 0;
+    const fromRecord = profile?.match_points ?? profile?.tier_points;
+    const mp =
+      fromRecord != null && fromRecord !== ''
+        ? Number(fromRecord)
+        : computeMatchPoints(profile?.wins, profile?.draws, profile?.losses);
     return {
       mp,
       ring: getTierRingProgress(mp),
       next: getNextTierInfo(mp),
     };
-  }, [profile?.match_points, profile?.tier_points]);
+  }, [profile?.match_points, profile?.tier_points, profile?.wins, profile?.draws, profile?.losses]);
 
   useEffect(() => {
     console.log('[Dashboard] 컴포넌트 마운트/업데이트');
@@ -774,7 +778,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                     </span>
                     <div
                       className="flex items-center gap-1 xs:gap-1.5 flex-shrink-0 min-w-0"
-                      title="매치 승점(승×3+무) 변화 — 이전에 본 랭킹 대비"
+                      title={t('ladderPointsDeltaTooltip')}
                     >
                       <span className="px-1.5 xs:px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 text-[9px] xs:text-[10px] sm:text-xs font-bold whitespace-nowrap truncate max-w-[5rem] xs:max-w-none">
                         {news.tier}
@@ -835,7 +839,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
                     <>
                       <span className="font-bold text-yellow-400 whitespace-nowrap">{profile.tier}</span>
                       <span className="hidden xs:inline">•</span>
-                      <span className="whitespace-nowrap text-[9px] xs:text-[10px] sm:text-xs">{tierBoardUi.mp} {t('victoryPoints') || '승점'}</span>
+                      <span className="whitespace-nowrap text-[9px] xs:text-[10px] sm:text-xs">{tierBoardUi.mp} {t('victoryPoints')}</span>
                       <span className="hidden xs:inline">•</span>
                     </>
                   )}
@@ -1289,7 +1293,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
               <div className="p-2 xs:p-3 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-lg border border-blue-500/30 text-center">
                 <div className="text-[10px] xs:text-xs text-gray-400 mb-0.5 xs:mb-1 whitespace-nowrap">{t('nextTier')}</div>
                 <div className="text-xs xs:text-sm font-bold text-blue-400 whitespace-nowrap truncate">
-                  {tierBoardUi.next.nextLabel || (t('maxTier') || 'Master I')}
+                  {tierBoardUi.next.nextLabel || t('maxTier')}
                 </div>
               </div>
               <div className="p-2 xs:p-3 bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-lg border border-emerald-500/30 text-center">

@@ -31,6 +31,17 @@
 - `05_views.sql`: 공개 선수 프로필, 카드 상세, 승인 큐 상세 뷰
 - `06_seed_game_content.sql`: 카드/노드/도감 기본 시드
 
+### 스킬 노드 83개가 안 보이거나 일부만 있을 때
+
+`06`의 첫 번째 `INSERT`는 `ON CONFLICT DO NOTHING`이라 **이미 있는 행은 갱신되지 않습니다.**  
+Supabase에서 **한 번에 83개를 확정**하려면 `07`·`08`(포인트·갈림 컬럼) 적용 후 아래를 실행하세요.
+
+```text
+23_skill_tree_full_upsert_all_83.sql
+```
+
+실행 후 `SELECT COUNT(*) FROM public.skill_tree_nodes;` 결과가 **83**인지 확인하면 됩니다.
+
 ## 이번 구조에서 바뀐 핵심
 
 - 역할명이 `athlete`, `coach`, `gym` 중심에서 `player_common`, `player_athlete`, `gym`, `admin` 중심으로 바뀝니다.

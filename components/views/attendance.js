@@ -4,64 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 
-function calculateStreak(records) {
-  if (!records || records.length === 0) return 0;
-
-  const sortedDates = records
-    .map((r) => new Date(r.check_in_time).toISOString().split('T')[0])
-    .sort((a, b) => new Date(b) - new Date(a));
-
-  let streak = 0;
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
-  if (sortedDates[0] !== today && sortedDates[0] !== yesterday) {
-    return 0;
-  }
-
-  let currentDate = new Date(sortedDates[0]);
-
-  for (let i = 0; i < sortedDates.length; i++) {
-    const recordDate = new Date(sortedDates[i]);
-    const diffDays = Math.floor((currentDate - recordDate) / 86400000);
-
-    if (diffDays <= 1) {
-      streak++;
-      currentDate = recordDate;
-    } else {
-      break;
-    }
-  }
-
-  return streak;
-}
-
-function calculateLongestStreak(records) {
-  if (!records || records.length === 0) return 0;
-
-  const sortedDates = records
-    .map((r) => new Date(r.check_in_time).toISOString().split('T')[0])
-    .sort((a, b) => new Date(a) - new Date(b));
-
-  let maxStreak = 1;
-  let currentStreak = 1;
-
-  for (let i = 1; i < sortedDates.length; i++) {
-    const prevDate = new Date(sortedDates[i - 1]);
-    const currDate = new Date(sortedDates[i]);
-    const diffDays = Math.floor((currDate - prevDate) / 86400000);
-
-    if (diffDays === 1) {
-      currentStreak++;
-      maxStreak = Math.max(maxStreak, currentStreak);
-    } else {
-      currentStreak = 1;
-    }
-  }
-
-  return maxStreak;
-}
-
 const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => {
   const { user, profile, refreshProfile } = useAuth();
   const locale = language === 'ko' ? 'ko-KR' : 'en-US';
@@ -82,50 +24,72 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
 
     try {
       const { getUserAttendance, default: supabase } = await import('@/lib/supabase');
-      
+
       const today = new Date().toISOString().split('T')[0];
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
+      const now = new Date();
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+        .toISOString()
+        .split('T')[0];
+
       console.log('[Attendance] 데이터 로딩 시작 (병렬)');
 
-      // 병렬로 데이터 로드
-      const [todayResult, recentData] = await Promise.all([
+      const [
+        todayResult,
+        recentResult,
+        statsResult,
+        userRowResult,
+        monthCountResult,
+      ] = await Promise.all([
         supabase
           .from('attendance')
           .select('*')
           .eq('user_id', user.id)
           .eq('attendance_date', today)
           .maybeSingle(),
-        getUserAttendance(user.id, thirtyDaysAgo.toISOString())
+        getUserAttendance(user.id, thirtyDaysAgo.toISOString()),
+        supabase
+          .from('statistics')
+          .select('total_attendance, current_streak, longest_streak')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase.from('users').select('skill_points').eq('id', user.id).maybeSingle(),
+        supabase
+          .from('attendance')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('attendance_date', firstOfMonth),
       ]);
+
+      const recentRows = recentResult?.data || [];
 
       console.log('[Attendance] 데이터 로딩 완료:', {
         todayChecked: !!todayResult?.data,
-        recentCount: recentData?.length || 0
+        recentCount: recentRows.length,
+        stats: statsResult?.data,
+        skillPoints: userRowResult?.data?.skill_points,
+        monthCount: monthCountResult?.count,
       });
 
       setTodayChecked(!!todayResult?.data);
       setAttendanceData(todayResult?.data);
+      setRecentAttendance(recentRows);
 
-      if (recentData) {
-        setRecentAttendance(recentData);
-        
-        // 통계 계산
-        const currentMonth = new Date().getMonth();
-        const thisMonthCount = recentData.filter(record => {
-          const recordDate = new Date(record.check_in_time);
-          return recordDate.getMonth() === currentMonth;
-        }).length;
+      const s = statsResult?.data;
+      const monthCnt = typeof monthCountResult?.count === 'number' ? monthCountResult.count : 0;
+      const skillPts =
+        userRowResult?.data?.skill_points != null
+          ? Number(userRowResult.data.skill_points)
+          : 0;
 
-        setStats({
-          totalDays: recentData.length,
-          currentStreak: calculateStreak(recentData),
-          longestStreak: calculateLongestStreak(recentData),
-          thisMonth: thisMonthCount,
-          skillPointsEarned: recentData.length
-        });
-      }
+      setStats({
+        totalDays: s?.total_attendance != null ? Number(s.total_attendance) : 0,
+        currentStreak: s?.current_streak != null ? Number(s.current_streak) : 0,
+        longestStreak: s?.longest_streak != null ? Number(s.longest_streak) : 0,
+        thisMonth: monthCnt,
+        skillPointsEarned: skillPts,
+      });
     } catch (error) {
       console.error('[Attendance] 출석 데이터 로드 에러:', error);
     }
@@ -189,10 +153,16 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
                   minute: '2-digit'
                 })} 출석
               </p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg">
+              <button
+                type="button"
+                onClick={async () => {
+                  await Promise.all([refreshProfile(), loadAttendanceData()]);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 rounded-lg transition-colors"
+              >
                 <Icon type="star" size={20} />
                 <span className="font-bold">스킬 포인트 +1</span>
-              </div>
+              </button>
             </>
           ) : (
             <>
