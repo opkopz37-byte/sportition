@@ -297,6 +297,8 @@ const SKILL_MAP_HEIGHT = 1232;
 const ZOOM_MIN = 0.28;
 const ZOOM_MAX = 2.05;
 const ZOOM_DEFAULT = 0.58;
+/** 버튼·단축 줌 한 단계 배율 */
+const ZOOM_STEP_FACTOR = 1.12;
 
 /** SVG viewBox 높이 (가로 100과 맞춤) */
 const VIEWBOX_H = 56;
@@ -659,6 +661,51 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
     };
   }, [viewportSize.w, viewportSize.h]);
 
+  /** 뷰포트 로컬 좌표 focal에서 확대/축소 (휠·핀치·버튼 공통) */
+  const applyZoomAtPoint = useCallback(
+    (nextZoom, focalX, focalY) => {
+      const z0 = zoomRef.current;
+      const z1 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextZoom));
+      if (Math.abs(z1 - z0) < 1e-6) return;
+      const px = panRef.current.x;
+      const py = panRef.current.y;
+      const mapX = (focalX - px) / z0;
+      const mapY = (focalY - py) / z0;
+      const newPanX = focalX - mapX * z1;
+      const newPanY = focalY - mapY * z1;
+      zoomRef.current = z1;
+      setZoom(z1);
+      setPan(clampPan(newPanX, newPanY, viewportSize.w, viewportSize.h, z1));
+    },
+    [viewportSize.w, viewportSize.h, clampPan]
+  );
+
+  const zoomInCenter = useCallback(() => {
+    const el = skillViewportRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    applyZoomAtPoint(zoomRef.current * ZOOM_STEP_FACTOR, width / 2, height / 2);
+  }, [applyZoomAtPoint]);
+
+  const zoomOutCenter = useCallback(() => {
+    const el = skillViewportRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    applyZoomAtPoint(zoomRef.current / ZOOM_STEP_FACTOR, width / 2, height / 2);
+  }, [applyZoomAtPoint]);
+
+  const resetMapZoom = useCallback(() => {
+    const el = skillViewportRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const z = ZOOM_DEFAULT;
+    zoomRef.current = z;
+    setZoom(z);
+    const sw = SKILL_MAP_WIDTH * z;
+    const sh = SKILL_MAP_HEIGHT * z;
+    setPan(clampPan((rect.width - sw) / 2, (rect.height - sh) / 2, rect.width, rect.height, z));
+  }, [clampPan]);
+
   useLayoutEffect(() => {
     const el = skillViewportRef.current;
     if (!el) return undefined;
@@ -710,22 +757,13 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
       const delta = -dy;
       const step = Math.sign(delta) * Math.min(Math.abs(delta) * 0.0021, 0.14);
       const z0 = zoomRef.current;
-      const z1 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z0 * (1 + step)));
-      if (Math.abs(z1 - z0) < 1e-6) return;
-      const panX = panRef.current.x;
-      const panY = panRef.current.y;
-      const mapX = (mx - panX) / z0;
-      const mapY = (my - panY) / z0;
-      const newPanX = mx - mapX * z1;
-      const newPanY = my - mapY * z1;
-      zoomRef.current = z1;
-      setZoom(z1);
-      setPan(clampPan(newPanX, newPanY, viewportSize.w, viewportSize.h, z1));
+      const z1 = z0 * (1 + step);
+      applyZoomAtPoint(z1, mx, my);
     };
 
     el.addEventListener('wheel', onWheel, { passive: false, capture: true });
     return () => el.removeEventListener('wheel', onWheel, { capture: true });
-  }, [viewportSize.w, viewportSize.h, clampPan]);
+  }, [applyZoomAtPoint]);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -779,13 +817,16 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointersRef.current.size >= 2 && pinchRef.current.active) {
+      const el = skillViewportRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
       const pts = [...pointersRef.current.values()];
       const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       const ratio = dist / pinchRef.current.startDist;
-      const z1 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinchRef.current.startZoom * ratio));
-      zoomRef.current = z1;
-      setZoom(z1);
-      setPan((prev) => clampPan(prev.x, prev.y, viewportSize.w, viewportSize.h, z1));
+      const z1 = pinchRef.current.startZoom * ratio;
+      const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
+      const midY = (pts[0].y + pts[1].y) / 2 - rect.top;
+      applyZoomAtPoint(z1, midX, midY);
       return;
     }
 
@@ -1295,10 +1336,42 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
               스포티션 복싱 스킬 트리
             </p>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              입문부터 생활체육대회까지
+              입문부터 생활체육대회까지 · 드래그 이동 · 휠/버튼 확대 · 두 손가락 줌
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-0.5 rounded-xl border border-white/15 bg-[#0a0a12]/95 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <button
+                type="button"
+                onClick={zoomOutCenter}
+                disabled={zoom <= ZOOM_MIN + 0.001}
+                className="min-w-[2rem] rounded-lg px-2 py-1.5 text-base font-bold leading-none text-white hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent"
+                aria-label="축소"
+              >
+                −
+              </button>
+              <span className="min-w-[2.85rem] text-center text-[10px] sm:text-xs font-semibold tabular-nums text-slate-400">
+                {(zoom * 100).toFixed(0)}%
+              </span>
+              <button
+                type="button"
+                onClick={zoomInCenter}
+                disabled={zoom >= ZOOM_MAX - 0.001}
+                className="min-w-[2rem] rounded-lg px-2 py-1.5 text-base font-bold leading-none text-white hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent"
+                aria-label="확대"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={resetMapZoom}
+                className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-400 hover:bg-white/10 hover:text-white"
+                title="줌·위치 초기화"
+                aria-label="줌 초기화"
+              >
+                초기화
+              </button>
+            </div>
             <div className="text-right">
               <p className="text-[10px] sm:text-xs text-slate-400">해금 스킬</p>
               <p className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#d2a8ff] tabular-nums tracking-wide">
@@ -1319,6 +1392,7 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
             height: 'min(calc(100dvh - 11rem), 920px)',
             minHeight: '440px',
             overscrollBehavior: 'contain',
+            touchAction: 'none',
           }}
           onPointerDown={handleSkillMapPointerDown}
           onPointerMove={handleSkillMapPointerMove}
