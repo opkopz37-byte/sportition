@@ -103,7 +103,7 @@ INSERT INTO public.skill_tree_nodes (node_number, name, name_en, zone, position_
 (215,'확장 20','Expansion 20','outboxer',88,75,'socket',ARRAY[213])
 ON CONFLICT (node_number) DO NOTHING;
 
--- 목업 합계 83노드: 401~423 추가 + 맵 범례(map_lane). 상세는 sql/22_skill_tree_map_lane_and_nodes_83.sql 참고.
+-- 목업 합계 86노드: 401~426. 맵 좌표·콘텐츠 확정은 sql/skill_tree/SKILL_TREE_UNIFIED.sql 를 Supabase에서 1회 실행하세요.
 INSERT INTO public.skill_tree_nodes (node_number, name, name_en, zone, position_x, position_y, node_type, parent_nodes, map_lane) VALUES
 (401,'백스텝 롱가드 심화','Backstep Long Guard Adv','outboxer',50,50,'basic',ARRAY[301]::INTEGER[],'c'),
 (402,'사이드 스텝 우','Side Step Right','outboxer',50,50,'basic',ARRAY[301]::INTEGER[],'g'),
@@ -125,9 +125,12 @@ INSERT INTO public.skill_tree_nodes (node_number, name, name_en, zone, position_
 (418,'더킹 어퍼(배) 훅','Ducking Upper Body Hook','infighter',50,50,'basic',ARRAY[304]::INTEGER[],'t'),
 (419,'슬립 바디(앞 손)','Slip Body Lead','infighter',50,50,'basic',ARRAY[304]::INTEGER[],'a'),
 (420,'걸어치기 슬립 바디','Walk-In Slip Body','infighter',50,50,'basic',ARRAY[304]::INTEGER[],'r'),
-(421,'생활체육대회 준비','Amateur League Prep','tutorial',50,50,'basic',ARRAY[26]::INTEGER[],'common'),
-(422,'생활체육대회 도전!','Amateur League Challenge','tutorial',50,50,'basic',ARRAY[421]::INTEGER[],'common'),
-(423,'마스터 클로징 루틴','Master Closing Routine','tutorial',50,50,'basic',ARRAY[422]::INTEGER[],'common')
+(421,'생활체육대회 준비','Amateur League Prep','tutorial',50,66.6,'basic',ARRAY[26]::INTEGER[],'common'),
+(422,'생활체육대회 도전!','Amateur League Challenge','tutorial',50,68.95,'basic',ARRAY[421]::INTEGER[],'common'),
+(423,'마스터 클로징 루틴','Master Closing Routine','tutorial',50,71.3,'basic',ARRAY[422]::INTEGER[],'common'),
+(424,'배잽','Body Jab','tutorial',50,50,'basic',ARRAY[1]::INTEGER[],'common'),
+(425,'레벨 체인지 배잽(아웃복싱형)','Level Change Body Jab (Outboxer)','outboxer',50,50,'basic',ARRAY[424]::INTEGER[],'g'),
+(426,'레벨 체인지 배잽(인파이팅형)','Level Change Body Jab (Infighting)','infighter',50,50,'basic',ARRAY[424]::INTEGER[],'n')
 ON CONFLICT (node_number) DO UPDATE SET
   name = EXCLUDED.name,
   name_en = EXCLUDED.name_en,

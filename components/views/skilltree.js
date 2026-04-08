@@ -30,8 +30,9 @@ const SkillTreeView = ({ t = (key) => key, setActiveTab }) => {
             <h2 className="text-lg font-bold text-white mb-1">스킬 트리가 하는 일</h2>
             <p className="text-sm text-gray-400 leading-relaxed">
               각 <strong className="text-gray-200 font-semibold">노드</strong>는 출석으로 쌓인{' '}
-              <strong className="text-cyan-200/90">스킬 포인트</strong>를 써서 찍는 성장 슬롯입니다. 중앙에서 시작해
-              단계가 깊어질수록 심화 노드로 이어지며,{' '}
+              <strong className="text-cyan-200/90">스킬 포인트</strong>를 써서 찍는 성장 슬롯입니다. 중앙은 잽{' '}
+              <strong className="text-gray-200 font-semibold">한 줄 스파인</strong>에서 시작해 단계가 깊어질수록 심화
+              노드로 이어지며,{' '}
               <strong className="text-orange-200/90">인파이터</strong>·
               <strong className="text-emerald-200/90">아웃복서</strong>·
               <strong className="text-yellow-200/90">전설</strong> 진영이 갈라집니다. 선행 노드를 모두 찍어야 다음
@@ -79,8 +80,8 @@ const SkillTreeView = ({ t = (key) => key, setActiveTab }) => {
         </h2>
         <ol className="space-y-3 text-sm text-gray-400 list-decimal list-inside marker:text-violet-400/80">
           <li>
-            <span className="text-gray-300">튜토리얼(중앙 기초 노드)</span>는 비용이 없거나 낮은 경우가 많습니다. 여기서
-            시작해 좌·우 본 트리로 자연스럽게 확장할 수 있습니다.
+            <span className="text-gray-300">튜토리얼(중앙 기초 노드)</span>는 비용이 없거나 낮은 경우가 많습니다. 잽부터
+            여기서 시작해 좌·우 본 트리로 자연스럽게 확장할 수 있습니다.
           </li>
           <li>
             아직 찍지 않은 노드는 <span className="text-gray-300">잠금</span>으로 표시됩니다. 선행 노드를 모두 찍으면

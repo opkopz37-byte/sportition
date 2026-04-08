@@ -31,16 +31,14 @@
 - `05_views.sql`: 공개 선수 프로필, 카드 상세, 승인 큐 상세 뷰
 - `06_seed_game_content.sql`: 카드/노드/도감 기본 시드
 
-### 스킬 노드 83개가 안 보이거나 일부만 있을 때
+### 스킬 노드 (86개) — 편집·적용은 한 파일만
 
-`06`의 첫 번째 `INSERT`는 `ON CONFLICT DO NOTHING`이라 **이미 있는 행은 갱신되지 않습니다.**  
-Supabase에서 **한 번에 83개를 확정**하려면 `07`·`08`(포인트·갈림 컬럼) 적용 후 아래를 실행하세요.
+`06`의 스킬 노드 `INSERT`는 일부가 `ON CONFLICT DO NOTHING`이라 **이미 있는 행은 갱신되지 않을 수 있습니다.**  
+노드 이름·좌표·부모·맵 부제·설명 등을 바꿀 때는 **`sql/skill_tree/SKILL_TREE_UNIFIED.sql`만** 수정하고, Supabase SQL Editor에서 **그 파일 전체를 1회 실행**하세요.
 
-```text
-23_skill_tree_full_upsert_all_83.sql
-```
+- 예전 파일명 `18_skill_tree_node_content.sql`, `23_skill_tree_full_upsert_all_83.sql`, `24_skill_tree_level_change_body_jab.sql`는 **스텁**이며, 실제 정의는 통합 파일에만 있습니다.
 
-실행 후 `SELECT COUNT(*) FROM public.skill_tree_nodes;` 결과가 **83**인지 확인하면 됩니다.
+실행 후 `SELECT COUNT(*) FROM public.skill_tree_nodes;` 결과가 **86**인지 확인하면 됩니다.
 
 ## 이번 구조에서 바뀐 핵심
 
@@ -61,5 +59,6 @@ Supabase에서 **한 번에 83개를 확정**하려면 `07`·`08`(포인트·갈
 04_rls_policies.sql
 05_views.sql
 06_seed_game_content.sql
+skill_tree/SKILL_TREE_UNIFIED.sql
 README.md
 ```
