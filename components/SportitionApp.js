@@ -19,7 +19,7 @@ import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 
 export default function SportitionApp() {
-  const { user, profile, isAuthenticated, loading, refreshProfile } = useAuth();
+  const { user, profile, isAuthenticated, loading, profileLoadError, refreshProfile } = useAuth();
   const [currentPage, setCurrentPage] = useState('landing');
   const [role, setRole] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -228,7 +228,14 @@ export default function SportitionApp() {
         <BackgroundGrid theme={{ accent: 'blue' }} />
         <div className="relative z-10 text-center max-w-md">
           <p className="text-gray-200 mb-2 font-medium">프로필을 불러오지 못했습니다.</p>
-          <p className="text-gray-500 text-sm mb-6">네트워크·DB 권한을 확인하거나 잠시 후 다시 시도해 주세요.</p>
+          <p className="text-gray-500 text-sm mb-3">네트워크·DB 권한을 확인하거나 잠시 후 다시 시도해 주세요.</p>
+          {profileLoadError ? (
+            <p className="text-amber-200/90 text-xs text-left mb-6 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 break-words font-mono leading-relaxed">
+              {profileLoadError}
+            </p>
+          ) : (
+            <p className="text-gray-600 text-xs mb-6">상세 오류가 없습니다. Network 탭에서 <span className="text-gray-400">supabase.co</span> 요청의 실패 응답을 확인해 주세요.</p>
+          )}
           <button
             type="button"
             onClick={() => refreshProfile()}
