@@ -223,7 +223,7 @@ function requiredForkInvestments(failCount) {
 
 function parentsSatisfiedForDisplay(node, unlockedIds, progressByNodeId, nodeByNumber) {
   if (!node?.parent_nodes?.length) return true;
-  return node.parent_nodes.every((pNum) => {
+  return node.parent_nodes.some((pNum) => {
     const pNode = nodeByNumber.get(pNum);
     if (!pNode) return false;
     if (pNode.is_fork) {
@@ -2089,7 +2089,7 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
 
                       {!parentsSatisfiedForSelected && (
                         <p className="text-[11px] sm:text-xs text-amber-200/90">
-                          선행 조건을 충족해야 갈림길에 투자할 수 있습니다.
+                          선행 노드 중 하나 이상을 충족해야 갈림길에 투자할 수 있습니다.
                         </p>
                       )}
                       {parentsSatisfiedForSelected && canInvestFork && !canAffordSelected && selectedPointCost > 0 && (
@@ -2168,7 +2168,7 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
 
                       {!parentsSatisfiedForSelected && (
                         <p className="text-[11px] sm:text-xs text-amber-200/90">
-                          선행 노드를 모두 찍어야 이 노드를 찍을 수 있습니다.
+                          선행 노드 중 하나 이상을 찍어야 이 노드를 찍을 수 있습니다.
                         </p>
                       )}
                       {parentsSatisfiedForSelected && canInvestNonFork && !canAffordSelected && selectedPointCost > 0 && (
