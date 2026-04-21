@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 
-const FILTERS = ['all', 'tutorial', 'infighter', 'outboxer', 'legendary'];
+const FILTERS = ['all', 'tutorial', 'infighter', 'outboxer'];
 
 /** 맵·목록: 짧은 노드 제목 (기획 5장). 없으면 DB name */
 function nodeDisplayTitle(node) {
@@ -120,17 +120,6 @@ const getStyleSummaryFromUnlocks = (unlockedNodes) => {
   };
 };
 
-const getNodeSymbol = (node, isUnlocked) => {
-  if (isUnlocked) {
-    if (node.zone === 'legendary') return '✦';
-    if (node.zone === 'tutorial') return '◎';
-    return '★';
-  }
-  if (node.zone === 'legendary') return '✦';
-  if (node.zone === 'tutorial') return '◎';
-  return '•';
-};
-
 const getNodeShapeClass = (node) => {
   if (node.zone === 'legendary' || node.node_type === 'legendary_socket') {
     return 'rotate-45 rounded-xl';
@@ -138,67 +127,44 @@ const getNodeShapeClass = (node) => {
   return 'rounded-xl';
 };
 
-/** 선택된 노드: 존별로 구분되는 링(테두리) */
-const getZoneSelectionRingClass = (node) => {
-  if (node.zone === 'infighter') return 'ring-[3px] ring-orange-400/95 ring-offset-2 ring-offset-[#070818]';
-  if (node.zone === 'outboxer') return 'ring-[3px] ring-teal-400/95 ring-offset-2 ring-offset-[#070818]';
-  if (node.zone === 'legendary') return 'ring-[3px] ring-amber-300/95 ring-offset-2 ring-offset-[#070818]';
-  if (node.zone === 'tutorial') return 'ring-[3px] ring-violet-400/90 ring-offset-2 ring-offset-[#070818]';
-  return 'ring-[3px] ring-slate-400/80 ring-offset-2 ring-offset-[#070818]';
-};
+const SELECTION_RING_CLASS =
+  'ring-[3px] ring-amber-300/90 ring-offset-2 ring-offset-[#141c32]';
 
-/** 해금 노드: 흰색 발광 없음 — 존 틴트 배경 + 테두리로 ‘기록됨’ 표시 */
+/** 해금 노드 — 단일 골드 톤 */
 const getUnlockedNodeToneClass = (node, isSelected) => {
-  const selected = isSelected ? getZoneSelectionRingClass(node) : '';
-  const base = 'font-bold border-2 scale-[1.02] z-20 shadow-[0_2px_10px_rgba(0,0,0,0.55)]';
-  if (node.zone === 'infighter') {
-    return `bg-gradient-to-br from-[#2a1518] to-[#120a0c] text-orange-100 border-orange-500/85 ${base} ${selected}`;
-  }
-  if (node.zone === 'outboxer') {
-    return `bg-gradient-to-br from-[#0f2422] to-[#0a1818] text-teal-100 border-teal-500/80 ${base} ${selected}`;
-  }
-  if (node.zone === 'legendary') {
-    return `bg-gradient-to-br from-[#2a2210] to-[#141008] text-amber-100 border-amber-400/85 ${base} ${selected}`;
-  }
-  return `bg-gradient-to-br from-[#1e1830] to-[#100e18] text-violet-100 border-violet-500/75 ${base} ${selected}`;
+  const selected = isSelected ? SELECTION_RING_CLASS : '';
+  const base =
+    'font-bold border-2 scale-[1.02] z-20 shadow-[0_2px_14px_rgba(15,23,42,0.35)]';
+  return `bg-gradient-to-br from-[#4a3d22] to-[#2e2614] text-[#fff8e7] border-[#e6c565]/88 ${base} ${selected}`;
 };
 
-/** 해금 노드 하단: 투자·기록 여부를 발광 없이 표시 */
-const getUnlockedBottomAccentClass = (node) => {
-  if (node.zone === 'infighter') return 'bg-gradient-to-r from-transparent via-orange-400/90 to-transparent';
-  if (node.zone === 'outboxer') return 'bg-gradient-to-r from-transparent via-teal-400/88 to-transparent';
-  if (node.zone === 'legendary') return 'bg-gradient-to-r from-transparent via-amber-400/85 to-transparent';
-  return 'bg-gradient-to-r from-transparent via-violet-400/85 to-transparent';
-};
+const getUnlockedBottomAccentClass = () =>
+  'bg-gradient-to-r from-transparent via-amber-400/88 to-transparent';
 
-/** 로드맵 스킬트리 톤: 미해금 시 각 존별 옅은 테두리와 어두운 배경 */
+/** 로드맵 스킬트리 톤 */
 const getNodeToneClass = ({ node, isUnlocked, isSelected, isDimmed, isUnlockableOnly, isLocked }) => {
   if (isUnlocked) {
     return getUnlockedNodeToneClass(node, isSelected);
   }
 
-  // Base background for all locked/inactive nodes
-  const bgClass = 'bg-[#151423]/90 backdrop-blur-sm';
-  let borderClass = 'border-slate-700/50';
+  const bgClass = 'bg-[#2a3148]/92';
+  const borderClass = 'border-slate-400/45';
+  const selected = isSelected ? SELECTION_RING_CLASS : '';
+  const opacity = isDimmed ? 'opacity-50' : (isLocked ? 'opacity-82' : 'opacity-98');
+  const textTone = isDimmed ? 'text-slate-500' : 'text-slate-200';
 
-  if (node.zone === 'outboxer') borderClass = 'border-[#2860a4]/70';
-  else if (node.zone === 'infighter') borderClass = 'border-[#9c2b4e]/70';
-  else if (node.zone === 'tutorial') borderClass = 'border-[#5b3c88]/70';
-  else if (node.zone === 'legendary') borderClass = 'border-amber-400/70';
-
-  const selected = isSelected ? getZoneSelectionRingClass(node) : '';
-  const opacity = isDimmed ? 'opacity-30' : (isLocked ? 'opacity-60' : 'opacity-90');
-
-  return `${bgClass} text-slate-400 border ${borderClass} shadow-sm ${opacity} ${selected}`;
+  return `${bgClass} ${textTone} border ${borderClass} shadow-sm ${opacity} ${selected}`;
 };
 
 const getNodeSizeClass = (node, hasSubtitle) => {
-  if (node.zone === 'legendary') return 'w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10';
-  if (node.node_type === 'socket') return 'min-w-[4rem] min-h-[2rem] max-w-[6rem] px-1 py-1 sm:min-w-[4.75rem]';
-  if (hasSubtitle || nodeIsMilestone(node)) {
-    return 'min-w-[4.25rem] min-h-[2.85rem] max-w-[7rem] px-1 py-1 sm:min-w-[5rem] sm:max-w-[7.25rem]';
+  if (node.zone === 'legendary') return 'w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10';
+  if (node.node_type === 'socket') {
+    return 'min-w-[3.25rem] min-h-[1.75rem] max-w-[5.25rem] px-0.5 py-0.5 sm:min-w-[4.75rem] sm:min-h-[2rem]';
   }
-  return 'min-w-[4rem] min-h-[2rem] max-w-[6rem] px-1 py-1 sm:min-w-[4.75rem] sm:max-w-[6.5rem]';
+  if (hasSubtitle || nodeIsMilestone(node)) {
+    return 'min-w-[3.5rem] min-h-[2.35rem] max-w-[6rem] px-0.5 py-0.5 sm:min-w-[5rem] sm:max-w-[7.25rem] sm:min-h-[2.85rem]';
+  }
+  return 'min-w-[3.25rem] min-h-[1.75rem] max-w-[5.5rem] px-0.5 py-0.5 sm:min-w-[4.75rem] sm:max-w-[6.5rem] sm:min-h-[2rem]';
 };
 
 const nodePointCost = (node) => Number(node?.point_cost ?? 1);
@@ -282,19 +248,6 @@ function collectPathRelatedNodeIds(treeNodes, unlockedNodeIds, progressByNodeId,
   return ids;
 }
 
-function walkUpChain(node, nodeByNumber) {
-  const chain = [node];
-  let cur = node;
-  for (let i = 0; i < 48; i += 1) {
-    if (!cur?.parent_nodes?.length) break;
-    const p = nodeByNumber.get(cur.parent_nodes[0]);
-    if (!p) break;
-    chain.unshift(p);
-    cur = p;
-  }
-  return chain;
-}
-
 const getRoadmapInterpretation = (unlockedNodes, tutorialCount, infighterCount, outboxerCount) => {
   if (unlockedNodes.length === 0) {
     return {
@@ -339,7 +292,7 @@ const SKILL_MAP_HEIGHT = 1520;
 function mapCoordFromDb(value) {
   const v = Number(value);
   if (Number.isNaN(v)) return 50;
-  return Math.min(100, Math.max(0, v));
+  return Math.min(300, Math.max(0, v));
 }
 
 /** 중앙 직선 스파인: 1(잽)에서 시작 → 26 → 생활체육대회(421~423) 한 줄로 통합 배치 */
@@ -350,7 +303,7 @@ const CENTER_SPINE_UNIFIED_ORDER = [
 /** 맵 세로 논리 좌표 상한(비튜토리얼 DB clamp). 스파인은 이보다 클 수 있음 → paddedMaxYPct로 정규화 */
 const MAP_COORD_EXTENT = 100;
 /** 튜토리얼 중앙 스파인: 연속 노드 사이 세로 간격(논리 좌표, 잽 기준 시작은 아래 START+GAP) */
-const SPINE_UNIFIED_STEP_Y = 10;
+const SPINE_UNIFIED_STEP_Y = 5;
 const SPINE_UNIFIED_START_Y = 5;
 /** '중앙 수직축: 기본기' 배지 ↔ 첫 노드(잽) 사이 */
 const SPINE_BADGE_TO_FIRST_NODE_GAP = 8;
@@ -369,23 +322,24 @@ function applyUnifiedCenterSpineY(positionById, nodes) {
   });
 }
 
-const ZOOM_MIN = 0.28;
+/** 매우 좁은 폰에서도 맵 전체 가로에 맞출 수 있도록 (초기·리셋 줌에만 사용) */
+const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 2.05;
 const ZOOM_DEFAULT = 0.58;
 /** 버튼·단축 줌 한 단계 배율 */
 const ZOOM_STEP_FACTOR = 1.12;
 
+/** 스포티션 복싱 스킬 트리 맵: 좁은 뷰포트에서 가로가 잘리지 않도록 줌을 낮춤. 넓은 화면은 ZOOM_DEFAULT 유지 */
+function computeFitZoomForViewportWidth(widthPx) {
+  if (!Number.isFinite(widthPx) || widthPx <= 0) return ZOOM_DEFAULT;
+  const scaledWAtDefault = SKILL_MAP_WIDTH * ZOOM_DEFAULT;
+  if (widthPx >= scaledWAtDefault) return ZOOM_DEFAULT;
+  const raw = (widthPx * 0.92) / SKILL_MAP_WIDTH;
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_DEFAULT, raw));
+}
+
 /** SVG viewBox 높이 (가로 100과 맞춤) */
 const VIEWBOX_H = 56;
-
-/** 목업 Tier: depth → 좌측 세로 라벨 (5단계 고정) */
-function tierLabelForDepth(d) {
-  if (d <= 0) return { line1: 'Tier 1', line2: '입문' };
-  if (d === 1) return { line1: 'Tier 2', line2: '심화' };
-  if (d === 2) return { line1: 'Tier 3', line2: '전술' };
-  if (d === 3) return { line1: 'Tier 4', line2: '마스터' };
-  return { line1: 'Tier 5', line2: '최종' };
-}
 
 /** 하단 범례(목업과 동일 색 체계) */
 const SKILL_MAP_LEGEND = [
@@ -479,64 +433,6 @@ const SIDE_STACK_DY = 3.25;
  * 공통 기본기는 항상 x=50 직선(엑셀 한 열). 같은 단계에 여러 튜토리얼이 있으면 y만 살짝 나눔.
  * 아웃·인은 고정 X 열에서만 배치하고, 같은 단계의 형제는 가로가 아니라 Y로만 쌓음.
  */
-/**
- * 가이드 라인 계산:
- *  - 모든 행(y 근접 버킷)에 가로선 → 노드가 실제로 있는 행만 선 표시
- *  - 티어 1~5 구간당 텍스트 라벨 1개 (첫 번째 행에만 출력, 나머지는 선만)
- */
-function computeMapRowGuideLines(nodes, positionById, mapViewBoxH, paddedMaxYPct = 100) {
-  if (!nodes?.length) return [];
-  const vh = mapViewBoxH ?? VIEWBOX_H;
-  const yDen = Math.max(1e-6, paddedMaxYPct);
-  const depthMap = computeSkillTreeDepths(nodes);
-  const items = nodes
-    .map((n) => ({
-      y: Number(positionById?.get(n.id)?.y ?? mapCoordFromDb(n.position_y)),
-      d: depthMap.get(n.node_number) ?? 0,
-    }))
-    .filter((x) => !Number.isNaN(x.y));
-  items.sort((a, b) => a.y - b.y);
-  if (!items.length) return [];
-
-  const EPS = 0.65;
-  const buckets = [];
-  let cur = [items[0]];
-  for (let i = 1; i < items.length; i += 1) {
-    const it = items[i];
-    if (it.y - cur[cur.length - 1].y <= EPS) cur.push(it);
-    else {
-      buckets.push(cur);
-      cur = [it];
-    }
-  }
-  buckets.push(cur);
-
-  /** 티어 구간 별 첫 번째 버킷 인덱스 기록 (Tier 1~5: depth 0~4+) */
-  const tierFirstIdx = new Map(); // tierKey → first bucket index
-  buckets.forEach((bucket, i) => {
-    const dMin = Math.min(...bucket.map((x) => x.d));
-    const tl = tierLabelForDepth(dMin);
-    const tierKey = tl.line1;
-    if (!tierFirstIdx.has(tierKey)) tierFirstIdx.set(tierKey, i);
-  });
-
-  return buckets.map((bucket, i) => {
-    const yPct = bucket.reduce((s, x) => s + x.y, 0) / bucket.length;
-    const dMin = Math.min(...bucket.map((x) => x.d));
-    const tl = tierLabelForDepth(dMin);
-    const tierKey = tl.line1;
-    const isFirstInTier = tierFirstIdx.get(tierKey) === i;
-    const label = isFirstInTier ? `${tl.line1} · ${tl.line2}` : null;
-
-    return {
-      key: `map-row-${i}-${yPct.toFixed(3)}-${dMin}`,
-      yPct,
-      ySvg: (yPct / yDen) * vh,
-      label,
-    };
-  });
-}
-
 function computeSkillTreeLayout(nodes) {
   if (!nodes?.length) {
     return {
@@ -547,7 +443,6 @@ function computeSkillTreeLayout(nodes) {
       paddedMaxYPct: 100,
       mapContentHeightPx: SKILL_MAP_HEIGHT,
       mapViewBoxH: VIEWBOX_H,
-      mapRowGuideLines: [],
     };
   }
 
@@ -593,7 +488,6 @@ function computeSkillTreeLayout(nodes) {
       paddedMaxYPct,
       mapContentHeightPx,
       mapViewBoxH,
-      mapRowGuideLines: computeMapRowGuideLines(nodes, positionById, mapViewBoxH, paddedMaxYPct),
     };
   }
 
@@ -682,7 +576,6 @@ function computeSkillTreeLayout(nodes) {
     paddedMaxYPct: 100,
     mapContentHeightPx: SKILL_MAP_HEIGHT,
     mapViewBoxH: VIEWBOX_H,
-    mapRowGuideLines: [],
   };
 }
 
@@ -748,23 +641,197 @@ function skillEdgePathD(parentNode, node, cx, cy, viewBoxH = VIEWBOX_H, yExtentP
   return edgePathElbow(start.x, start.y, end.x, end.y, horizFirst);
 }
 
-const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
-  const { user, profile, loading: authLoading } = useAuth();
-  const [dataLoading, setDataLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [treeNodes, setTreeNodes] = useState([]);
-  const [unlockedNodeIds, setUnlockedNodeIds] = useState(() => new Set());
-  const [progressRows, setProgressRows] = useState([]);
-  const [skillPoints, setSkillPoints] = useState(0);
-  const [skillResetTickets, setSkillResetTickets] = useState(0);
-  const [activeFilter, setActiveFilter] = useState('all');
-  /** none: 구역 필터만 | path: 기록 기준 선행 경로 | stage: 단계(깊이)만 */
-  const [highlightMode, setHighlightMode] = useState('none');
-  const [stageDepth, setStageDepth] = useState(0);
-  const [selectedNodeId, setSelectedNodeId] = useState(null);
-  const [isApplying, setIsApplying] = useState(false);
+/** 맵 좌표(px): 노드 중심 — 뷰포트 컬링용 */
+function getNodePixelPos(node, skillTreeLayout, mapH) {
+  const lay = skillTreeLayout?.positionById?.get(node.id);
+  const yDen = skillTreeLayout?.paddedMaxYPct ?? 100;
+  const leftPct = lay ? lay.x : mapCoordFromDb(node?.position_x ?? 50);
+  const topPct = lay
+    ? (lay.y / Math.max(1e-6, yDen)) * 100
+    : (mapCoordFromDb(node?.position_y ?? 50) / Math.max(1e-6, yDen)) * 100;
+  return {
+    nx: (leftPct / 100) * SKILL_MAP_WIDTH,
+    ny: (topPct / 100) * mapH,
+  };
+}
 
-  const skillTreeLayout = useMemo(() => computeSkillTreeLayout(treeNodes), [treeNodes]);
+/** 노드 대략 크기 (픽셀, 맵 좌표계) — 프레이밍용 */
+function getNodeApproxSize(node) {
+  const mapSub = mapSubtitleVisible(node) ? nodeMapSubtitle(node) : '';
+  const milestone = nodeIsMilestone(node);
+  if (node.zone === 'legendary') return { w: 80, h: 80 };
+  if (node.node_type === 'socket') return { w: 90, h: 50 };
+  if (mapSub || milestone) return { w: 110, h: 70 };
+  return { w: 90, h: 55 };
+}
+
+/** 선택 노드를 뷰포트에 꽉 차게 프레이밍하는 줌 계산 */
+function computeFrameZoom(node, skillTreeLayout, mapH, vw, vh) {
+  const size = getNodeApproxSize(node);
+  const paddingFactor = 5.5;
+  const targetW = size.w * paddingFactor;
+  const targetH = size.h * paddingFactor;
+  const zoomW = vw / targetW;
+  const zoomH = vh / targetH;
+  const rawZ = Math.min(zoomW, zoomH);
+  return Math.min(ZOOM_MAX * 0.7, Math.max(ZOOM_MIN * 2.5, rawZ));
+}
+
+/** 뷰포트(화면)를 맵 좌표계로 투영한 축정렬 사각형 (+ margin) */
+function viewportBoundsInMapSpace(vw, vh, pan, z, marginPx) {
+  const zi = Math.max(z, 1e-6);
+  return {
+    x0: -pan.x / zi - marginPx,
+    x1: (-pan.x + vw) / zi + marginPx,
+    y0: -pan.y / zi - marginPx,
+    y1: (-pan.y + vh) / zi + marginPx,
+  };
+}
+
+const SKILL_MAP_CULL_MARGIN_PX = 340;
+
+/** 선택 노드와 직접 연결된 부모·자식 — 컬링 시 엣지 단절 방지 */
+function idsLinkedToSelectedNode(selectedNodeId, treeNodes, nodeByNumber) {
+  if (!selectedNodeId || !Array.isArray(treeNodes)) return null;
+  const sel = treeNodes.find((n) => n?.id === selectedNodeId);
+  if (!sel) return null;
+  const out = new Set();
+  for (const pNum of sel.parent_nodes || []) {
+    const p = nodeByNumber?.get(pNum);
+    if (p?.id) out.add(p.id);
+  }
+  const selNum = Number(sel.node_number);
+  for (const n of treeNodes) {
+    if (!n?.id) continue;
+    if (n.parent_nodes?.some((pn) => Number(pn) === selNum)) out.add(n.id);
+  }
+  return out;
+}
+
+function nodeCenterInMapBounds(nx, ny, bounds) {
+  const pad = 140;
+  return nx + pad >= bounds.x0 && nx - pad <= bounds.x1 && ny + pad >= bounds.y0 && ny - pad <= bounds.y1;
+}
+
+/** 맵 노드 버튼 — 부모 리렌더와 분리 */
+const SkillMapNode = memo(function SkillMapNode({
+  node,
+  leftPct,
+  topPct,
+  isSelected,
+  isUnlocked,
+  isHighlighted,
+  isUnlockableOnly,
+  isLocked,
+  mapSub,
+  nfInvCount,
+  onSelectNode,
+}) {
+  const milestone = nodeIsMilestone(node);
+  const shapeClass = getNodeShapeClass(node);
+  const sizeClass = getNodeSizeClass(node, Boolean(mapSub));
+  const toneClass = getNodeToneClass({
+    node,
+    isUnlocked,
+    isSelected,
+    isDimmed: !isHighlighted,
+    isUnlockableOnly,
+    isLocked,
+  });
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelectNode?.(node.id)}
+      className={`absolute -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-[1.03] ${
+        isSelected ? 'z-[25]' : 'z-[5]'
+      }`}
+      style={{
+        left: `${leftPct}%`,
+        top: `${topPct}%`,
+      }}
+    >
+      <div className="relative">
+        <div
+          className={`${sizeClass} ${shapeClass} ${toneClass} border-2 flex flex-col items-center justify-center gap-1 relative transition-all overflow-hidden ${
+            isSelected ? 'shadow-[0_0_14px_rgba(0,0,0,0.45)]' : ''
+          } ${milestone && isUnlocked ? 'ring-1 ring-amber-400/40' : ''}`}
+        >
+          {isUnlocked && (
+            <div
+              className={`pointer-events-none absolute bottom-0.5 left-1 right-1 h-[2px] rounded-full opacity-95 ${getUnlockedBottomAccentClass()}`}
+              aria-hidden
+            />
+          )}
+          {node.zone === 'legendary' || node.node_type === 'legendary_socket' ? (
+            <span className="text-[7px] sm:text-[8px] font-bold leading-none -rotate-45 text-inherit" aria-hidden>
+              ★
+            </span>
+          ) : (
+            <>
+              {node.is_fork && (
+                <span className="absolute top-0.5 left-0.5 text-[5px] sm:text-[6px] font-bold text-amber-300/95 z-10">
+                  갈림
+                </span>
+              )}
+              {isLocked && (
+                <span className="absolute top-0.5 right-0.5 text-[6px] leading-none opacity-80 z-10">🔒</span>
+              )}
+              {milestone && (
+                <span className="text-[7px] sm:text-[8px] leading-none z-[1]" aria-hidden>
+                  🏆
+                </span>
+              )}
+              <span
+                className={`text-[6px] sm:text-[7px] md:text-[8px] font-semibold leading-tight text-center line-clamp-3 px-0.5 z-[1] ${
+                  isUnlocked ? 'text-inherit' : 'text-slate-400'
+                }`}
+              >
+                {nodeDisplayTitle(node)}
+              </span>
+              {mapSub ? (
+                <span
+                  className={`text-[4.5px] sm:text-[5px] font-medium leading-tight text-center line-clamp-2 px-0.5 z-[1] ${
+                    isUnlocked ? 'text-inherit opacity-80' : 'text-slate-500'
+                  }`}
+                >
+                  {mapSub}
+                </span>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        {!node.is_fork && nfInvCount > 0 && MAX_NON_FORK_INVEST > 1 && (
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 flex flex-col items-center gap-0.5 pointer-events-none max-w-[min(12rem,calc(100vw-2rem))]">
+            <p className="text-[6px] sm:text-[7px] text-cyan-300/90 tabular-nums">
+              {nfInvCount}/{MAX_NON_FORK_INVEST}
+            </p>
+          </div>
+        )}
+      </div>
+    </button>
+  );
+});
+
+/** 맵 뷰포트·패닝·줌·SVG·노드 — memo로 요약/상세 패널 리렌더와 분리 */
+const SkillTreeMapPanel = memo(function SkillTreeMapPanel({
+  t = (key) => key,
+  user,
+  errorMessage,
+  treeNodes = [],
+  skillTreeLayout = {},
+  nodeByNumber = new Map(),
+  unlockedNodeIds = new Set(),
+  progressByNodeId = new Map(),
+  highlightedNodeIds = new Set(),
+  selectedNodeId,
+  onSelectNode = () => {},
+  unlockedCount = 0,
+  totalNodes = 0,
+}) {
+  const [mapNavigateMode, setMapNavigateMode] = useState(false);
+  const [skillMapHelpOpen, setSkillMapHelpOpen] = useState(false);
 
   const skillViewportRef = useRef(null);
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
@@ -784,13 +851,37 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
   const mapCenteredRef = useRef(false);
   const panRef = useRef({ x: 0, y: 0 });
   const zoomRef = useRef(ZOOM_DEFAULT);
+  const mapTransformLayerRef = useRef(null);
+  const panGestureActiveRef = useRef(false);
+  const pinchGestureActiveRef = useRef(false);
+  const wheelPanSettleTimerRef = useRef(null);
+  const wheelZoomUiRafRef = useRef(null);
+  const wheelCullSuppressTimerRef = useRef(null);
+  const [suppressViewportCull, setSuppressViewportCull] = useState(false);
+  const prevSelectedForFocusRef = useRef(null);
+  const isInitialLoadRef = useRef(true);
+  const [mapCullDisabledMobile, setMapCullDisabledMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const apply = () => setMapCullDisabledMobile(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  const selectionLinkedNodeIds = useMemo(
+    () => idsLinkedToSelectedNode(selectedNodeId, treeNodes, nodeByNumber),
+    [selectedNodeId, treeNodes, nodeByNumber]
+  );
 
   const clampPan = useCallback(
     (x, y, vw = viewportSize.w, vh = viewportSize.h, z = zoomRef.current) => {
       const w = vw;
       const h = vh;
       if (w <= 0 || h <= 0) return { x, y };
-      const mapH = skillTreeLayout.mapContentHeightPx ?? SKILL_MAP_HEIGHT;
+      const mapH = skillTreeLayout?.mapContentHeightPx ?? SKILL_MAP_HEIGHT;
       const sw = SKILL_MAP_WIDTH * z;
       const sh = mapH * z;
       const minX = Math.min(0, w - sw);
@@ -800,12 +891,139 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
         y: Math.min(0, Math.max(minY, y)),
       };
     },
-    [viewportSize.w, viewportSize.h, skillTreeLayout.mapContentHeightPx]
+    [viewportSize.w, viewportSize.h, skillTreeLayout?.mapContentHeightPx]
   );
 
-  /** 뷰포트 로컬 좌표 focal에서 확대/축소 (휠·핀치·버튼 공통) */
+  const applyMapTransformDom = useCallback(() => {
+    const el = mapTransformLayerRef.current;
+    if (!el) return;
+    const { x, y } = panRef.current;
+    const z = zoomRef.current;
+    el.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
+  }, []);
+
+  const scheduleWheelZoomUiSync = useCallback(() => {
+    if (wheelZoomUiRafRef.current != null) return;
+    wheelZoomUiRafRef.current = requestAnimationFrame(() => {
+      wheelZoomUiRafRef.current = null;
+      setZoom(zoomRef.current);
+      setPan({ ...panRef.current });
+    });
+  }, []);
+
+  const mapContentHeightPx = skillTreeLayout?.mapContentHeightPx ?? SKILL_MAP_HEIGHT;
+
+  const visibleNodeIds = useMemo(() => {
+    const vw = viewportSize.w;
+    const vh = viewportSize.h;
+    if (suppressViewportCull || mapCullDisabledMobile || vw <= 0 || vh <= 0) {
+      return new Set((treeNodes || []).map((n) => n?.id).filter(Boolean));
+    }
+    const b = viewportBoundsInMapSpace(vw, vh, pan, zoom, SKILL_MAP_CULL_MARGIN_PX);
+    const ids = new Set();
+    for (const n of treeNodes || []) {
+      if (!n?.id) continue;
+      const { nx, ny } = getNodePixelPos(n, skillTreeLayout, mapContentHeightPx);
+      if (nodeCenterInMapBounds(nx, ny, b)) ids.add(n.id);
+    }
+    if (selectedNodeId) ids.add(selectedNodeId);
+    if (selectionLinkedNodeIds) {
+      for (const id of selectionLinkedNodeIds) ids.add(id);
+    }
+    return ids;
+  }, [
+    treeNodes,
+    skillTreeLayout,
+    mapContentHeightPx,
+    viewportSize.w,
+    viewportSize.h,
+    pan,
+    zoom,
+    suppressViewportCull,
+    mapCullDisabledMobile,
+    selectedNodeId,
+    selectionLinkedNodeIds,
+  ]);
+
+  const nodesToRender = useMemo(() => {
+    if (!Array.isArray(treeNodes)) return [];
+    if (suppressViewportCull) return treeNodes;
+    return treeNodes.filter((n) => n && visibleNodeIds.has(n.id));
+  }, [treeNodes, visibleNodeIds, suppressViewportCull]);
+
+  const edgesToRender = useMemo(() => {
+    if (!Array.isArray(treeNodes)) return [];
+    return treeNodes.flatMap((node) => {
+      if (!node || !node.parent_nodes || node.parent_nodes.length === 0) return [];
+      return node.parent_nodes.map((parentNum) => {
+        const parentNode = nodeByNumber?.get(parentNum);
+        if (!parentNode) return null;
+        const cx = (n) => Number(skillTreeLayout?.positionById?.get(n?.id)?.x ?? n?.position_x ?? 50);
+        const cy = (n) =>
+          Number(
+            skillTreeLayout?.positionById?.get(n?.id)?.y ?? mapCoordFromDb(n?.position_y ?? 50)
+          );
+        const edgeD = skillEdgePathD(
+          parentNode,
+          node,
+          cx,
+          cy,
+          skillTreeLayout?.mapViewBoxH ?? VIEWBOX_H,
+          skillTreeLayout?.paddedMaxYPct ?? 100
+        );
+        const childLit = node.is_fork
+          ? nodeReadyForEdge(node, unlockedNodeIds, progressByNodeId)
+          : (unlockedNodeIds?.has(node.id) || false);
+        const isActiveLine =
+          parentEdgeSatisfied(parentNode, node, unlockedNodeIds, progressByNodeId) && childLit;
+        const filtered = !(
+          (highlightedNodeIds?.has(node.id) || false) && (highlightedNodeIds?.has(parentNode.id) || false)
+        );
+        const pathHighlight =
+          (highlightedNodeIds?.has(parentNode.id) || false) &&
+          (highlightedNodeIds?.has(node.id) || false);
+        const showEdge =
+          suppressViewportCull ||
+          visibleNodeIds.has(parentNode.id) ||
+          visibleNodeIds.has(node.id) ||
+          pathHighlight;
+        if (!showEdge) return null;
+        const spineEdge = parentNode.zone === 'tutorial' && node.zone === 'tutorial';
+        const laneKey = (node.map_lane && String(node.map_lane).toLowerCase()) || '';
+        const laneStroke = laneKey && MAP_LANE_EDGE[laneKey];
+        let stroke = 'rgba(120,133,158,0.58)';
+        if (laneStroke) {
+          stroke = isActiveLine ? laneStroke.active : laneStroke.inactive;
+        } else if (isActiveLine && spineEdge) stroke = 'rgba(212,175,55,0.92)';
+        else if (isActiveLine && node.zone === 'legendary') stroke = 'rgba(250,204,21,0.95)';
+        else if (isActiveLine && node.zone === 'infighter') stroke = 'rgba(251,146,60,0.9)';
+        else if (isActiveLine && node.zone === 'outboxer') stroke = 'rgba(45,212,191,0.88)';
+        else if (!isActiveLine && node.zone === 'infighter') stroke = 'rgba(251,146,60,0.2)';
+        else if (!isActiveLine && node.zone === 'outboxer') stroke = 'rgba(45,212,191,0.2)';
+        else if (!isActiveLine && node.zone === 'legendary') stroke = 'rgba(250,204,21,0.22)';
+        else if (!isActiveLine && spineEdge) stroke = 'rgba(212,175,55,0.22)';
+        return {
+          key: `${parentNode.id}-${node.id}`,
+          d: edgeD,
+          stroke,
+          strokeWidth: isActiveLine ? 0.5 : 0.32,
+          opacity: filtered ? 0.16 : 1,
+        };
+      });
+    }).filter(Boolean);
+  }, [
+    treeNodes,
+    nodeByNumber,
+    skillTreeLayout,
+    unlockedNodeIds,
+    progressByNodeId,
+    highlightedNodeIds,
+    suppressViewportCull,
+    visibleNodeIds,
+  ]);
+
   const applyZoomAtPoint = useCallback(
-    (nextZoom, focalX, focalY) => {
+    (nextZoom, focalX, focalY, syncMode = 'react') => {
       const z0 = zoomRef.current;
       const z1 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextZoom));
       if (Math.abs(z1 - z0) < 1e-6) return;
@@ -818,11 +1036,27 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
       const nextPan = clampPan(newPanX, newPanY, viewportSize.w, viewportSize.h, z1);
       zoomRef.current = z1;
       panRef.current = nextPan;
+      if (pinchGestureActiveRef.current) {
+        applyMapTransformDom();
+        return;
+      }
+      if (syncMode === 'raf') {
+        applyMapTransformDom();
+        scheduleWheelZoomUiSync();
+        return;
+      }
       setZoom(z1);
       setPan(nextPan);
     },
-    [viewportSize.w, viewportSize.h, clampPan]
+    [viewportSize.w, viewportSize.h, clampPan, applyMapTransformDom, scheduleWheelZoomUiSync]
   );
+
+  useLayoutEffect(() => {
+    if (panGestureActiveRef.current || pinchGestureActiveRef.current) return;
+    panRef.current = pan;
+    zoomRef.current = zoom;
+    applyMapTransformDom();
+  }, [pan, zoom, applyMapTransformDom]);
 
   const zoomInCenter = useCallback(() => {
     const el = skillViewportRef.current;
@@ -842,36 +1076,44 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
     const el = skillViewportRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const z = ZOOM_DEFAULT;
+    const z = computeFitZoomForViewportWidth(rect.width);
     zoomRef.current = z;
-    setZoom(z);
-    const mapH = skillTreeLayout.mapContentHeightPx ?? SKILL_MAP_HEIGHT;
+    const mapH = skillTreeLayout?.mapContentHeightPx ?? SKILL_MAP_HEIGHT;
     const sw = SKILL_MAP_WIDTH * z;
     const sh = mapH * z;
     const p = clampPan((rect.width - sw) / 2, (rect.height - sh) / 2, rect.width, rect.height, z);
     panRef.current = p;
+    setZoom(z);
     setPan(p);
-  }, [clampPan, skillTreeLayout.mapContentHeightPx]);
+  }, [clampPan, skillTreeLayout?.mapContentHeightPx]);
 
   useLayoutEffect(() => {
     const el = skillViewportRef.current;
     if (!el) return undefined;
 
-    const mapH = skillTreeLayout.mapContentHeightPx ?? SKILL_MAP_HEIGHT;
+    const mapH = skillTreeLayout?.mapContentHeightPx ?? SKILL_MAP_HEIGHT;
 
     const applySize = (width, height) => {
       setViewportSize({ w: width, h: height });
+      if (!mapCenteredRef.current && width > 0 && height > 0) {
+        mapCenteredRef.current = true;
+        const fitZ = computeFitZoomForViewportWidth(width);
+        zoomRef.current = fitZ;
+        setZoom(fitZ);
+        const sw = SKILL_MAP_WIDTH * fitZ;
+        const sh = mapH * fitZ;
+        const nextPan = {
+          x: (width - sw) / 2,
+          y: (height - sh) / 2,
+        };
+        panRef.current = nextPan;
+        setPan(nextPan);
+        return;
+      }
       setPan((prev) => {
         const z = zoomRef.current;
         const sw = SKILL_MAP_WIDTH * z;
         const sh = mapH * z;
-        if (!mapCenteredRef.current && width > 0 && height > 0) {
-          mapCenteredRef.current = true;
-          return {
-            x: (width - sw) / 2,
-            y: (height - sh) / 2,
-          };
-        }
         const minX = Math.min(0, width - sw);
         const minY = Math.min(0, height - sh);
         return {
@@ -888,30 +1130,100 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [skillTreeLayout.mapContentHeightPx]);
+  }, [skillTreeLayout?.mapContentHeightPx]);
 
   useEffect(() => {
+    if (!mapNavigateMode) {
+      panDragRef.current = {
+        active: false,
+        pointerId: null,
+        startClientX: 0,
+        startClientY: 0,
+        originPanX: 0,
+        originPanY: 0,
+      };
+      pointersRef.current.clear();
+      pinchRef.current.active = false;
+      setIsPanningMap(false);
+    }
+  }, [mapNavigateMode]);
+
+  useEffect(() => {
+    if (!skillMapHelpOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setSkillMapHelpOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [skillMapHelpOpen]);
+
+  useEffect(() => {
+    if (selectedNodeId == null) return;
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      prevSelectedForFocusRef.current = selectedNodeId;
+      return;
+    }
+    if (suppressViewportCull || isPanningMap) return;
+    if (prevSelectedForFocusRef.current === selectedNodeId) return;
+    const node = treeNodes.find((n) => n.id === selectedNodeId);
+    if (!node) return;
+    const vw = viewportSize.w;
+    const vh = viewportSize.h;
+    if (vw <= 0 || vh <= 0) return;
+    prevSelectedForFocusRef.current = selectedNodeId;
+    const mapH = skillTreeLayout?.mapContentHeightPx ?? SKILL_MAP_HEIGHT;
+    const { nx, ny } = getNodePixelPos(node, skillTreeLayout, mapH);
+    
+    const targetZ = computeFrameZoom(node, skillTreeLayout, mapH, vw, vh);
+    const panX = vw / 2 - nx * targetZ;
+    const panY = vh / 2 - ny * targetZ;
+    const next = clampPan(panX, panY, vw, vh, targetZ);
+    
+    zoomRef.current = targetZ;
+    panRef.current = next;
+    applyMapTransformDom();
+    setZoom(targetZ);
+    setPan(next);
+  }, [
+    selectedNodeId,
+    suppressViewportCull,
+    isPanningMap,
+    treeNodes,
+    viewportSize.w,
+    viewportSize.h,
+    skillTreeLayout,
+    clampPan,
+    applyMapTransformDom,
+  ]);
+
+  useEffect(() => {
+    if (!mapNavigateMode) return undefined;
     const el = skillViewportRef.current;
     if (!el) return undefined;
 
     const onWheel = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      setSuppressViewportCull(true);
+      if (wheelCullSuppressTimerRef.current != null) clearTimeout(wheelCullSuppressTimerRef.current);
+      wheelCullSuppressTimerRef.current = setTimeout(() => {
+        wheelCullSuppressTimerRef.current = null;
+        setSuppressViewportCull(false);
+      }, 200);
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
 
       if (e.ctrlKey) {
-        // Ctrl + 휠 → 줌 (마우스 커서 위치 기준)
         let dy = e.deltaY;
         if (e.deltaMode === 1) dy *= 16;
         else if (e.deltaMode === 2) dy *= Math.max(rect.height, 320);
         const delta = -dy;
         const step = Math.sign(delta) * Math.min(Math.abs(delta) * 0.003, 0.18);
         const z0 = zoomRef.current;
-        applyZoomAtPoint(z0 * (1 + step), mx, my);
+        applyZoomAtPoint(z0 * (1 + step), mx, my, 'raf');
       } else {
-        // 일반 휠 → 패닝 (deltaX: 좌우, deltaY: 상하)
         let dx = e.deltaX;
         let dy = e.deltaY;
         if (e.deltaMode === 1) { dx *= 18; dy *= 18; }
@@ -924,24 +1236,41 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
           zoomRef.current
         );
         panRef.current = next;
-        setPan(next);
+        applyMapTransformDom();
+        if (wheelPanSettleTimerRef.current != null) clearTimeout(wheelPanSettleTimerRef.current);
+        wheelPanSettleTimerRef.current = setTimeout(() => {
+          wheelPanSettleTimerRef.current = null;
+          setPan({ ...panRef.current });
+        }, 140);
       }
     };
 
     el.addEventListener('wheel', onWheel, { passive: false, capture: true });
-    return () => el.removeEventListener('wheel', onWheel, { capture: true });
-  }, [applyZoomAtPoint, clampPan, viewportSize.w, viewportSize.h]);
-
-  useEffect(() => {
-    zoomRef.current = zoom;
-  }, [zoom]);
+    return () => {
+      el.removeEventListener('wheel', onWheel, { capture: true });
+      if (wheelPanSettleTimerRef.current != null) {
+        clearTimeout(wheelPanSettleTimerRef.current);
+        wheelPanSettleTimerRef.current = null;
+      }
+      if (wheelCullSuppressTimerRef.current != null) {
+        clearTimeout(wheelCullSuppressTimerRef.current);
+        wheelCullSuppressTimerRef.current = null;
+      }
+    };
+  }, [mapNavigateMode, applyZoomAtPoint, clampPan, viewportSize.w, viewportSize.h, applyMapTransformDom]);
 
   const handleSkillMapPointerDown = (e) => {
-    if (e.target.closest('button[type="button"]')) return;
+    /** 모바일 WebKit: target이 Text 노드면 closest 없음 → 부모 Element 사용 (nodeType 1 = Element) */
+    const raw = e.target;
+    const fromEl = raw && raw.nodeType === 1 ? raw : raw?.parentElement;
+    if (fromEl?.closest?.('button[type="button"]')) return;
+    if (!mapNavigateMode) return;
 
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointersRef.current.size >= 2) {
+      pinchGestureActiveRef.current = true;
+      panGestureActiveRef.current = false;
       const pts = [...pointersRef.current.values()];
       const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       pinchRef.current = {
@@ -960,15 +1289,16 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
       }
       panDragRef.current.pointerId = null;
       setIsPanningMap(false);
+      setSuppressViewportCull(true);
       return;
     }
 
-    // 마우스: 왼쪽(0) 또는 중간(1) 버튼으로 패닝 허용
     if (e.button !== 0 && e.button !== 1 && e.pointerType === 'mouse') return;
 
     const el = skillViewportRef.current;
     if (!el) return;
     el.setPointerCapture(e.pointerId);
+    panGestureActiveRef.current = true;
     panDragRef.current = {
       active: true,
       pointerId: e.pointerId,
@@ -978,6 +1308,7 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
       originPanY: panRef.current.y,
     };
     setIsPanningMap(true);
+    setSuppressViewportCull(true);
   };
 
   const handleSkillMapPointerMove = (e) => {
@@ -1004,30 +1335,391 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
     const dy = e.clientY - d.startClientY;
     const next = clampPan(d.originPanX + dx, d.originPanY + dy, viewportSize.w, viewportSize.h, zoomRef.current);
     panRef.current = next;
-    setPan(next);
+    applyMapTransformDom();
   };
 
   const endSkillMapPan = (e) => {
+    const wasPinching = pinchGestureActiveRef.current;
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) {
       pinchRef.current.active = false;
+      pinchGestureActiveRef.current = false;
+    }
+
+    if (wasPinching && !pinchGestureActiveRef.current) {
+      setZoom(zoomRef.current);
+      setPan({ ...panRef.current });
     }
 
     if (panDragRef.current.active && panDragRef.current.pointerId === e.pointerId) {
+      panGestureActiveRef.current = false;
       panDragRef.current.active = false;
       panDragRef.current.pointerId = null;
       setIsPanningMap(false);
+      setPan({ ...panRef.current });
       try {
         skillViewportRef.current?.releasePointerCapture(e.pointerId);
       } catch {
         /* ignore */
       }
     }
+
+    const stillPanning = panDragRef.current.active;
+    const stillPinching = Boolean(pinchRef.current.active && pointersRef.current.size >= 2);
+    setSuppressViewportCull(Boolean(stillPanning || stillPinching));
   };
 
+  return (
+    <>
+      <div className="w-full min-w-0 max-w-full">
+        <div className="rounded-lg sm:rounded-xl overflow-hidden border border-amber-400/22 sm:border-amber-300/28 shadow-[0_8px_40px_rgba(15,23,42,0.38)] ring-1 ring-amber-950/20">
+          <div className="px-3 xs:px-4 sm:px-5 pt-3 sm:pt-4 pb-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between bg-gradient-to-r from-[#252238] via-[#1e2238] to-[#1c2034]">
+            <div className="min-w-0 w-full sm:flex-1 sm:w-auto">
+              <p className="text-base sm:text-xl md:text-2xl font-bold text-white tracking-tight break-words">
+                스포티션 복싱 스킬 트리
+              </p>
+              <p className="text-[11px] sm:text-sm text-slate-300/95 mt-1 leading-snug">{t?.('skillMapModeHint') || ''}</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-between xs:justify-end gap-2 sm:gap-3 w-full min-w-0 sm:w-auto sm:shrink-0">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={mapNavigateMode}
+                onClick={() => setMapNavigateMode((v) => !v)}
+                className={`rounded-xl border px-3 py-2 text-[11px] sm:text-xs font-bold transition-all shrink-0 ${
+                  mapNavigateMode
+                    ? 'border-white/22 bg-white/[0.08] text-slate-100 hover:bg-white/[0.12]'
+                    : 'border-amber-400/50 bg-amber-500/22 text-amber-50 shadow-[0_0_18px_rgba(251,191,36,0.22)] hover:bg-amber-500/28 hover:border-amber-400/65'
+                }`}
+              >
+                {mapNavigateMode ? (t?.('skillMapNavigateMode') || '맵 탐색') : (t?.('skillMapPageScrollMode') || '페이지 스크롤')}
+              </button>
+              <div className="flex items-center gap-0.5 rounded-xl border border-white/18 bg-white/[0.06] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <button
+                  type="button"
+                  onClick={zoomOutCenter}
+                  disabled={zoom <= ZOOM_MIN + 0.001}
+                  className="min-w-[2rem] rounded-lg px-2 py-1.5 text-base font-bold leading-none text-white hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent"
+                  aria-label="축소"
+                >
+                  −
+                </button>
+                <span className="min-w-[2.85rem] text-center text-[10px] sm:text-xs font-semibold tabular-nums text-slate-300">
+                  {(zoom * 100).toFixed(0)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={zoomInCenter}
+                  disabled={zoom >= ZOOM_MAX - 0.001}
+                  className="min-w-[2rem] rounded-lg px-2 py-1.5 text-base font-bold leading-none text-white hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent"
+                  aria-label="확대"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={resetMapZoom}
+                  className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-400 hover:bg-white/10 hover:text-white"
+                  title="줌·위치 초기화"
+                  aria-label="줌 초기화"
+                >
+                  초기화
+                </button>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] sm:text-xs text-slate-400">해금 스킬</p>
+                <p className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#d2a8ff] tabular-nums tracking-wide">
+                  {unlockedCount}
+                  <span className="text-slate-500 font-semibold text-lg mx-1"> / </span>
+                  <span className="text-slate-400 text-lg">{totalNodes || 0}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            ref={skillViewportRef}
+            tabIndex={-1}
+            className={`relative w-full overflow-hidden bg-[#141c32] select-none outline-none focus:outline-none ${
+              mapNavigateMode ? (isPanningMap ? 'cursor-grabbing touch-none' : 'cursor-grab touch-none') : 'cursor-default touch-pan-y'
+            }`}
+            style={{
+              height: 'clamp(280px, 52dvh, 640px)',
+              overscrollBehavior: mapNavigateMode ? 'contain' : 'auto',
+              touchAction: mapNavigateMode ? 'none' : 'pan-y',
+            }}
+            onPointerDown={handleSkillMapPointerDown}
+            onPointerMove={handleSkillMapPointerMove}
+            onPointerUp={endSkillMapPan}
+            onPointerCancel={endSkillMapPan}
+          >
+            {user?.id && treeNodes.length === 0 && !errorMessage && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-900/45 px-4 text-center pointer-events-none">
+                <p className="text-sm text-slate-200 max-w-md">
+                  불러온 스킬 노드가 없습니다. DB에 <code className="text-cyan-300/90">skill_tree_nodes</code> 시드가 들어 있는지
+                  확인해 주세요.
+                </p>
+              </div>
+            )}
+            <div
+              ref={mapTransformLayerRef}
+              className="absolute top-0 left-0 will-change-transform overflow-visible"
+              style={{
+                width: SKILL_MAP_WIDTH,
+                height: skillTreeLayout?.mapContentHeightPx ?? SKILL_MAP_HEIGHT,
+                transformOrigin: '0 0',
+              }}
+            >
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    'radial-gradient(ellipse 80% 50% at 20% 0%, #3d3468, transparent 76%), radial-gradient(ellipse 80% 50% at 80% 100%, #4a2848, transparent 76%), linear-gradient(135deg, #242038 0%, #232a42 50%, #2a2238 100%)',
+                }}
+              />
+
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
+                style={{ overflow: 'visible' }}
+                viewBox={`0 0 100 ${skillTreeLayout?.mapViewBoxH ?? VIEWBOX_H}`}
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <linearGradient id="spineBeam" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="rgba(212,175,55,0.55)" />
+                    <stop offset="50%" stopColor="rgba(251,191,36,0.35)" />
+                    <stop offset="100%" stopColor="rgba(180,83,9,0.25)" />
+                  </linearGradient>
+                </defs>
+                <line
+                  x1={SPINE_CENTER_X}
+                  y1={2}
+                x2={SPINE_CENTER_X}
+                y2={(skillTreeLayout?.mapViewBoxH ?? VIEWBOX_H) - 2}
+                  stroke="url(#spineBeam)"
+                  strokeWidth={0.75}
+                  opacity={0.42}
+                />
+                <line
+                  x1={SPINE_CENTER_X}
+                  y1={2}
+                x2={SPINE_CENTER_X}
+                y2={(skillTreeLayout?.mapViewBoxH ?? VIEWBOX_H) - 2}
+                  stroke="rgba(253,230,138,0.22)"
+                  strokeWidth={0.18}
+                />
+
+                {edgesToRender.map((edge) => (
+                  <path
+                    key={edge.key}
+                    d={edge.d}
+                    fill="none"
+                    stroke={edge.stroke}
+                    strokeWidth={edge.strokeWidth}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={edge.opacity}
+                  />
+                ))}
+              </svg>
+
+              {Array.isArray(nodesToRender) &&
+                nodesToRender.map((node) => {
+                  if (!node || !node.id) return null;
+                  const nfPr = node.is_fork ? progressByNodeId.get(node.id) : null;
+                  const forkDone = nfPr?.promotion_status === 'passed';
+                  const isUnlocked = node.is_fork
+                    ? isForkNodeActive(node, unlockedNodeIds, progressByNodeId)
+                    : (unlockedNodeIds?.has(node.id) ?? false);
+                  const isSelected = node.id === selectedNodeId;
+                  const isHighlighted = highlightedNodeIds?.has(node.id) || false;
+                  const parentsOk = parentsSatisfiedForDisplay(node, unlockedNodeIds, progressByNodeId, nodeByNumber);
+                  const isUnlockableOnly = !isUnlocked && parentsOk && (!node.is_fork || !forkDone);
+                  const isLocked =
+                    !isUnlocked &&
+                    Boolean(node.parent_nodes?.length) &&
+                    !parentsOk &&
+                    node.node_number !== SKILL_TREE_ENTRY_NODE_NUMBER;
+                  const mapSub = mapSubtitleVisible(node) ? nodeMapSubtitle(node) : '';
+                  const lay = skillTreeLayout?.positionById?.get(node.id);
+                  const yDen = skillTreeLayout?.paddedMaxYPct ?? 100;
+                  const leftPct = lay ? lay.x : mapCoordFromDb(node?.position_x ?? 50);
+                  const topPct = lay
+                    ? (lay.y / Math.max(1e-6, yDen)) * 100
+                    : (mapCoordFromDb(node?.position_y ?? 50) / Math.max(1e-6, yDen)) * 100;
+                  const nfInvCount =
+                    !node.is_fork && node.id ? nonForkInvestmentCount(node.id, unlockedNodeIds, progressByNodeId) : 0;
+
+                  return (
+                    <SkillMapNode
+                      key={node.id}
+                      node={node}
+                      leftPct={leftPct}
+                      topPct={topPct}
+                      isSelected={isSelected}
+                      isUnlocked={isUnlocked}
+                      isHighlighted={isHighlighted}
+                      isUnlockableOnly={isUnlockableOnly}
+                      isLocked={isLocked}
+                      mapSub={mapSub}
+                      nfInvCount={nfInvCount}
+                      onSelectNode={onSelectNode}
+                    />
+                  );
+                })}
+
+              <div className="absolute left-0 right-0 top-6 flex justify-between items-start px-8 sm:px-12 pointer-events-none z-[8]">
+                <div className="w-[32%] text-left">
+                  <span className="inline-block px-4 py-2 rounded-lg bg-[#1e2d52]/95 border border-[#4a6fb8]/55 text-[#93c4f8] font-semibold text-[8px] sm:text-[10px] shadow-sm">아웃복싱 계보</span>
+                </div>
+                <div className="w-[36%] text-center">
+                  <span className="inline-block px-6 py-2.5 rounded-full bg-[#2a2048]/95 border border-[#6a5090]/55 text-[#d8c8f8] font-semibold text-[8px] sm:text-[10px] shadow-[0_0_18px_rgba(106,80,144,0.35)]">중앙 수직축: 기본기</span>
+                </div>
+                <div className="w-[32%] text-right">
+                  <span className="inline-block px-4 py-2 rounded-lg bg-[#4a2030]/95 border border-[#c05070]/45 text-[#f0a0b0] font-semibold text-[8px] sm:text-[10px] shadow-sm">인파이팅 계보</span>
+                </div>
+              </div>
+
+              <div className="absolute left-0 right-0 bottom-0 z-[12] pointer-events-none flex justify-center px-1 pb-2 pt-6 bg-gradient-to-t from-[#141c32]/95 via-[#141c32]/50 to-transparent">
+                <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 max-w-full rounded-lg border border-white/18 bg-slate-900/35 px-2.5 py-1.5 backdrop-blur-sm shadow-[0_-4px_24px_rgba(15,23,42,0.35)]">
+                  {SKILL_MAP_LEGEND.map((item) => (
+                    <span
+                      key={item.key}
+                      className="inline-flex items-center gap-1 text-[7px] sm:text-[8px] text-slate-200/95 whitespace-nowrap"
+                    >
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.dot}`} />
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="absolute bottom-5 right-4 z-[30] flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/12 text-[13px] font-bold text-slate-100 shadow-[0_4px_20px_rgba(15,23,42,0.35)] backdrop-blur-md pointer-events-auto hover:bg-white/18 transition-colors"
+              title="맵 범례·연결선 안내"
+              aria-label="맵 범례·연결선 안내 열기"
+              aria-expanded={skillMapHelpOpen}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSkillMapHelpOpen(true);
+              }}
+            >
+              ?
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {skillMapHelpOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setSkillMapHelpOpen(false)}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="skill-map-help-title"
+            className="w-full max-w-md rounded-2xl border border-white/15 bg-[#0f1020] p-5 shadow-2xl max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="skill-map-help-title" className="text-lg font-bold text-white mb-2">
+              맵 범례·연결선 안내
+            </h2>
+            <p className="text-sm text-gray-400 mb-4 leading-relaxed">
+              노드 사이 선 색은 맵 레인(예: C 회피, G 공격, N 압박, R 바디)을 뜻합니다. 맵 하단 범례와 동일합니다.
+            </p>
+            <ul className="space-y-2 text-sm text-gray-300 mb-5">
+              {SKILL_MAP_LEGEND.map((item) => (
+                <li key={item.key} className="flex items-center gap-2">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${item.dot}`} />
+                  {item.label}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 font-semibold text-white transition-colors"
+              onClick={() => setSkillMapHelpOpen(false)}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+});
+
+/** 해금·진행 행에서 가장 최근 활동 시각이 있는 노드 id (맵 초기 포커스용) */
+function pickMostRecentActivityNodeId(unlockRows, progRows, normalizedTreeNodes) {
+  const validIds = new Set();
+  for (const n of normalizedTreeNodes || []) {
+    if (n?.id != null) validIds.add(n.id);
+  }
+  const latestByNode = new Map();
+  for (const r of unlockRows || []) {
+    const nid = r?.node_id;
+    if (!validIds.has(nid)) continue;
+    const ts = r.unlocked_at ? new Date(r.unlocked_at).getTime() : 0;
+    const prev = latestByNode.get(nid) ?? 0;
+    if (ts > prev) latestByNode.set(nid, ts);
+  }
+  for (const r of progRows || []) {
+    const nid = r?.node_id;
+    if (!validIds.has(nid)) continue;
+    const ts = r.updated_at ? new Date(r.updated_at).getTime() : 0;
+    const prev = latestByNode.get(nid) ?? 0;
+    if (ts > prev) latestByNode.set(nid, ts);
+  }
+  let bestId = null;
+  let bestTs = -1;
+  for (const [nid, ts] of latestByNode) {
+    if (ts > bestTs) {
+      bestTs = ts;
+      bestId = nid;
+    }
+  }
+  return bestTs > 0 ? bestId : null;
+}
+
+const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
+  const { user, profile, loading: authLoading } = useAuth();
+  const [dataLoading, setDataLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [treeNodes, setTreeNodes] = useState([]);
+  const [unlockedNodeIds, setUnlockedNodeIds] = useState(() => new Set());
+  const [progressRows, setProgressRows] = useState([]);
+  const [skillPoints, setSkillPoints] = useState(0);
+  const [skillResetTickets, setSkillResetTickets] = useState(0);
+  const [activeFilter, setActiveFilter] = useState('all');
+  /** none: 구역 필터만 | path: 기록 기준 선행 경로 */
+  const [highlightMode, setHighlightMode] = useState('none');
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [isApplying, setIsApplying] = useState(false);
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
+  /** 모바일(좁은 뷰): 상세 시트는 맵 탭 시에만 펼침, 진입 시 강제로 덮지 않음 */
+  const [mobileSkillSheetOpen, setMobileSkillSheetOpen] = useState(false);
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+
   useEffect(() => {
-    panRef.current = pan;
-  }, [pan]);
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const apply = () => setIsNarrowViewport(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  const skillTreeLayout = useMemo(() => computeSkillTreeLayout(treeNodes), [treeNodes]);
+
+  const handleSelectNodeFromMap = useCallback(
+    (id) => {
+      setSelectedNodeId(id);
+    },
+    []
+  );
 
   const loadSkillData = useCallback(async () => {
     if (!user?.id) return;
@@ -1036,9 +1728,8 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
     setErrorMessage('');
 
     try {
-      const { getSkillTreeNodes, getUserSkillUnlocks, getUserSkillNodeProgress, getUserProfile } = await import(
-        '@/lib/supabase'
-      );
+      const { getSkillTreeNodes, getUserSkillUnlocks, getUserSkillNodeProgress, getUserSkillWallet, getUserProfile } =
+        await import('@/lib/supabase');
 
       const { data: nodes, error: nodesError } = await getSkillTreeNodes();
       if (nodesError) throw nodesError;
@@ -1048,12 +1739,19 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
         .sort((a, b) => a.node_number - b.node_number);
       setTreeNodes(normalizedTreeNodes);
 
-      const [{ data: unlockRows, error: unlockError }, { data: progRows, error: progError }, { data: profileData, error: profileError }] =
-        await Promise.all([getUserSkillUnlocks(user.id), getUserSkillNodeProgress(user.id), getUserProfile(user.id)]);
+      const [{ data: unlockRows, error: unlockError }, { data: progRows, error: progError }, { data: wallet, error: walletError }] =
+        await Promise.all([getUserSkillUnlocks(user.id), getUserSkillNodeProgress(user.id), getUserSkillWallet(user.id)]);
 
-      if (profileError) console.warn('[ActiveSkillsView] 프로필:', profileError);
-      setSkillPoints(Number(profileData?.skill_points ?? 0));
-      setSkillResetTickets(Number(profileData?.skill_reset_tickets ?? 0));
+      if (walletError) console.warn('[ActiveSkillsView] 스킬 지갑:', walletError);
+      if (wallet && !walletError) {
+        setSkillPoints(Number(wallet.skill_points ?? 0));
+        setSkillResetTickets(Number(wallet.skill_reset_tickets ?? 0));
+      } else {
+        const { data: profileData, error: profileError } = await getUserProfile(user.id);
+        if (profileError) console.warn('[ActiveSkillsView] 프로필(지갑 대체):', profileError);
+        setSkillPoints(Number(profileData?.skill_points ?? 0));
+        setSkillResetTickets(Number(profileData?.skill_reset_tickets ?? 0));
+      }
 
       if (progError) {
         const msg = progError.message || '';
@@ -1090,6 +1788,12 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
       const progMap = new Map((progRows || []).map((r) => [r.node_id, r]));
       setSelectedNodeId((prev) => {
         if (prev && normalizedTreeNodes.some((n) => n.id === prev)) return prev;
+        const recentId = pickMostRecentActivityNodeId(
+          unlockError ? [] : unlockRows,
+          progError ? [] : progRows,
+          normalizedTreeNodes
+        );
+        if (recentId != null) return recentId;
         const firstUnlocked = normalizedTreeNodes.find((n) => {
           if (!n.is_fork) return ids.has(n.id);
           return isForkNodeActive(n, ids, progMap);
@@ -1098,7 +1802,7 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
       });
     } catch (error) {
       console.error('[ActiveSkillsView] 데이터 로드 에러:', error);
-      setErrorMessage(error?.message || '액티브 스킬 정보를 불러오지 못했습니다.');
+      setErrorMessage(error?.message || '스킬 정보를 불러오지 못했습니다.');
     } finally {
       setDataLoading(false);
     }
@@ -1113,6 +1817,7 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
       setSkillPoints(0);
       setSkillResetTickets(0);
       setSelectedNodeId(null);
+      setMobileSkillSheetOpen(false);
       setErrorMessage('');
       return;
     }
@@ -1129,25 +1834,6 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
     (progressRows || []).forEach((r) => m.set(r.node_id, r));
     return m;
   }, [progressRows]);
-
-  const childrenByParentNum = useMemo(() => {
-    const m = new Map();
-    for (const n of treeNodes) {
-      for (const p of n.parent_nodes || []) {
-        if (!m.has(p)) m.set(p, []);
-        m.get(p).push(n);
-      }
-    }
-    for (const arr of m.values()) {
-      arr.sort((a, b) => a.node_number - b.node_number);
-    }
-    return m;
-  }, [treeNodes]);
-
-  useEffect(() => {
-    const max = skillTreeLayout.maxDepth;
-    if (stageDepth > max) setStageDepth(Math.max(0, max));
-  }, [skillTreeLayout.maxDepth, stageDepth]);
 
   const unlockedNodesList = useMemo(
     () =>
@@ -1176,23 +1862,8 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
       }
       return inter;
     }
-    if (highlightMode === 'stage') {
-      const inter = new Set();
-      for (const n of treeNodes) {
-        const d = skillTreeLayout.depthMap.get(n.node_number) ?? 0;
-        if (d === stageDepth && zoneFilteredIds.has(n.id)) inter.add(n.id);
-      }
-      return inter;
-    }
     return zoneFilteredIds;
-  }, [
-    highlightMode,
-    stageDepth,
-    zoneFilteredIds,
-    pathRelatedIds,
-    treeNodes,
-    skillTreeLayout.depthMap,
-  ]);
+  }, [highlightMode, zoneFilteredIds, pathRelatedIds]);
 
   const buildSummary = useMemo(() => getStyleSummaryFromUnlocks(unlockedNodesList), [unlockedNodesList]);
 
@@ -1207,22 +1878,6 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
   );
 
   const selectedNode = treeNodes.find((node) => node.id === selectedNodeId) || null;
-
-  const selectedRelated = useMemo(() => {
-    if (!selectedNode) return null;
-    const parents = (selectedNode.parent_nodes || [])
-      .map((num) => nodeByNumber.get(num))
-      .filter(Boolean);
-    const children = childrenByParentNum.get(selectedNode.node_number) || [];
-    const chain = walkUpChain(selectedNode, nodeByNumber);
-    const flowText = chain.map((n) => nodeDisplayTitle(n)).join(' → ');
-    return { parents, children, flowText };
-  }, [selectedNode, nodeByNumber, childrenByParentNum, treeNodes]);
-
-  const filteredUnlockedNodes = useMemo(
-    () => unlockedNodesList.filter((n) => zoneMatchesFilter(n.zone, activeFilter)),
-    [activeFilter, unlockedNodesList]
-  );
 
   const parentsSatisfiedForSelected = useMemo(() => {
     if (!selectedNode) return true;
@@ -1371,21 +2026,12 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
   }
 
   return (
-    <div className="animate-fade-in-up space-y-3 xs:space-y-5 w-full max-w-[100vw] overflow-x-hidden px-3 sm:px-4 lg:px-6">
+    <div className="animate-fade-in-up space-y-3 xs:space-y-5 w-full min-w-0 max-w-full overflow-x-hidden px-3 sm:px-4 lg:px-6 box-border">
       <PageHeader
         title={t('activeSkills')}
         description="중앙 스파인은 잽에서 시작해 공통 기본기로 이어지고, 왼쪽은 아웃복싱·오른쪽은 인파이팅으로 확장됩니다. 위에서 아래로 심화되며, 선행을 채운 뒤 기록합니다. 맵은 드래그·휠로 탐색합니다."
-        onBack={() => setActiveTab('roadmap-skill-tree')}
-      >
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setActiveTab('roadmap-skill-tree')}
-            className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white transition-all"
-          >
-            스킬 가이드
-          </button>
-        </div>
-      </PageHeader>
+        onBack={() => setActiveTab('skills')}
+      />
 
       {errorMessage && (
         <SpotlightCard className="p-4 border-l-4 border-red-500">
@@ -1401,56 +2047,70 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
         </SpotlightCard>
       )}
 
-      <SpotlightCard className={`p-5 sm:p-6 border bg-gradient-to-br ${buildSummary.className}`}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
-          <div className="min-w-0 flex-1 space-y-3">
-            <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">액티브 스킬 요약</p>
-            <h3 className="text-xl sm:text-2xl font-bold text-white leading-tight">{buildSummary.label}</h3>
-            <p className="text-sm text-gray-300/95 leading-relaxed max-w-xl">{buildSummary.description}</p>
-            <dl className="grid gap-2 text-[11px] sm:text-xs text-gray-400 max-w-xl rounded-lg bg-black/20 border border-white/5 p-3">
-              <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2 sm:items-baseline">
-                <dt className="text-gray-500 shrink-0 sm:w-24">훈련 경향</dt>
-                <dd className="text-gray-300 min-w-0">{roadmapInterpretation.tendency}</dd>
-              </div>
-              <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2 sm:items-baseline border-t border-white/5 pt-2">
-                <dt className="text-gray-500 shrink-0 sm:w-24">진행</dt>
-                <dd className="text-gray-300 min-w-0">{roadmapInterpretation.stageHint}</dd>
-              </div>
-              <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2 sm:items-baseline border-t border-white/5 pt-2">
-                <dt className="text-gray-500 shrink-0 sm:w-24">확장</dt>
-                <dd className="text-gray-300 min-w-0">{roadmapInterpretation.expansion}</dd>
-              </div>
-            </dl>
+      <SpotlightCard className={`border bg-gradient-to-br ${buildSummary.className} transition-all ${summaryExpanded ? 'p-5 sm:p-6' : 'p-3 sm:p-4'}`}>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">스킬 요약</p>
+            <h3 className="text-base sm:text-lg font-bold text-white leading-tight truncate">{buildSummary.label}</h3>
           </div>
+          <button
+            type="button"
+            onClick={() => setSummaryExpanded(!summaryExpanded)}
+            className="shrink-0 w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+            aria-label={summaryExpanded ? '요약 접기' : '요약 펼치기'}
+          >
+            {summaryExpanded ? '−' : '+'}
+          </button>
+        </div>
 
-          <div className="w-full lg:max-w-[min(100%,22rem)] shrink-0 flex flex-col gap-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
-              <div className="rounded-xl bg-black/30 border border-white/10 p-3 sm:p-3.5">
+        {summaryExpanded && (
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+            <div className="min-w-0 flex-1 space-y-3">
+              <p className="text-sm text-gray-300/95 leading-relaxed max-w-xl">{buildSummary.description}</p>
+              <dl className="grid gap-2 text-[11px] sm:text-xs text-gray-400 max-w-xl rounded-lg bg-white/[0.06] border border-white/10 p-3">
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2 sm:items-baseline">
+                  <dt className="text-gray-500 shrink-0 sm:w-24">훈련 경향</dt>
+                  <dd className="text-gray-300 min-w-0">{roadmapInterpretation.tendency}</dd>
+                </div>
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2 sm:items-baseline border-t border-white/5 pt-2">
+                  <dt className="text-gray-500 shrink-0 sm:w-24">진행</dt>
+                  <dd className="text-gray-300 min-w-0">{roadmapInterpretation.stageHint}</dd>
+                </div>
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2 sm:items-baseline border-t border-white/5 pt-2">
+                  <dt className="text-gray-500 shrink-0 sm:w-24">확장</dt>
+                  <dd className="text-gray-300 min-w-0">{roadmapInterpretation.expansion}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="w-full lg:max-w-[min(100%,22rem)] shrink-0 flex flex-col gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
+              <div className="rounded-xl bg-white/[0.07] border border-white/12 p-3 sm:p-3.5">
                 <div className="text-[10px] text-gray-400 mb-0.5">기록 노드</div>
                 <div className="text-lg font-bold text-white tabular-nums">{unlockedNodesList.length}</div>
               </div>
-              <div className="rounded-xl bg-black/30 border border-white/10 p-3 sm:p-3.5">
+              <div className="rounded-xl bg-white/[0.07] border border-white/12 p-3 sm:p-3.5">
                 <div className="text-[10px] text-gray-400 mb-0.5">스킬 포인트</div>
                 <div className="text-lg font-bold text-cyan-300 tabular-nums">{skillPoints}</div>
               </div>
-              <div className="rounded-xl bg-black/30 border border-white/10 p-3 sm:p-3.5">
+              <div className="rounded-xl bg-white/[0.07] border border-white/12 p-3 sm:p-3.5">
                 <div className="text-[10px] text-gray-400 mb-0.5">공통·기본</div>
                 <div className="text-lg font-bold text-slate-200 tabular-nums">{tutorialCount}</div>
               </div>
-              <div className="rounded-xl bg-black/30 border border-white/10 p-3 sm:p-3.5">
+              <div className="rounded-xl bg-white/[0.07] border border-white/12 p-3 sm:p-3.5">
                 <div className="text-[10px] text-gray-400 mb-0.5">인파이터</div>
                 <div className="text-lg font-bold text-orange-300 tabular-nums">{infighterCount}</div>
               </div>
-              <div className="rounded-xl bg-black/30 border border-white/10 p-3 sm:p-3.5">
+              <div className="rounded-xl bg-white/[0.07] border border-white/12 p-3 sm:p-3.5">
                 <div className="text-[10px] text-gray-400 mb-0.5">아웃복서</div>
                 <div className="text-lg font-bold text-emerald-300 tabular-nums">{outboxerCount}</div>
               </div>
-              <div className="rounded-xl bg-black/30 border border-white/10 p-3 sm:p-3.5">
+              <div className="rounded-xl bg-white/[0.07] border border-white/12 p-3 sm:p-3.5">
                 <div className="text-[10px] text-gray-400 mb-0.5">전설</div>
                 <div className="text-lg font-bold text-yellow-400 tabular-nums">{legendaryCount}</div>
               </div>
             </div>
-            <div className="rounded-xl bg-black/25 border border-white/10 p-3 space-y-2">
+            <div className="rounded-xl bg-white/[0.06] border border-white/12 p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-[10px] text-gray-500">초기화권</div>
@@ -1468,9 +2128,39 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
               <p className="text-[10px] text-gray-500 leading-relaxed">
                 해금·진행·승단 신청을 초기화하고 사용 SP를 환급합니다. 권이 있을 때만 가능합니다.
               </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {!summaryExpanded && (
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <div className="text-center">
+              <div className="text-[9px] text-gray-400">기록</div>
+              <div className="text-sm font-bold text-white tabular-nums">{unlockedNodesList.length}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] text-gray-400">SP</div>
+              <div className="text-sm font-bold text-cyan-300 tabular-nums">{skillPoints}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] text-gray-400">기본</div>
+              <div className="text-sm font-bold text-slate-200 tabular-nums">{tutorialCount}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] text-gray-400">인파</div>
+              <div className="text-sm font-bold text-orange-300 tabular-nums">{infighterCount}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] text-gray-400">아웃</div>
+              <div className="text-sm font-bold text-emerald-300 tabular-nums">{outboxerCount}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] text-gray-400">전설</div>
+              <div className="text-sm font-bold text-yellow-400 tabular-nums">{legendaryCount}</div>
+            </div>
+          </div>
+        )}
       </SpotlightCard>
 
       <div className="flex flex-col gap-2 sm:gap-3">
@@ -1518,531 +2208,153 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
           >
             진행 경로만
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setHighlightMode('stage');
-              setStageDepth(0);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
-              highlightMode === 'stage'
-                ? 'bg-white/12 text-white border-white/20 shadow-sm'
-                : 'bg-white/[0.04] text-gray-400 border-transparent hover:bg-white/10 hover:text-gray-200'
-            }`}
-          >
-            단계별
-          </button>
-          {highlightMode === 'stage' && (
-            <div className="flex flex-wrap gap-1 w-full sm:w-auto sm:pl-2">
-              {Array.from({ length: skillTreeLayout.maxDepth + 1 }, (_, d) => {
-                const active = stageDepth === d;
-                return (
-                  <button
-                    key={`stage-${d}`}
-                    type="button"
-                    onClick={() => setStageDepth(d)}
-                    className={`px-2 py-1 rounded-md text-xs font-semibold tabular-nums border transition-all ${
-                      active
-                        ? 'bg-cyan-500/20 text-cyan-100 border-cyan-400/40'
-                        : 'bg-white/[0.04] text-gray-400 border-transparent hover:bg-white/10'
-                    }`}
-                  >
-                    {d === 0 ? '기초' : `단계 ${d + 1}`}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
 
-      <div className="w-screen max-w-[100vw] relative left-1/2 -translate-x-1/2">
-      <div className="rounded-none sm:rounded-xl overflow-hidden border-y border-amber-900/30 sm:border border-amber-500/20 shadow-[0_0_60px_rgba(0,0,0,0.65)] ring-1 ring-amber-950/40">
-        <div className="px-5 pt-4 pb-3 flex flex-wrap items-center justify-between gap-2 bg-[#12111d]">
-          <div className="min-w-0">
-            <p className="text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight truncate">
-              스포티션 복싱 스킬 트리
-            </p>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              입문부터 생활체육대회까지 · 드래그/중간버튼으로 이동 · 휠 스크롤 · Ctrl+휠 또는 +/- 로 확대·축소 · 핀치
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 shrink-0">
-            <div className="flex items-center gap-0.5 rounded-xl border border-white/15 bg-[#0a0a12]/95 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-              <button
-                type="button"
-                onClick={zoomOutCenter}
-                disabled={zoom <= ZOOM_MIN + 0.001}
-                className="min-w-[2rem] rounded-lg px-2 py-1.5 text-base font-bold leading-none text-white hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent"
-                aria-label="축소"
-              >
-                −
-              </button>
-              <span className="min-w-[2.85rem] text-center text-[10px] sm:text-xs font-semibold tabular-nums text-slate-400">
-                {(zoom * 100).toFixed(0)}%
-              </span>
-              <button
-                type="button"
-                onClick={zoomInCenter}
-                disabled={zoom >= ZOOM_MAX - 0.001}
-                className="min-w-[2rem] rounded-lg px-2 py-1.5 text-base font-bold leading-none text-white hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent"
-                aria-label="확대"
-              >
-                +
-              </button>
-              <button
-                type="button"
-                onClick={resetMapZoom}
-                className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-400 hover:bg-white/10 hover:text-white"
-                title="줌·위치 초기화"
-                aria-label="줌 초기화"
-              >
-                초기화
-              </button>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] sm:text-xs text-slate-400">해금 스킬</p>
-              <p className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#d2a8ff] tabular-nums tracking-wide">
-                {unlockedNodesList.length}
-                <span className="text-slate-500 font-semibold text-lg mx-1"> / </span>
-                <span className="text-slate-400 text-lg">{treeNodes.length || 0}</span>
-              </p>
-            </div>
-          </div>
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-5 items-start relative">
+        <div className="w-full lg:flex-1 min-w-0">
+          <SkillTreeMapPanel
+            t={t}
+            user={user}
+            errorMessage={errorMessage}
+            treeNodes={treeNodes}
+            skillTreeLayout={skillTreeLayout}
+            nodeByNumber={nodeByNumber}
+            unlockedNodeIds={unlockedNodeIds}
+            progressByNodeId={progressByNodeId}
+            highlightedNodeIds={highlightedNodeIds}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={handleSelectNodeFromMap}
+            unlockedCount={unlockedNodesList.length}
+            totalNodes={treeNodes.length}
+          />
         </div>
-        <div
-          ref={skillViewportRef}
-          tabIndex={-1}
-          className={`relative w-full overflow-hidden bg-[#070818] select-none touch-none outline-none focus:outline-none ${
-            isPanningMap ? 'cursor-grabbing' : 'cursor-grab'
-          }`}
-          style={{
-            height: 'min(calc(100dvh - 11rem), 920px)',
-            minHeight: '440px',
-            overscrollBehavior: 'contain',
-            touchAction: 'none',
-          }}
-          onPointerDown={handleSkillMapPointerDown}
-          onPointerMove={handleSkillMapPointerMove}
-          onPointerUp={endSkillMapPan}
-          onPointerCancel={endSkillMapPan}
-        >
-          {user?.id && treeNodes.length === 0 && !errorMessage && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55 px-4 text-center pointer-events-none">
-              <p className="text-sm text-gray-300 max-w-md">
-                불러온 스킬 노드가 없습니다. DB에 <code className="text-cyan-300/90">skill_tree_nodes</code> 시드가 들어 있는지
-                확인해 주세요.
-              </p>
-            </div>
-          )}
+
+        {selectedNode && isNarrowViewport && mobileSkillSheetOpen ? (
           <div
-            className="absolute top-0 left-0 will-change-transform overflow-visible"
-            style={{
-              width: SKILL_MAP_WIDTH,
-              height: skillTreeLayout.mapContentHeightPx ?? SKILL_MAP_HEIGHT,
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: '0 0',
-            }}
-          >
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  'radial-gradient(ellipse 80% 50% at 20% 0%, #171131, transparent 80%), radial-gradient(ellipse 80% 50% at 80% 100%, #2a122e, transparent 80%), linear-gradient(135deg, #131222 0%, #151322 50%, #1b1220 100%)',
-              }}
-            />
+            role="presentation"
+            className="fixed inset-0 z-[40] bg-slate-950/55 lg:hidden"
+            onClick={() => setMobileSkillSheetOpen(false)}
+          />
+        ) : null}
 
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
-              style={{ overflow: 'visible' }}
-              viewBox={`0 0 100 ${skillTreeLayout.mapViewBoxH ?? VIEWBOX_H}`}
-              preserveAspectRatio="none"
+        {selectedNode && isNarrowViewport && !mobileSkillSheetOpen ? (
+          <div className="fixed bottom-0 left-0 right-0 z-[45] lg:hidden border-t border-white/18 bg-[#1a2238]/96 backdrop-blur-md px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(15,23,42,0.4)]">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between gap-3 text-left min-h-[2.75rem]"
+              onClick={() => setMobileSkillSheetOpen(true)}
             >
-              <defs>
-                <linearGradient id="spineBeam" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="rgba(212,175,55,0.55)" />
-                  <stop offset="50%" stopColor="rgba(251,191,36,0.35)" />
-                  <stop offset="100%" stopColor="rgba(180,83,9,0.25)" />
-                </linearGradient>
-              </defs>
-              <line
-                x1={SPINE_CENTER_X}
-                y1={2}
-                x2={SPINE_CENTER_X}
-                y2={(skillTreeLayout.mapViewBoxH ?? VIEWBOX_H) - 2}
-                stroke="url(#spineBeam)"
-                strokeWidth={0.75}
-                opacity={0.42}
-              />
-              <line
-                x1={SPINE_CENTER_X}
-                y1={2}
-                x2={SPINE_CENTER_X}
-                y2={(skillTreeLayout.mapViewBoxH ?? VIEWBOX_H) - 2}
-                stroke="rgba(253,230,138,0.22)"
-                strokeWidth={0.18}
-              />
-
-              {MAP_LAYOUT_USE_DB_COORDINATES && skillTreeLayout.mapRowGuideLines?.length
-                ? skillTreeLayout.mapRowGuideLines.map((row) => {
-                    return (
-                      <g key={row.key}>
-                        {/* 가로선: 라벨 있는 행만 표시 */}
-                        {row.label && (
-                          <line
-                            x1={0}
-                            y1={row.ySvg}
-                            x2={100}
-                            y2={row.ySvg}
-                            stroke="rgba(148,163,184,0.14)"
-                            strokeWidth={0.22}
-                          />
-                        )}
-                        {/* 텍스트: 티어 구간 첫 행만 */}
-                        {row.label && (
-                          <text
-                            x={1.2}
-                            y={row.ySvg - 0.55}
-                            fill="rgba(203,213,225,0.45)"
-                            fontSize={0.85}
-                            fontWeight={600}
-                            style={{ fontFamily: 'system-ui, sans-serif' }}
-                          >
-                            {row.label}
-                          </text>
-                        )}
-                      </g>
-                    );
-                  })
-                : Array.from({ length: skillTreeLayout.maxDepth + 1 }, (_, d) => {
-                    const yPct = 5 + (d / Math.max(skillTreeLayout.maxDepth, 1)) * 88;
-                    const vb = skillTreeLayout.mapViewBoxH ?? VIEWBOX_H;
-                    const yDen = skillTreeLayout.paddedMaxYPct ?? 100;
-                    const y = (yPct / Math.max(1e-6, yDen)) * vb;
-                    const tl = tierLabelForDepth(d);
-                    const tierLine =
-                      skillTreeLayout.maxDepth > 6
-                        ? `${tl.line1} ${tl.line2}`
-                        : `${tl.line1} · ${tl.line2}`;
-                    return (
-                      <g key={`tier-${d}`}>
-                        <line
-                          x1={0}
-                          y1={y}
-                          x2={100}
-                          y2={y}
-                          stroke="rgba(148,163,184,0.12)"
-                          strokeWidth={0.22}
-                        />
-                        <text
-                          x={1.2}
-                          y={y - 0.38}
-                          fill="rgba(203,213,225,0.42)"
-                          fontSize={skillTreeLayout.maxDepth > 6 ? 0.82 : 0.92}
-                          fontWeight={600}
-                          style={{ fontFamily: 'system-ui, sans-serif' }}
-                        >
-                          {tierLine}
-                        </text>
-                      </g>
-                    );
-                  })}
-
-              {treeNodes.flatMap((node) => {
-                if (!node.parent_nodes || node.parent_nodes.length === 0) return [];
-
-                return node.parent_nodes.map((parentNum) => {
-                  const parentNode = nodeByNumber.get(parentNum);
-                  if (!parentNode) return null;
-
-                  const cx = (n) => Number(skillTreeLayout.positionById.get(n.id)?.x ?? n.position_x);
-                  const cy = (n) =>
-                    Number(
-                      skillTreeLayout.positionById.get(n.id)?.y ?? mapCoordFromDb(n.position_y)
-                    );
-
-                  const edgeD = skillEdgePathD(
-                    parentNode,
-                    node,
-                    cx,
-                    cy,
-                    skillTreeLayout.mapViewBoxH ?? VIEWBOX_H,
-                    skillTreeLayout.paddedMaxYPct ?? 100
-                  );
-                  const childLit = node.is_fork
-                    ? nodeReadyForEdge(node, unlockedNodeIds, progressByNodeId)
-                    : unlockedNodeIds.has(node.id);
-                  const isActiveLine =
-                    parentEdgeSatisfied(parentNode, node, unlockedNodeIds, progressByNodeId) && childLit;
-                  const filtered = !(
-                    highlightedNodeIds.has(node.id) && highlightedNodeIds.has(parentNode.id)
-                  );
-
-                  const spineEdge = parentNode.zone === 'tutorial' && node.zone === 'tutorial';
-                  const laneKey = (node.map_lane && String(node.map_lane).toLowerCase()) || '';
-                  const laneStroke = laneKey && MAP_LANE_EDGE[laneKey];
-
-                  let stroke = 'rgba(71,85,105,0.35)';
-                  if (laneStroke) {
-                    stroke = isActiveLine ? laneStroke.active : laneStroke.inactive;
-                  } else if (isActiveLine && spineEdge) stroke = 'rgba(212,175,55,0.92)';
-                  else if (isActiveLine && node.zone === 'legendary') stroke = 'rgba(250,204,21,0.95)';
-                  else if (isActiveLine && node.zone === 'infighter') stroke = 'rgba(251,146,60,0.9)';
-                  else if (isActiveLine && node.zone === 'outboxer') stroke = 'rgba(45,212,191,0.88)';
-                  else if (!isActiveLine && node.zone === 'infighter') stroke = 'rgba(251,146,60,0.2)';
-                  else if (!isActiveLine && node.zone === 'outboxer') stroke = 'rgba(45,212,191,0.2)';
-                  else if (!isActiveLine && node.zone === 'legendary') stroke = 'rgba(250,204,21,0.22)';
-                  else if (!isActiveLine && spineEdge) stroke = 'rgba(212,175,55,0.22)';
-
-                  return (
-                    <path
-                      key={`${parentNode.id}-${node.id}`}
-                      d={edgeD}
-                      fill="none"
-                      stroke={stroke}
-                      strokeWidth={isActiveLine ? 0.5 : 0.32}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      opacity={filtered ? 0.16 : 1}
-                      style={{
-                        filter: isActiveLine ? `drop-shadow(0 0 3px ${stroke})` : 'none',
-                        transition: 'all 0.2s ease',
-                      }}
-                    />
-                  );
-                });
-              })}
-            </svg>
-
-            {treeNodes.map((node) => {
-              const nfPr = node.is_fork ? progressByNodeId.get(node.id) : null;
-              const forkDone = nfPr?.promotion_status === 'passed';
-              const isUnlocked = node.is_fork
-                ? isForkNodeActive(node, unlockedNodeIds, progressByNodeId)
-                : unlockedNodeIds.has(node.id);
-              const isSelected = node.id === selectedNodeId;
-              const isHighlighted = highlightedNodeIds.has(node.id);
-              const parentsOk = parentsSatisfiedForDisplay(node, unlockedNodeIds, progressByNodeId, nodeByNumber);
-              const isUnlockableOnly = !isUnlocked && parentsOk && (!node.is_fork || !forkDone);
-              const isLocked =
-                !isUnlocked &&
-                Boolean(node.parent_nodes?.length) &&
-                !parentsOk &&
-                node.node_number !== SKILL_TREE_ENTRY_NODE_NUMBER;
-              const mapSub = mapSubtitleVisible(node) ? nodeMapSubtitle(node) : '';
-              const milestone = nodeIsMilestone(node);
-              const shapeClass = getNodeShapeClass(node);
-              const sizeClass = getNodeSizeClass(node, Boolean(mapSub));
-              const toneClass = getNodeToneClass({
-                node,
-                isUnlocked,
-                isSelected,
-                isDimmed: !isHighlighted,
-                isUnlockableOnly,
-                isLocked,
-              });
-              const symbol = getNodeSymbol(node, isUnlocked);
-              const lay = skillTreeLayout.positionById.get(node.id);
-              const yDen = skillTreeLayout.paddedMaxYPct ?? 100;
-              const leftPct = lay ? lay.x : mapCoordFromDb(node.position_x);
-              const topPct = lay
-                ? (lay.y / Math.max(1e-6, yDen)) * 100
-                : (mapCoordFromDb(node.position_y) / Math.max(1e-6, yDen)) * 100;
-              const nfInvCount = !node.is_fork
-                ? nonForkInvestmentCount(node.id, unlockedNodeIds, progressByNodeId)
-                : 0;
-
-              return (
-                <button
-                  key={node.id}
-                  type="button"
-                  onClick={() => setSelectedNodeId(node.id)}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-[1.03] ${
-                    isSelected ? 'z-[25]' : 'z-[5]'
-                  }`}
-                  style={{
-                    left: `${leftPct}%`,
-                    top: `${topPct}%`,
-                  }}
-                >
-                  <div className="relative">
-                    <div
-                      className={`${sizeClass} ${shapeClass} ${toneClass} border-2 flex flex-col items-center justify-center gap-1 relative transition-all overflow-hidden ${
-                        isSelected ? 'shadow-[0_0_14px_rgba(0,0,0,0.45)]' : ''
-                      } ${milestone && isUnlocked ? 'ring-1 ring-amber-400/40' : ''}`}
-                    >
-                      {isUnlocked && (
-                        <div
-                          className={`pointer-events-none absolute bottom-0.5 left-1 right-1 h-[2px] rounded-full opacity-95 ${getUnlockedBottomAccentClass(
-                            node
-                          )}`}
-                          aria-hidden
-                        />
-                      )}
-                      {node.zone === 'legendary' || node.node_type === 'legendary_socket' ? (
-                        <span className="text-[8px] sm:text-[9px] font-bold leading-none -rotate-45 text-inherit">
-                          {symbol}
-                        </span>
-                      ) : (
-                        <>
-                          {node.is_fork && (
-                            <span className="absolute top-0.5 left-0.5 text-[5px] sm:text-[6px] font-bold text-amber-300/95 z-10">
-                              갈림
-                            </span>
-                          )}
-                          {isLocked && (
-                            <span className="absolute top-0.5 right-0.5 text-[6px] leading-none opacity-80 z-10">🔒</span>
-                          )}
-                          {milestone && (
-                            <span className="text-[7px] sm:text-[8px] leading-none z-[1]" aria-hidden>
-                              🏆
-                            </span>
-                          )}
-                          <span
-                            className={`text-[6px] sm:text-[7px] md:text-[8px] font-semibold leading-tight text-center line-clamp-3 px-0.5 z-[1] ${
-                              isUnlocked ? 'text-inherit' : 'text-slate-500'
-                            }`}
-                          >
-                            {nodeDisplayTitle(node)}
-                          </span>
-                          {mapSub ? (
-                            <span
-                              className={`text-[4.5px] sm:text-[5px] font-medium leading-tight text-center line-clamp-2 px-0.5 z-[1] ${
-                                isUnlocked ? 'text-inherit opacity-80' : 'text-slate-600'
-                              }`}
-                            >
-                              {mapSub}
-                            </span>
-                          ) : null}
-                        </>
-                      )}
-                    </div>
-
-                    {!node.is_fork && nfInvCount > 0 && MAX_NON_FORK_INVEST > 1 && (
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 flex flex-col items-center gap-0.5 pointer-events-none max-w-[min(12rem,calc(100vw-2rem))]">
-                        <p className="text-[6px] sm:text-[7px] text-cyan-300/90 tabular-nums">
-                          {nfInvCount}/{MAX_NON_FORK_INVEST}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-
-            <div className="absolute left-0 right-0 top-6 flex justify-between items-start px-8 sm:px-12 pointer-events-none z-[8]">
-              <div className="w-[32%] text-left">
-                <span className="inline-block px-4 py-2 rounded-lg bg-[#141b3e] border border-[#2a4d80] text-[#71a6e7] font-semibold text-[8px] sm:text-[10px]">아웃복싱 계보</span>
-              </div>
-              <div className="w-[36%] text-center">
-                <span className="inline-block px-6 py-2.5 rounded-full bg-[#1e1531] border border-[#523181] text-[#bda7e2] font-semibold text-[8px] sm:text-[10px] drop-shadow-[0_0_15px_rgba(82,49,129,0.6)]">중앙 수직축: 기본기</span>
-              </div>
-              <div className="w-[32%] text-right">
-                <span className="inline-block px-4 py-2 rounded-lg bg-[#3e1423] border border-[#8f213b] text-[#e06b83] font-semibold text-[8px] sm:text-[10px]">인파이팅 계보</span>
-              </div>
-            </div>
-
-            <div className="absolute left-0 right-0 bottom-0 z-[12] pointer-events-none flex justify-center px-1 pb-2 pt-6 bg-gradient-to-t from-[#070818]/92 via-[#070818]/55 to-transparent">
-              <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 max-w-full rounded-lg border border-white/10 bg-black/50 px-2.5 py-1.5 backdrop-blur-sm shadow-[0_-4px_24px_rgba(0,0,0,0.45)]">
-                {SKILL_MAP_LEGEND.map((item) => (
-                  <span
-                    key={item.key}
-                    className="inline-flex items-center gap-1 text-[7px] sm:text-[8px] text-slate-300/95 whitespace-nowrap"
-                  >
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.dot}`} />
-                    {item.label}
-                  </span>
-                ))}
-              </div>
-            </div>
+              <span className="text-sm font-semibold text-white truncate min-w-0">{nodeDisplayTitle(selectedNode)}</span>
+              <span className="text-[11px] font-semibold text-cyan-300/95 shrink-0">상세 ▲</span>
+            </button>
           </div>
-          <button
-            type="button"
-            className="absolute bottom-5 right-4 z-[30] flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/55 text-[13px] font-bold text-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.45)] backdrop-blur-md pointer-events-auto hover:bg-white/10 transition-colors"
-            title="범례·연결선 색은 맵 레인(C 회피, G 공격, N 압박, R 바디 등)을 뜻합니다."
-            aria-label="맵 도움말"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            ?
-          </button>
-        </div>
-      </div>
-      </div>
+        ) : null}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:items-start">
-        <SpotlightCard className="p-5 xl:sticky xl:top-4">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
-              <Icon type="target" size={18} className="text-white" />
+        <div
+          className={`
+          w-full lg:w-[min(420px,38%)] lg:sticky lg:top-4 lg:self-start
+          fixed bottom-0 left-0 right-0 lg:relative
+          ${selectedNode && mobileSkillSheetOpen ? 'max-lg:translate-y-0' : 'max-lg:translate-y-full'}
+          lg:translate-y-0
+          transition-transform duration-300 ease-out
+          z-50 lg:z-auto
+          max-h-[70dvh] lg:max-h-[calc(100dvh-6rem)]
+        `}
+        >
+          <div className="lg:hidden h-16 bg-gradient-to-t from-slate-900/45 to-transparent absolute bottom-full left-0 right-0 pointer-events-none" />
+          
+          <div className="min-w-0 w-full h-full">
+        <SpotlightCard className="p-4 sm:p-5 border border-white/12 h-full overflow-y-auto
+          rounded-t-2xl lg:rounded-xl
+          shadow-[0_-4px_28px_rgba(15,23,42,0.38)] lg:shadow-[0_0_28px_rgba(15,23,42,0.22)]
+        ">
+          <div className="flex items-start gap-3 pb-3 mb-4 border-b border-white/10">
+            <div className="lg:hidden w-12 h-1 rounded-full bg-white/20 mx-auto mb-2 absolute top-2 left-1/2 -translate-x-1/2" />
+            <div className="w-8 h-8 shrink-0 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center lg:mt-0 mt-4">
+              <Icon type="target" size={16} className="text-white" />
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">선택한 훈련 항목</h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                맵에서 노드를 누르면 선행 조건·필요 포인트·반복 기록 한도를 확인할 수 있습니다.
+            <div className="min-w-0 flex-1 lg:mt-0 mt-4">
+              <h3 className="text-base sm:text-lg font-bold text-white">선택한 훈련 항목</h3>
+              <p className="text-[10px] sm:text-xs text-gray-400 leading-relaxed mt-0.5 hidden lg:block">
+                맵에서 노드를 누르면 상세 정보를 확인할 수 있습니다.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setMobileSkillSheetOpen(false)}
+              className="lg:hidden shrink-0 w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors mt-4"
+              aria-label="상세 닫기"
+            >
+              ✕
+            </button>
           </div>
 
           {selectedNode ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <span className={`px-2 py-1 rounded-full text-xs font-bold border ${
-                  selectedNode.zone === 'tutorial'
-                    ? 'bg-slate-500/15 text-slate-200 border-slate-300/30'
-                    : selectedNode.zone === 'infighter'
-                      ? 'bg-orange-500/15 text-orange-200 border-orange-400/30'
-                      : selectedNode.zone === 'outboxer'
-                        ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30'
-                        : 'bg-yellow-500/15 text-yellow-200 border-yellow-400/30'
-                }`}>
-                  {selectedNode.zone === 'tutorial' ? '공통·기본' : selectedNode.zone === 'infighter' ? '인파이터' : selectedNode.zone === 'outboxer' ? '아웃복서' : '전설'}
-                </span>
-                <span className="px-2 py-1 rounded-full text-xs font-bold border bg-white/5 text-gray-300 border-white/10">
-                  {selectedNode.node_type === 'basic' ? '기본 노드' : selectedNode.node_type === 'socket' ? '확장 노드' : '전설 노드'}
-                </span>
-              </div>
+            <div className="flex flex-col gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+                <div className="lg:col-span-5 space-y-3 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold border ${
+                      selectedNode.zone === 'tutorial'
+                        ? 'bg-slate-500/15 text-slate-200 border-slate-300/30'
+                        : selectedNode.zone === 'infighter'
+                          ? 'bg-orange-500/15 text-orange-200 border-orange-400/30'
+                          : selectedNode.zone === 'outboxer'
+                            ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30'
+                            : 'bg-yellow-500/15 text-yellow-200 border-yellow-400/30'
+                    }`}>
+                      {selectedNode.zone === 'tutorial' ? '공통·기본' : selectedNode.zone === 'infighter' ? '인파이터' : selectedNode.zone === 'outboxer' ? '아웃복서' : '전설'}
+                    </span>
+                    <span className="px-2 py-1 rounded-full text-xs font-bold border bg-white/5 text-gray-300 border-white/10">
+                      {selectedNode.node_type === 'basic' ? '기본 노드' : selectedNode.node_type === 'socket' ? '확장 노드' : '전설 노드'}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-lg sm:text-xl font-bold text-white leading-snug">{nodeDisplayTitle(selectedNode)}</h4>
+                    {nodeMapSubtitle(selectedNode) ? (
+                      <p className="text-xs text-slate-400 mt-1">{nodeMapSubtitle(selectedNode)}</p>
+                    ) : null}
+                    <p className="text-[11px] sm:text-xs text-gray-500 mt-1.5 tabular-nums">노드 #{selectedNode.node_number}</p>
+                    {nodeSourceName(selectedNode) &&
+                    nodeSourceName(selectedNode) !== nodeDisplayTitle(selectedNode) ? (
+                      <p className="text-[11px] sm:text-xs text-slate-400 mt-2 leading-relaxed">
+                        원문명: <span className="text-slate-300">{nodeSourceName(selectedNode)}</span>
+                      </p>
+                    ) : null}
+                    {selectedNode.name_en ? (
+                      <p className="text-[11px] sm:text-xs text-gray-500 mt-1">영문: {selectedNode.name_en}</p>
+                    ) : null}
+                  </div>
+                </div>
 
-              <div className="space-y-3">
-                <div>
-                  <h4 className="text-base sm:text-lg md:text-xl font-bold text-white mb-1">{nodeDisplayTitle(selectedNode)}</h4>
-                  {nodeMapSubtitle(selectedNode) ? (
-                    <p className="text-xs text-slate-400 mb-1">{nodeMapSubtitle(selectedNode)}</p>
+                <div className="lg:col-span-7 space-y-3 min-w-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {selectedNode.description ? (
+                      <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3 sm:min-h-[5.5rem]">
+                        <p className="text-[10px] font-bold text-amber-200/80 uppercase tracking-wide mb-1.5">설명</p>
+                        <p className="text-xs sm:text-sm text-slate-200/95 leading-relaxed whitespace-pre-wrap">{selectedNode.description}</p>
+                      </div>
+                    ) : null}
+                    {selectedNode.training_intent ? (
+                      <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3 sm:min-h-[5.5rem]">
+                        <p className="text-[10px] font-bold text-cyan-200/80 uppercase tracking-wide mb-1.5">훈련 의도</p>
+                        <p className="text-xs sm:text-sm text-slate-300/95 leading-relaxed whitespace-pre-wrap">{selectedNode.training_intent}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                  {selectedNode.flow_summary ? (
+                    <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3">
+                      <p className="text-[10px] font-bold text-violet-200/80 uppercase tracking-wide mb-1.5">연결 흐름</p>
+                      <p className="text-xs sm:text-sm text-slate-300/95 leading-relaxed">{selectedNode.flow_summary}</p>
+                    </div>
                   ) : null}
-                  <p className="text-[11px] sm:text-xs text-gray-500">노드 #{selectedNode.node_number}</p>
-                  {nodeSourceName(selectedNode) &&
-                  nodeSourceName(selectedNode) !== nodeDisplayTitle(selectedNode) ? (
-                    <p className="text-[11px] sm:text-xs text-slate-400 mt-1 leading-relaxed">
-                      원문명: <span className="text-slate-300">{nodeSourceName(selectedNode)}</span>
+                  {!selectedNode.description && !selectedNode.training_intent && !selectedNode.flow_summary ? (
+                    <p className="text-[11px] text-slate-500 leading-relaxed rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                      상세 설명·훈련 의도는 DB에 채워지면 여기에 표시됩니다. 맵에서는 짧은 제목만 보입니다.
                     </p>
                   ) : null}
-                  {selectedNode.name_en ? (
-                    <p className="text-[11px] sm:text-xs text-gray-500 mt-1">영문: {selectedNode.name_en}</p>
-                  ) : null}
                 </div>
-                {selectedNode.description ? (
-                  <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3">
-                    <p className="text-[10px] font-bold text-amber-200/80 uppercase tracking-wide mb-1.5">설명</p>
-                    <p className="text-xs sm:text-sm text-slate-200/95 leading-relaxed whitespace-pre-wrap">{selectedNode.description}</p>
-                  </div>
-                ) : null}
-                {selectedNode.training_intent ? (
-                  <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3">
-                    <p className="text-[10px] font-bold text-cyan-200/80 uppercase tracking-wide mb-1.5">훈련 의도</p>
-                    <p className="text-xs sm:text-sm text-slate-300/95 leading-relaxed whitespace-pre-wrap">{selectedNode.training_intent}</p>
-                  </div>
-                ) : null}
-                {selectedNode.flow_summary ? (
-                  <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3">
-                    <p className="text-[10px] font-bold text-violet-200/80 uppercase tracking-wide mb-1.5">연결 흐름</p>
-                    <p className="text-xs sm:text-sm text-slate-300/95 leading-relaxed">{selectedNode.flow_summary}</p>
-                  </div>
-                ) : null}
-                {!selectedNode.description && !selectedNode.training_intent && !selectedNode.flow_summary ? (
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    상세 설명·훈련 의도는 DB에 채워지면 여기에 표시됩니다. 맵에서는 짧은 제목만 보입니다.
-                  </p>
-                ) : null}
               </div>
 
               {selectedNode.is_fork ? (
@@ -2065,7 +2377,7 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
                   )}
                   {!forkPassed && !forkPending && (
                     <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-3">
-                      <div className="rounded-lg bg-black/30 border border-white/10 p-3 text-xs space-y-1">
+                      <div className="rounded-lg bg-white/[0.07] border border-white/12 p-3 text-xs space-y-1">
                         <div className="flex justify-between text-gray-400">
                           <span>승단 실패</span>
                           <span className="text-white font-bold tabular-nums">{selectedFailCount} / 5</span>
@@ -2134,7 +2446,7 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
                 </>
               ) : (
                 <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-3">
-                  <div className="rounded-lg bg-black/30 border border-white/10 p-3 text-xs">
+                  <div className="rounded-lg bg-white/[0.07] border border-white/12 p-3 text-xs">
                     <div className="flex justify-between text-gray-400 mb-2">
                       <span>훈련 기록</span>
                       <span className="text-white font-bold tabular-nums">
@@ -2156,11 +2468,11 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
                   ) : (
                     <>
                       <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="rounded-lg bg-black/30 border border-white/10 p-3">
+                        <div className="rounded-lg bg-white/[0.07] border border-white/12 p-3">
                           <div className="text-gray-400 mb-1">1회 필요 포인트</div>
                           <div className="font-bold text-white">{selectedPointCost === 0 ? '무료' : `${selectedPointCost} SP`}</div>
                         </div>
-                        <div className="rounded-lg bg-black/30 border border-white/10 p-3">
+                        <div className="rounded-lg bg-white/[0.07] border border-white/12 p-3">
                           <div className="text-gray-400 mb-1">보유 포인트</div>
                           <div className="font-bold text-cyan-200">{skillPoints} SP</div>
                         </div>
@@ -2194,141 +2506,19 @@ const ActiveSkillsView = ({ t = (key) => key, setActiveTab }) => {
 
             </div>
           ) : (
-            <div className="text-sm text-gray-400 leading-relaxed">맵에서 노드를 선택하면 상세가 여기에 표시됩니다.</div>
+            <div className="text-xs sm:text-sm text-gray-400 leading-relaxed">맵에서 노드를 선택하면 상세가 여기에 표시됩니다.</div>
           )}
         </SpotlightCard>
-
-        <SpotlightCard className="p-5 xl:sticky xl:top-4">
-          <h3 className="text-lg font-bold text-white mb-1">연결</h3>
-          <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-            선행에서 이어지는 흐름을 빠르게 살펴봅니다.
-          </p>
-          {selectedNode && selectedRelated ? (
-            <div className="space-y-5 text-sm">
-              <div>
-                <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">선행 스킬</h4>
-                {selectedRelated.parents.length ? (
-                  <ul className="space-y-1.5">
-                    {selectedRelated.parents.map((p) => (
-                      <li key={p.id}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedNodeId(p.id)}
-                          className="text-left text-gray-200 hover:text-cyan-200 transition-colors underline-offset-2 hover:underline"
-                        >
-                          {nodeDisplayTitle(p)}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-500">없음 (시작점)</p>
-                )}
-              </div>
-              <div>
-                <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">다음 연결</h4>
-                {selectedRelated.children.length ? (
-                  <ul className="space-y-1.5">
-                    {selectedRelated.children.map((c) => (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedNodeId(c.id)}
-                          className="text-left text-gray-200 hover:text-cyan-200 transition-colors underline-offset-2 hover:underline"
-                        >
-                          {nodeDisplayTitle(c)}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-500">파생 노드가 없거나 아직 공개되지 않았습니다.</p>
-                )}
-              </div>
-              <div className="rounded-xl bg-white/5 border border-white/10 p-3">
-                <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">관련 흐름 (선행 체인)</h4>
-                <p className="text-xs text-gray-300 leading-relaxed break-words">{selectedRelated.flowText}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 leading-relaxed">맵에서 노드를 선택하면 연결 정보가 표시됩니다.</p>
-          )}
-        </SpotlightCard>
+          </div>
+        </div>
       </div>
 
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-base font-bold text-white">기록한 항목</h3>
-            <span className="text-[11px] text-gray-500">구역 필터가 적용된 목록입니다.</span>
-          </div>
-          {filteredUnlockedNodes.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredUnlockedNodes.map((node) => {
-                const typeBadge = getTypeBadge(
-                  node.zone === 'tutorial'
-                    ? 'tutorial'
-                    : node.zone === 'infighter'
-                      ? 'infighter'
-                      : node.zone === 'outboxer'
-                        ? 'outboxer'
-                        : node.zone === 'legendary'
-                          ? 'legendary'
-                          : 'neutral'
-                );
-
-                return (
-                  <SpotlightCard key={node.id} className="p-5 overflow-hidden">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div>
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-bold border ${typeBadge.className}`}>
-                            {typeBadge.label}
-                          </span>
-                        </div>
-                        <h3 className="text-base sm:text-lg font-bold text-white">{nodeDisplayTitle(node)}</h3>
-                        <p className="text-[11px] sm:text-sm text-gray-400">노드 #{node.node_number}</p>
-                      </div>
-
-                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-sm sm:text-base flex-shrink-0">
-                        {node.zone === 'legendary' ? '✦' : '★'}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-xs text-gray-400 leading-relaxed">
-                      포인트로 기록한 항목입니다. 위 필터에 맞춰 맵과 이 목록이 함께 정리됩니다.
-                    </div>
-                  </SpotlightCard>
-                );
-              })}
-            </div>
-          ) : (
-            <SpotlightCard className="p-10 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                <Icon type="target" size={28} className="text-gray-400" />
-              </div>
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-2">아직 기록한 항목이 없습니다</h3>
-              <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                포인트가 있으면 맵에서 노드를 골라 훈련 기록을 남길 수 있습니다. 필터는 맵과 아래 목록에 같이 적용됩니다.
-              </p>
-              <div className="flex flex-wrap justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('roadmap-skill-tree')}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-lg text-white font-bold transition-all"
-                >
-                  스킬 가이드
-                </button>
-              </div>
-            </SpotlightCard>
-          )}
-
-          <SpotlightCard className="p-5">
-            <h3 className="text-lg font-bold text-white mb-2">포인트·로드맵 안내</h3>
-            <p className="text-sm text-gray-400 leading-relaxed">
-              출석이 반영될 때마다 스킬 포인트가 쌓입니다. 맵에서 선행을 채운 뒤 원하는 항목에 기록하면 되고, 같은 노드에 여러 번 기록해 강도를 올릴 수 있습니다.
-            </p>
-          </SpotlightCard>
-        </div>
+      <SpotlightCard className="p-5">
+        <h3 className="text-lg font-bold text-white mb-2">포인트·로드맵 안내</h3>
+        <p className="text-sm text-gray-400 leading-relaxed">
+          출석이 반영될 때마다 스킬 포인트가 쌓입니다. 맵에서 선행을 채운 뒤 원하는 항목에 기록하면 되고, 같은 노드에 여러 번 기록해 강도를 올릴 수 있습니다.
+        </p>
+      </SpotlightCard>
     </div>
   );
 };

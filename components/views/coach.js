@@ -4,9 +4,17 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
+import {
+  BIRTH_YEAR_OPTIONS,
+  MONTH_OPTIONS,
+  BIRTH_DAY_OPTIONS,
+  isValidCalendarDate,
+  birthPartsToIso,
+} from '@/lib/birthDate';
+import { checkEmailAvailable } from '@/lib/emailAvailability';
 // 코치 뷰들
 
-const CoachInsightsView = ({ t = (key) => key, setActiveTab, skillRequests, updateSkillRequestStatus }) => (
+const CoachInsightsView = ({ t = (key) => key, setActiveTab }) => (
   <div className="animate-fade-in-up">
     <PageHeader 
       title={`📊 ${t('insightsDashboard')}`}
@@ -332,11 +340,11 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab, skillRequests, upda
         </h3>
         <div className="space-y-2 sm:space-y-3">
           {[
-            { name: '김철수', tier: 'Master I', score: 285, streak: 30, trend: '+15', avatar: '🥊' },
-            { name: '이영희', tier: 'Master II', score: 268, streak: 28, trend: '+12', avatar: '🥋' },
-            { name: '박민준', tier: 'Master III', score: 255, streak: 25, trend: '+10', avatar: '⚡' },
-            { name: '정지훈', tier: 'Diamond II', score: 242, streak: 22, trend: '+8', avatar: '🔥' },
-            { name: '최동욱', tier: 'Diamond I', score: 238, streak: 20, trend: '+7', avatar: '💪' },
+            { name: '김철수', streak: 30, trend: '+15', avatar: '🥊' },
+            { name: '이영희', streak: 28, trend: '+12', avatar: '🥋' },
+            { name: '박민준', streak: 25, trend: '+10', avatar: '⚡' },
+            { name: '정지훈', streak: 22, trend: '+8', avatar: '🔥' },
+            { name: '최동욱', streak: 20, trend: '+7', avatar: '💪' },
           ].map((player, i) => (
             <div key={i} className={`p-2 sm:p-3 rounded-lg transition-all ${
               i === 0 ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-2 border-yellow-500/50' :
@@ -357,17 +365,12 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab, skillRequests, upda
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5 flex-wrap">
                       <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap">{player.name}</span>
-                      <span className="text-[9px] sm:text-[10px] text-gray-400 whitespace-nowrap">{player.tier}</span>
                     </div>
                     <div className="flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] text-gray-400 flex-wrap">
                       <span className="whitespace-nowrap">🔥 {player.streak}{t('consecutiveDays')}</span>
                       <span className="text-emerald-400 font-bold whitespace-nowrap">{player.trend}</span>
                     </div>
                   </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="text-base sm:text-lg font-bold text-white whitespace-nowrap">{player.score}</div>
-                  <div className="text-[9px] sm:text-[10px] text-gray-400 whitespace-nowrap">{t('points')}</div>
                 </div>
               </div>
             </div>
@@ -420,143 +423,6 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab, skillRequests, upda
         </div>
       </SpotlightCard>
     </div>
-
-    {/* 스킬 요청 관리 */}
-    <div className="mt-4 sm:mt-6">
-      <SpotlightCard className="p-3 sm:p-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-5 gap-2">
-          <h3 className="text-base sm:text-lg lg:text-xl font-bold text-white flex items-center gap-1.5 sm:gap-2 flex-wrap">
-            <span>⚡</span>
-            <span className="whitespace-nowrap">{t('skillRequestManagement')}</span>
-            {skillRequests.filter(req => req.status === 'pending').length > 0 && (
-              <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-500/20 text-red-400 rounded-full text-[10px] sm:text-xs font-bold animate-pulse whitespace-nowrap">
-                {skillRequests.filter(req => req.status === 'pending').length} {t('requestsWaiting')}
-              </span>
-            )}
-          </h3>
-          <div className="flex gap-1.5 sm:gap-2 w-full sm:w-auto overflow-x-auto">
-            <button className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] sm:text-xs transition-all whitespace-nowrap flex-shrink-0">
-              {t('all')}
-            </button>
-            <button className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap flex-shrink-0">
-              {t('pending')}
-            </button>
-            <button className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] sm:text-xs transition-all whitespace-nowrap flex-shrink-0">
-              {t('approved')}
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-2 sm:space-y-3">
-          {skillRequests.length === 0 ? (
-            <div className="text-center py-8 sm:py-12 text-gray-500">
-              <div className="text-3xl sm:text-4xl mb-2 sm:mb-4">📭</div>
-              <div className="text-sm sm:text-base">{t('noSkillRequests')}</div>
-            </div>
-          ) : (
-            skillRequests.map((request) => (
-              <div 
-                key={request.id} 
-                className={`p-2.5 sm:p-4 rounded-lg border transition-all ${
-                  request.status === 'pending' 
-                    ? 'bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border-yellow-500/30 hover:border-yellow-500/50' 
-                    : request.status === 'approved'
-                    ? 'bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-emerald-500/30'
-                    : 'bg-gradient-to-r from-red-500/10 to-rose-500/10 border-red-500/30'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                    {/* 회원 정보 */}
-                    <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm sm:text-base flex-shrink-0">
-                      {request.playerName.charAt(0)}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1 sm:gap-1.5 mb-1 flex-wrap">
-                        <span className="text-white font-bold text-xs sm:text-sm whitespace-nowrap">{request.playerName}</span>
-                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded text-[9px] sm:text-[10px] font-bold whitespace-nowrap">
-                          {request.tier}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
-                          request.skillType === 'active' 
-                            ? 'bg-blue-500/20 text-blue-400' 
-                            : 'bg-amber-500/20 text-amber-400'
-                        }`}>
-                          {request.skillType === 'active' ? t('activeSkill') : t('passiveSkill')}
-                        </span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-1 sm:gap-3 text-[10px] sm:text-xs">
-                        <div className="flex items-center gap-1">
-                          <span className="text-gray-400 whitespace-nowrap">{t('requestedSkill')}:</span>
-                          <span className="text-white font-bold whitespace-nowrap overflow-hidden text-ellipsis">{request.skillName}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-gray-400 whitespace-nowrap">{t('requestTime')}:</span>
-                          <span className="text-gray-300 whitespace-nowrap">{request.requestDate}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 상태 및 액션 */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2 mt-2 sm:mt-0">
-                    {request.status === 'pending' ? (
-                      <>
-                        <button 
-                          onClick={() => updateSkillRequestStatus(request.id, 'approved')}
-                          className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white rounded-lg font-bold transition-all text-[11px] sm:text-xs whitespace-nowrap"
-                        >
-                          ✓ {t('approve')}
-                        </button>
-                        <button 
-                          onClick={() => updateSkillRequestStatus(request.id, 'rejected')}
-                          className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white rounded-lg font-bold transition-all text-[11px] sm:text-xs whitespace-nowrap"
-                        >
-                          ✗ {t('reject')}
-                        </button>
-                      </>
-                    ) : (
-                      <div className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold text-[11px] sm:text-xs whitespace-nowrap ${
-                        request.status === 'approved' 
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' 
-                          : 'bg-red-500/20 text-red-400 border border-red-500/50'
-                      }`}>
-                        {request.status === 'approved' ? `✓ ${t('approved')}` : `✗ ${t('rejected')}`}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* 통계 */}
-        {skillRequests.length > 0 && (
-          <div className="mt-3 sm:mt-5 grid grid-cols-3 gap-2 sm:gap-3">
-            <div className="p-2 sm:p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-center">
-              <div className="text-lg sm:text-xl lg:text-2xl font-bold text-yellow-400">
-                {skillRequests.filter(req => req.status === 'pending').length}
-              </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 whitespace-nowrap">대기중</div>
-            </div>
-            <div className="p-2 sm:p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-center">
-              <div className="text-lg sm:text-xl lg:text-2xl font-bold text-emerald-400">
-                {skillRequests.filter(req => req.status === 'approved').length}
-              </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 whitespace-nowrap">승인됨</div>
-            </div>
-            <div className="p-2 sm:p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-center">
-              <div className="text-lg sm:text-xl lg:text-2xl font-bold text-red-400">
-                {skillRequests.filter(req => req.status === 'rejected').length}
-              </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 whitespace-nowrap">거절됨</div>
-            </div>
-          </div>
-        )}
-      </SpotlightCard>
-    </div>
   </div>
 );
 
@@ -564,7 +430,6 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab, skillRequests, upda
 function mapGymMemberRow(row) {
   const stats = row.statistics || {};
   const priv = row.user_private_profiles;
-  const tr = row.tier_rankings;
   const wins = Number(stats.wins) || 0;
   const losses = Number(stats.losses) || 0;
   const draws = Number(stats.draws) || 0;
@@ -582,14 +447,14 @@ function mapGymMemberRow(row) {
   const joinDate = row.created_at ? new Date(row.created_at).toISOString().slice(0, 10) : '—';
   const birthStr = priv?.birth_date ? String(priv.birth_date).slice(0, 10) : '—';
   const hasActivity = totalAttendance > 0 || totalMatches > 0;
-  const rankOrPoints =
-    typeof tr?.rank === 'number' && tr.rank > 0 ? tr.rank : (Number(row.tier_points) || 0);
   const winRatePct =
     totalMatches > 0 ? Math.round((wins / totalMatches) * 1000) / 10 : 0;
-  const rankLabel =
-    typeof tr?.rank === 'number' && tr.rank > 0
-      ? `랭크 #${tr.rank}`
-      : `${Number(row.tier_points) || 0}pt`;
+  const memoRaw = row.boxing_style ? String(row.boxing_style) : '';
+  const addrMatch = memoRaw.match(/^주소:\s*([^\n]+)/);
+  const addressDisplay = addrMatch ? addrMatch[1].trim() : '—';
+  const notesDisplay =
+    memoRaw.replace(/^주소:\s*[^\n]+\n?/, '').trim() ||
+    (memoRaw && !addrMatch ? memoRaw : '—');
 
   return {
     id: row.id,
@@ -598,8 +463,8 @@ function mapGymMemberRow(row) {
     name: displayName,
     status: hasActivity ? 'active' : 'inactive',
     tier: row.tier || '—',
-    level: rankOrPoints,
-    rankLabel,
+    level: 0,
+    rankLabel: '',
     attendance: totalAttendance,
     lastVisit: '—',
     phone: priv?.phone || '—',
@@ -610,47 +475,415 @@ function mapGymMemberRow(row) {
     weight: row.weight != null ? Number(row.weight) : null,
     height: row.height != null ? row.height : null,
     joinDate,
-    address: '—',
+    address: addressDisplay,
     emergencyContact: priv?.representative_phone || '—',
-    notes: row.boxing_style ? `스타일: ${row.boxing_style}` : '—',
+    notes: notesDisplay,
     wins,
     losses,
     draws,
     totalMatches,
     winRate: winRatePct,
     recentRecords: [],
-    achievements: [],
     skills: [],
   };
 }
 
+const NEW_MEMBER_FORM_INITIAL = {
+  name: '',
+  email: '',
+  phone: '',
+  birthYear: '',
+  birthMonth: '',
+  birthDay: '',
+  gender: '남성',
+  weight: '',
+  height: '',
+  address: '',
+  emergencyContact: '',
+  notes: '',
+};
+
+/** 체육관 신규 회원 등록 — 전체 페이지 */
+const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
+  const { profile } = useAuth();
+  const [registeringMember, setRegisteringMember] = useState(false);
+  const [newMemberForm, setNewMemberForm] = useState(NEW_MEMBER_FORM_INITIAL);
+  const [emailCheckStatus, setEmailCheckStatus] = useState('idle');
+
+  const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
+
+  const handleRegisterNewMember = async () => {
+    if (!profile?.id || !gymName) {
+      alert('체육관 프로필(체육관명)이 없습니다. 마이페이지에서 설정해 주세요.');
+      return;
+    }
+    const email = newMemberForm.email.trim();
+    const name = newMemberForm.name.trim();
+    if (!email || !name) {
+      alert('이름과 이메일은 필수입니다.');
+      return;
+    }
+    if (emailCheckStatus !== 'available') {
+      alert('이메일(아이디) 중복 확인을 완료해 주세요.');
+      return;
+    }
+    if (!newMemberForm.birthYear || !newMemberForm.birthMonth || !newMemberForm.birthDay) {
+      alert('생년월일을 모두 선택해 주세요.');
+      return;
+    }
+    if (!isValidCalendarDate(newMemberForm.birthYear, newMemberForm.birthMonth, newMemberForm.birthDay)) {
+      alert('올바른 생년월일을 선택해 주세요.');
+      return;
+    }
+    const birthDateIso = birthPartsToIso(
+      newMemberForm.birthYear,
+      newMemberForm.birthMonth,
+      newMemberForm.birthDay
+    );
+    const pwd = birthDateIso.replace(/-/g, '');
+    if (!/^\d{8}$/.test(pwd)) {
+      alert('생년월일을 확인해 주세요.');
+      return;
+    }
+    const genderMap = { 남성: 'male', 여성: 'female' };
+
+    const memoParts = [];
+    if (newMemberForm.address.trim()) memoParts.push(`주소: ${newMemberForm.address.trim()}`);
+    if (newMemberForm.notes.trim()) memoParts.push(newMemberForm.notes.trim());
+    const notesCombined = memoParts.join('\n');
+
+    setRegisteringMember(true);
+    try {
+      const { signUp } = await import('@/lib/supabase');
+      const { error } = await signUp(email, pwd, {
+        name,
+        role: 'player_common',
+        gym_name: gymName,
+        gym_user_id: profile.id,
+        phone: newMemberForm.phone.trim() || undefined,
+        birth_date: birthDateIso,
+        representative_phone: newMemberForm.emergencyContact.trim() || undefined,
+        membership_type: 'basic',
+        gender: genderMap[newMemberForm.gender] || 'male',
+        height: newMemberForm.height ? parseInt(newMemberForm.height, 10) : undefined,
+        weight: newMemberForm.weight ? parseFloat(newMemberForm.weight) : undefined,
+        notes: notesCombined || undefined,
+      });
+      if (error) {
+        alert(error.message || '등록에 실패했습니다.');
+        return;
+      }
+      alert('회원 계정이 생성되었습니다. 생년월일(YYYYMMDD)을 초기 비밀번호로 안내해 주세요.');
+      setNewMemberForm({ ...NEW_MEMBER_FORM_INITIAL });
+      setEmailCheckStatus('idle');
+      setActiveTab('players');
+    } catch (e) {
+      alert(e.message || '등록에 실패했습니다.');
+    } finally {
+      setRegisteringMember(false);
+    }
+  };
+
+  return (
+    <div className="animate-fade-in-up max-w-4xl mx-auto w-full">
+      <PageHeader
+        title={t('newMemberRegistration')}
+        description="새로운 회원의 정보를 입력하세요"
+        onBack={() => setActiveTab('players')}
+      />
+
+      {!gymName && (
+        <SpotlightCard className="p-4 mb-4 border border-amber-500/30 bg-amber-500/10">
+          <p className="text-sm text-amber-200">체육관명이 프로필에 없습니다. 마이페이지에서 체육관명을 설정한 뒤 다시 시도해 주세요.</p>
+        </SpotlightCard>
+      )}
+
+      <div className="space-y-6 sm:space-y-8 pb-8">
+        <div>
+          <h3 className="text-base sm:text-2xl font-bold text-white mb-3 sm:mb-6 flex items-center gap-2">
+            <span>📋</span>
+            <span>기본 정보</span>
+            <span className="text-red-400">*</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+                이름 <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={newMemberForm.name}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, name: e.target.value })}
+                placeholder="홍길동"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+                이메일 (아이디) <span className="text-red-400">*</span>
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="email"
+                  value={newMemberForm.email}
+                  onChange={(e) => {
+                    setNewMemberForm({ ...newMemberForm, email: e.target.value });
+                    setEmailCheckStatus('idle');
+                  }}
+                  placeholder="example@email.com"
+                  className="flex-1 min-w-0 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                  autoComplete="email"
+                />
+                <button
+                  type="button"
+                  disabled={
+                    registeringMember ||
+                    !newMemberForm.email.trim() ||
+                    emailCheckStatus === 'checking'
+                  }
+                  onClick={async () => {
+                    setEmailCheckStatus('checking');
+                    const r = await checkEmailAvailable(newMemberForm.email);
+                    if (!r.ok) {
+                      setEmailCheckStatus(r.error === 'service_unavailable' ? 'unavailable' : 'error');
+                      alert(
+                        r.error === 'service_unavailable'
+                          ? '이메일 확인 서비스를 사용할 수 없습니다. 환경 설정(SUPABASE_SERVICE_ROLE_KEY)을 확인해 주세요.'
+                          : '이메일 확인 중 오류가 발생했습니다.'
+                      );
+                      return;
+                    }
+                    setEmailCheckStatus(r.available ? 'available' : 'taken');
+                    if (!r.available) {
+                      alert('이미 사용 중인 이메일입니다. 다른 이메일을 입력해 주세요.');
+                    }
+                  }}
+                  className="shrink-0 px-4 py-3 rounded-xl border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {emailCheckStatus === 'checking' ? '확인 중…' : '중복 확인'}
+                </button>
+              </div>
+              {emailCheckStatus === 'available' && (
+                <p className="text-xs text-emerald-400 mt-1.5">사용 가능한 이메일입니다.</p>
+              )}
+              {emailCheckStatus === 'taken' && (
+                <p className="text-xs text-red-400 mt-1.5">이미 등록된 이메일입니다.</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+                연락처 <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="tel"
+                value={newMemberForm.phone}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, phone: e.target.value })}
+                placeholder="010-1234-5678"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+                생년월일 <span className="text-red-400">*</span>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-1">연도</label>
+                  <select
+                    value={newMemberForm.birthYear}
+                    onChange={(e) =>
+                      setNewMemberForm({ ...newMemberForm, birthYear: e.target.value })
+                    }
+                    className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-all text-sm"
+                  >
+                    <option value="">선택</option>
+                    {BIRTH_YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={String(y)}>
+                        {y}년
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-1">월</label>
+                  <select
+                    value={newMemberForm.birthMonth}
+                    onChange={(e) =>
+                      setNewMemberForm({ ...newMemberForm, birthMonth: e.target.value })
+                    }
+                    className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-all text-sm"
+                  >
+                    <option value="">선택</option>
+                    {MONTH_OPTIONS.map((mo) => (
+                      <option key={mo} value={String(mo)}>
+                        {mo}월
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-1">일</label>
+                  <select
+                    value={newMemberForm.birthDay}
+                    onChange={(e) =>
+                      setNewMemberForm({ ...newMemberForm, birthDay: e.target.value })
+                    }
+                    className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-all text-sm"
+                  >
+                    <option value="">선택</option>
+                    {BIRTH_DAY_OPTIONS.map((day) => (
+                      <option key={day} value={String(day)}>
+                        {day}일
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+                성별 <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={newMemberForm.gender}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, gender: e.target.value })}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500 transition-all"
+              >
+                <option value="남성">남성</option>
+                <option value="여성">여성</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-base sm:text-2xl font-bold text-white mb-3 sm:mb-6 flex items-center gap-2">
+            <span>💪</span>
+            <span>신체 정보</span>
+          </h3>
+          <div className="grid grid-cols-2 gap-4 sm:gap-6">
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">체중 (kg)</label>
+              <input
+                type="number"
+                value={newMemberForm.weight}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, weight: e.target.value })}
+                placeholder="70"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">신장 (cm)</label>
+              <input
+                type="number"
+                value={newMemberForm.height}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, height: e.target.value })}
+                placeholder="175"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-base sm:text-2xl font-bold text-white mb-3 sm:mb-6 flex items-center gap-2">
+            <span>📞</span>
+            <span>연락 정보</span>
+          </h3>
+          <div className="grid grid-cols-1 gap-4 sm:gap-6">
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">주소</label>
+              <input
+                type="text"
+                value={newMemberForm.address}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, address: e.target.value })}
+                placeholder="서울시 강남구"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">비상연락처</label>
+              <input
+                type="tel"
+                value={newMemberForm.emergencyContact}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, emergencyContact: e.target.value })}
+                placeholder="010-9876-5432"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-base sm:text-2xl font-bold text-white mb-3 sm:mb-6 flex items-center gap-2">
+            <span>📝</span>
+            <span>특이사항</span>
+          </h3>
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">메모</label>
+            <textarea
+              value={newMemberForm.notes}
+              onChange={(e) => setNewMemberForm({ ...newMemberForm, notes: e.target.value })}
+              placeholder="부상 이력, 특별 주의사항 등을 입력하세요..."
+              rows={4}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all resize-y min-h-[6rem]"
+            />
+          </div>
+        </div>
+
+        <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+          <div className="flex items-start gap-3">
+            <span className="text-blue-400 text-xl flex-shrink-0">ℹ️</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-blue-400 font-bold text-sm mb-1">회원 등록 안내</div>
+              <div className="text-xs sm:text-sm text-gray-400">
+                • <span className="text-red-400">*</span> 표시된 항목은 필수 입력 항목입니다.
+                <br />
+                • 회원 등록 후 초기 비밀번호는 생년월일(YYYYMMDD)로 설정됩니다.
+                <br />• 회원에게 초기 비밀번호 변경을 안내해 주세요.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setNewMemberForm({ ...NEW_MEMBER_FORM_INITIAL });
+              setEmailCheckStatus('idle');
+              setActiveTab('players');
+            }}
+            className="flex-1 py-4 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-base transition-all disabled:opacity-50"
+            disabled={registeringMember}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={handleRegisterNewMember}
+            disabled={registeringMember || !gymName}
+            className="flex-1 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl font-bold text-base transition-all shadow-lg shadow-blue-500/30 disabled:opacity-50"
+          >
+            {registeringMember ? '등록 중…' : '✓ 등록 완료'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // 회원 관리 페이지 (코치)
 const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
   const { profile } = useAuth();
-  const [registeringMember, setRegisteringMember] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // all, active, inactive
   /** 'all' | 'athlete' — 모든 회원 vs 선수(player_athlete)만 */
   const [memberRoleScope, setMemberRoleScope] = useState('all');
   const [selectedMember, setSelectedMember] = useState(null); // 상세보기 모달용
-  const [showNewMemberModal, setShowNewMemberModal] = useState(false); // 신규회원 등록 모달
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState(null);
-  const newMemberInitial = {
-    name: '',
-    email: '',
-    phone: '',
-    birthDate: '',
-    gender: '남성',
-    weight: '',
-    height: '',
-    address: '',
-    emergencyContact: '',
-    membershipType: '베이직',
-    notes: '',
-  };
-  const [newMemberForm, setNewMemberForm] = useState(newMemberInitial);
 
   const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
 
@@ -769,69 +1002,16 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
     return matchesSearch && matchesStatus;
   });
 
-  const handleRegisterNewMember = async () => {
-    if (!profile?.id || !gymName) {
-      alert('체육관 프로필(체육관명)이 없습니다. 마이페이지에서 설정해 주세요.');
-      return;
-    }
-    const email = newMemberForm.email.trim();
-    const name = newMemberForm.name.trim();
-    if (!email || !name) {
-      alert('이름과 이메일은 필수입니다.');
-      return;
-    }
-    if (!newMemberForm.birthDate) {
-      alert('생년월일을 입력해 주세요. 초기 비밀번호(YYYYMMDD)로 사용됩니다.');
-      return;
-    }
-    const pwd = newMemberForm.birthDate.replace(/-/g, '');
-    if (!/^\d{8}$/.test(pwd)) {
-      alert('생년월일을 확인해 주세요.');
-      return;
-    }
-    const membershipMap = { 베이직: 'basic', 스탠다드: 'standard', 프리미엄: 'premium' };
-    const genderMap = { 남성: 'male', 여성: 'female' };
-
-    setRegisteringMember(true);
-    try {
-      const { signUp } = await import('@/lib/supabase');
-      const { error } = await signUp(email, pwd, {
-        name,
-        role: 'player_common',
-        gym_name: gymName,
-        gym_user_id: profile.id,
-        phone: newMemberForm.phone.trim() || undefined,
-        birth_date: newMemberForm.birthDate,
-        representative_phone: newMemberForm.emergencyContact.trim() || undefined,
-        membership_type: membershipMap[newMemberForm.membershipType] || 'basic',
-        gender: genderMap[newMemberForm.gender] || 'male',
-        height: newMemberForm.height ? parseInt(newMemberForm.height, 10) : undefined,
-        weight: newMemberForm.weight ? parseFloat(newMemberForm.weight) : undefined,
-      });
-      if (error) {
-        alert(error.message || '등록에 실패했습니다.');
-        return;
-      }
-      alert('회원 계정이 생성되었습니다. 생년월일(YYYYMMDD)을 초기 비밀번호로 안내해 주세요.');
-      setShowNewMemberModal(false);
-      setNewMemberForm({ ...newMemberInitial });
-      await loadMembers();
-    } catch (e) {
-      alert(e.message || '등록에 실패했습니다.');
-    } finally {
-      setRegisteringMember(false);
-    }
-  };
-
   return (
     <div className="animate-fade-in-up">
       <PageHeader 
         title={t('members')} 
         description={t('viewAndManageMembers')}
-        onBack={() => setActiveTab('insights')}
+        onBack={() => setActiveTab('home')}
       >
         <button 
-          onClick={() => setShowNewMemberModal(true)}
+          type="button"
+          onClick={() => setActiveTab('gym-register-member')}
           className="px-3 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold rounded-xl transition-all hover:scale-105 flex items-center gap-1 sm:gap-2 text-sm sm:text-base"
         >
           <span>+</span>
@@ -852,14 +1032,24 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
       {/* 검색 및 필터 */}
       <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4">
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('searchMemberName')}
-              className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all text-sm sm:text-base"
-            />
+          <div className="flex-1 w-full min-w-0 max-w-none">
+            <div className="flex w-full min-h-[3rem] sm:min-h-[3.25rem] items-center rounded-xl border border-white/10 bg-white/5 pl-3 sm:pl-4 pr-1 py-1 focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/25">
+              <input
+                id="coach-member-search"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('searchMemberName')}
+                className="flex-1 min-w-0 bg-transparent border-0 py-2.5 sm:py-3 pr-2 text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-sm sm:text-base"
+              />
+              <button
+                type="button"
+                className="shrink-0 rounded-lg m-0.5 px-3 sm:px-5 py-2 sm:py-2.5 text-sm font-medium text-white bg-white/10 hover:bg-white/15 border border-white/10"
+                aria-label={t('search')}
+              >
+                {t('search')}
+              </button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {[
@@ -973,10 +1163,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2 gap-y-0.5 text-[10px] sm:text-xs text-gray-400">
                       <span className="whitespace-nowrap">📞 {member.phone}</span>
                       <span className="hidden sm:inline">•</span>
-                      <span className="whitespace-nowrap">🏆 {member.tier}</span>
-                      <span className="hidden sm:inline">•</span>
-                      <span className="whitespace-nowrap">{member.rankLabel || `Lv.${member.level}`}</span>
-                      <span className="hidden sm:inline">•</span>
                       <span className="whitespace-nowrap">📅 {member.attendance}일</span>
                     </div>
                   </div>
@@ -1023,10 +1209,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                       </span>
                     </div>
                     <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 text-[9px] xs:text-[10px] sm:text-xs text-gray-400 flex-wrap">
-                      <span className="whitespace-nowrap">🏆 {selectedMember.tier}</span>
-                      <span className="hidden xs:inline">•</span>
-                      <span className="whitespace-nowrap">{selectedMember.rankLabel || `Lv.${selectedMember.level}`}</span>
-                      <span className="hidden xs:inline">•</span>
                       <span className="whitespace-nowrap">출석 {selectedMember.attendance}일</span>
                     </div>
                   </div>
@@ -1129,71 +1311,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                   </div>
                 </SpotlightCard>
 
-                {/* 전적 / 능력치 (DB에는 세부 능력치 없음 → 전적 표시) */}
-                <SpotlightCard className="p-2.5 xs:p-3 sm:p-5 col-span-1 sm:col-span-2">
-                  <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
-                    <span className="text-xs xs:text-sm sm:text-base">⚡</span>
-                    <span>{selectedMember.skills?.length ? '능력치' : '전적·통계'}</span>
-                  </h3>
-                  {selectedMember.skills?.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 xs:gap-2 sm:gap-3">
-                      {selectedMember.skills.map((skill) => (
-                        <div key={skill.name} className="p-1.5 xs:p-2 sm:p-3 bg-white/5 rounded-lg">
-                          <div className="flex justify-between items-center mb-1 gap-2">
-                            <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{skill.name}</span>
-                            <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-bold whitespace-nowrap">{skill.level}%</span>
-                          </div>
-                          <div className="w-full bg-gray-800 rounded-full h-1 xs:h-1.5">
-                            <div
-                              className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
-                              style={{ width: `${skill.level}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      <div className="p-2 sm:p-3 bg-blue-500/10 rounded-lg border border-blue-500/20 text-center">
-                        <div className="text-[9px] text-gray-400">승</div>
-                        <div className="text-lg font-bold text-blue-400">{selectedMember.wins ?? 0}</div>
-                      </div>
-                      <div className="p-2 sm:p-3 bg-gray-500/10 rounded-lg border border-white/10 text-center">
-                        <div className="text-[9px] text-gray-400">무</div>
-                        <div className="text-lg font-bold text-white">{selectedMember.draws ?? 0}</div>
-                      </div>
-                      <div className="p-2 sm:p-3 bg-red-500/10 rounded-lg border border-red-500/20 text-center">
-                        <div className="text-[9px] text-gray-400">패</div>
-                        <div className="text-lg font-bold text-red-400">{selectedMember.losses ?? 0}</div>
-                      </div>
-                      <div className="p-2 sm:p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-center">
-                        <div className="text-[9px] text-gray-400">승률</div>
-                        <div className="text-lg font-bold text-emerald-400">{selectedMember.winRate ?? 0}%</div>
-                      </div>
-                    </div>
-                  )}
-                </SpotlightCard>
-
-                {/* 업적 */}
-                <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
-                  <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
-                    <span className="text-xs xs:text-sm sm:text-base">🏆</span>
-                    <span>업적</span>
-                  </h3>
-                  <div className="space-y-1 xs:space-y-1.5 sm:space-y-2">
-                    {selectedMember.achievements.length > 0 ? (
-                      selectedMember.achievements.map((achievement, idx) => (
-                        <div key={idx} className="p-1.5 xs:p-2 bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-1 xs:gap-1.5">
-                          <span className="text-yellow-400 text-[10px] xs:text-xs sm:text-sm flex-shrink-0">🌟</span>
-                          <span className="text-[9px] xs:text-[10px] sm:text-xs text-white overflow-hidden text-ellipsis">{achievement}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500 text-center py-2 xs:py-3">업적이 없습니다</div>
-                    )}
-                  </div>
-                </SpotlightCard>
-
                 {/* 최근 활동 */}
                 <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
                   <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
@@ -1241,246 +1358,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
           </div>
         </div>
       )}
-
-      {/* 신규 회원 등록 모달 */}
-      {showNewMemberModal && (
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 animate-fade-in overflow-y-auto"
-          onClick={() => setShowNewMemberModal(false)}
-        >
-          <div 
-            className="bg-[#0A0A0A] border border-white/20 rounded-2xl w-full max-w-[min(1440px,calc(100vw-24px))] h-[80vh] max-h-[80vh] flex flex-col my-auto shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 모달 헤더 */}
-            <div className="p-2.5 xs:p-3 sm:p-8 border-b border-white/10 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 flex-shrink-0">
-              <div className="flex items-center justify-between gap-1.5 xs:gap-2 sm:gap-4">
-                <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-4 flex-1 min-w-0">
-                  <div className="w-10 h-10 xs:w-12 xs:h-12 sm:w-16 sm:h-16 rounded-xl xs:rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white shadow-lg flex-shrink-0">
-                    <span className="text-lg xs:text-2xl sm:text-3xl">👤</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h2 className="text-sm xs:text-base sm:text-2xl md:text-3xl font-bold text-white mb-0.5 xs:mb-1">신규 회원 등록</h2>
-                    <p className="text-[9px] xs:text-[10px] sm:text-sm text-gray-400 hidden xs:block">새로운 회원의 정보를 입력하세요</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setShowNewMemberModal(false)}
-                  className="w-7 h-7 xs:w-8 xs:h-8 sm:w-12 sm:h-12 rounded-lg xs:rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
-                >
-                  <span className="text-base xs:text-lg sm:text-2xl">✕</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 모달 내용 */}
-            <div className="p-2.5 xs:p-3 sm:p-8 overflow-y-auto flex-1 min-h-0">
-              <div className="space-y-3 xs:space-y-4 sm:space-y-8">
-                {/* 기본 정보 섹션 */}
-                <div>
-                  <h3 className="text-sm xs:text-base sm:text-2xl font-bold text-white mb-2 xs:mb-3 sm:mb-6 flex items-center gap-1 xs:gap-1.5 sm:gap-2">
-                    <span>📋</span>
-                    <span>기본 정보</span>
-                    <span className="text-red-400">*</span>
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 xs:gap-4 sm:gap-6">
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">
-                        이름 <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={newMemberForm.name}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, name: e.target.value})}
-                        placeholder="홍길동"
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">
-                        이메일 <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        value={newMemberForm.email}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, email: e.target.value})}
-                        placeholder="example@email.com"
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">
-                        연락처 <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        value={newMemberForm.phone}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, phone: e.target.value})}
-                        placeholder="010-1234-5678"
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">
-                        생년월일 <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={newMemberForm.birthDate}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, birthDate: e.target.value})}
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">
-                        성별 <span className="text-red-400">*</span>
-                      </label>
-                      <select
-                        value={newMemberForm.gender}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, gender: e.target.value})}
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 transition-all"
-                      >
-                        <option value="남성">남성</option>
-                        <option value="여성">여성</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">
-                        멤버십 타입 <span className="text-red-400">*</span>
-                      </label>
-                      <select
-                        value={newMemberForm.membershipType}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, membershipType: e.target.value})}
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 transition-all"
-                      >
-                        <option value="베이직">베이직</option>
-                        <option value="스탠다드">스탠다드</option>
-                        <option value="프리미엄">프리미엄</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 신체 정보 섹션 */}
-                <div>
-                  <h3 className="text-sm xs:text-base sm:text-2xl font-bold text-white mb-2 xs:mb-3 sm:mb-6 flex items-center gap-1 xs:gap-1.5 sm:gap-2">
-                    <span>💪</span>
-                    <span>신체 정보</span>
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2 xs:gap-3 sm:gap-6">
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">체중 (kg)</label>
-                      <input
-                        type="number"
-                        value={newMemberForm.weight}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, weight: e.target.value})}
-                        placeholder="70"
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">신장 (cm)</label>
-                      <input
-                        type="number"
-                        value={newMemberForm.height}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, height: e.target.value})}
-                        placeholder="175"
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 연락 정보 섹션 */}
-                <div>
-                  <h3 className="text-sm xs:text-base sm:text-2xl font-bold text-white mb-2 xs:mb-3 sm:mb-6 flex items-center gap-1 xs:gap-1.5 sm:gap-2">
-                    <span>📞</span>
-                    <span>연락 정보</span>
-                  </h3>
-                  <div className="grid grid-cols-1 gap-2 xs:gap-3 sm:gap-6">
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">주소</label>
-                      <input
-                        type="text"
-                        value={newMemberForm.address}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, address: e.target.value})}
-                        placeholder="서울시 강남구"
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">비상연락처</label>
-                      <input
-                        type="tel"
-                        value={newMemberForm.emergencyContact}
-                        onChange={(e) => setNewMemberForm({...newMemberForm, emergencyContact: e.target.value})}
-                        placeholder="010-9876-5432"
-                        className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 특이사항 섹션 */}
-                <div>
-                  <h3 className="text-sm xs:text-base sm:text-2xl font-bold text-white mb-2 xs:mb-3 sm:mb-6 flex items-center gap-1 xs:gap-1.5 sm:gap-2">
-                    <span>📝</span>
-                    <span>특이사항</span>
-                  </h3>
-                  <div>
-                    <label className="block text-[10px] xs:text-xs sm:text-sm font-medium text-gray-400 mb-1 xs:mb-1.5 sm:mb-2">메모</label>
-                    <textarea
-                      value={newMemberForm.notes}
-                      onChange={(e) => setNewMemberForm({...newMemberForm, notes: e.target.value})}
-                      placeholder="부상 이력, 특별 주의사항 등을 입력하세요..."
-                      rows="3"
-                      className="w-full px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 bg-white/5 border border-white/10 rounded-lg xs:rounded-xl text-[11px] xs:text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all resize-none"
-                    />
-                  </div>
-                </div>
-
-                {/* 안내 메시지 */}
-                <div className="p-2 xs:p-3 sm:p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg xs:rounded-xl">
-                  <div className="flex items-start gap-1.5 xs:gap-2 sm:gap-3">
-                    <span className="text-blue-400 text-sm xs:text-base sm:text-xl flex-shrink-0">ℹ️</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-blue-400 font-bold text-[10px] xs:text-xs sm:text-sm mb-0.5 xs:mb-1">회원 등록 안내</div>
-                      <div className="text-[9px] xs:text-[10px] sm:text-sm text-gray-400">
-                        • <span className="text-red-400">*</span> 표시된 항목은 필수 입력 항목입니다.<br/>
-                        • 회원 등록 후 초기 비밀번호는 생년월일(YYYYMMDD)로 설정됩니다.<br/>
-                        • 회원에게 초기 비밀번호 변경을 안내해 주세요.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 모달 푸터 */}
-            <div className="p-6 border-t border-white/10 bg-white/5 flex gap-4">
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowNewMemberModal(false);
-                  setNewMemberForm({ ...newMemberInitial });
-                }}
-                className="flex-1 py-4 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-lg transition-all disabled:opacity-50"
-                disabled={registeringMember}
-              >
-                취소
-              </button>
-              <button 
-                type="button"
-                onClick={handleRegisterNewMember}
-                disabled={registeringMember}
-                className="flex-1 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl font-bold text-lg transition-all hover:scale-[1.02] shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:hover:scale-100"
-              >
-                {registeringMember ? '등록 중…' : '✓ 등록 완료'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -1504,6 +1381,34 @@ function computeExpectedBlueWinPercent(blue, red) {
   return Math.round((sb / den) * 1000) / 10;
 }
 
+function matchEmptyScoresMap(roundCount) {
+  const n = Math.min(12, Math.max(3, Math.floor(Number(roundCount)) || 3));
+  return Object.fromEntries([...Array(n)].map((_, i) => [`round${i + 1}`, null]));
+}
+
+function sumCornerPoints(scores, totalRounds, corner) {
+  let t = 0;
+  for (let r = 1; r <= totalRounds; r++) {
+    t += scores[`round${r}`]?.[corner] || 0;
+  }
+  return t;
+}
+
+/** 라운드별 점수로 이긴 라운드 수 (동점 라운드는 미카운트) */
+function countRoundsWonOnScore(scores, totalRounds) {
+  let blue = 0;
+  let red = 0;
+  for (let r = 1; r <= totalRounds; r++) {
+    const s = scores[`round${r}`];
+    if (!s) continue;
+    const b = Number(s.blue) || 0;
+    const rr = Number(s.red) || 0;
+    if (b > rr) blue++;
+    else if (rr > b) red++;
+  }
+  return { blue, red };
+}
+
 // 매칭 룸 페이지 (코치)
 const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   // Phase: 'lobby' | 'matching' | 'fighting' | 'rest' | 'finish'
@@ -1512,9 +1417,14 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [redCorner, setRedCorner] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentRound, setCurrentRound] = useState(1);
+  const [totalRounds, setTotalRounds] = useState(3);
   const [roundTime, setRoundTime] = useState(180); // 3:00
   const [restTime, setRestTime] = useState(60); // 1:00
-  const [scores, setScores] = useState({ round1: null, round2: null, round3: null });
+  const [scores, setScores] = useState(() => matchEmptyScoresMap(3));
+  const currentRoundRef = useRef(1);
+  const totalRoundsRef = useRef(3);
+  currentRoundRef.current = currentRound;
+  totalRoundsRef.current = totalRounds;
   const [selectingCorner, setSelectingCorner] = useState(null); // 'blue' | 'red' | null
   const [rscWinner, setRscWinner] = useState(null); // RSC 승자 ('blue' | 'red' | null)
   const [finishMethod, setFinishMethod] = useState(null); // 'decision' | 'rsc' | 'forced'
@@ -1646,43 +1556,44 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     loadMatchRoomData({ showLoading: true });
   }, [loadMatchRoomData]);
 
-  // 타이머 로직
+  // 타이머 로직 (마지막 라운드 종료 후에는 라운드 간 쉬는 시간 없음 → 바로 채점)
   useEffect(() => {
     if (!isPlaying) return;
-    
+
     const interval = setInterval(() => {
       if (phase === 'fighting') {
-        setRoundTime(prev => {
+        setRoundTime((prev) => {
           if (prev <= 1) {
             setIsPlaying(false);
             setPhase('rest');
-            setRestTime(60);
+            const cr = currentRoundRef.current;
+            const tr = totalRoundsRef.current;
+            setRestTime(cr < tr ? 60 : 0);
             return 180;
           }
           return prev - 1;
         });
       } else if (phase === 'rest') {
-        setRestTime(prev => {
+        setRestTime((prev) => {
+          const cr = currentRoundRef.current;
+          const tr = totalRoundsRef.current;
+          if (cr === tr) {
+            return 0;
+          }
           if (prev <= 1) {
-            if (currentRound < 3) {
-              setCurrentRound(currentRound + 1);
-              setPhase('fighting');
-              setRoundTime(180);
-              setIsPlaying(true);
-            } else {
-              setPhase('finish');
-              setFinishMethod('decision');
-              setResultMethod('decision');
-            }
+            setCurrentRound((c) => c + 1);
+            setPhase('fighting');
+            setRoundTime(180);
+            setIsPlaying(true);
             return 60;
           }
           return prev - 1;
         });
       }
     }, 1000);
-    
+
     return () => clearInterval(interval);
-  }, [isPlaying, phase, currentRound]);
+  }, [isPlaying, phase]);
 
   // rest 페이즈 자동 시작 및 입력 초기화
   useEffect(() => {
@@ -1703,15 +1614,23 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
   const startMatch = () => {
     if (!blueCorner || !redCorner) return;
+    setScores(matchEmptyScoresMap(totalRounds));
     setPhase('fighting');
     setCurrentRound(1);
     setRoundTime(180);
+    setRestTime(60);
     setIsPlaying(true);
   };
 
   const handleScoreSelect = (roundNum, blueScore, redScore, dominant) => {
-    setScores(prev => ({ ...prev, [`round${roundNum}`]: { blue: blueScore, red: redScore, dominant } }));
+    setScores((prev) => ({ ...prev, [`round${roundNum}`]: { blue: blueScore, red: redScore, dominant } }));
     setCurrentScoreInput({ blue: null, red: null, dominant: null });
+    if (roundNum === totalRounds) {
+      setIsPlaying(false);
+      setFinishMethod('decision');
+      setResultMethod('decision');
+      setPhase('finish');
+    }
   };
 
   const canSubmitScore = () => {
@@ -1736,9 +1655,14 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
       if (forcedResult.winner === 'red') return redCorner;
       return null;
     }
-    const blueTotal = (scores.round1?.blue || 0) + (scores.round2?.blue || 0) + (scores.round3?.blue || 0);
-    const redTotal = (scores.round1?.red || 0) + (scores.round2?.red || 0) + (scores.round3?.red || 0);
-    return blueTotal > redTotal ? blueCorner : redCorner;
+    const blueTotal = sumCornerPoints(scores, totalRounds, 'blue');
+    const redTotal = sumCornerPoints(scores, totalRounds, 'red');
+    if (blueTotal > redTotal) return blueCorner;
+    if (redTotal > blueTotal) return redCorner;
+    const { blue: blueRw, red: redRw } = countRoundsWonOnScore(scores, totalRounds);
+    if (blueRw > redRw) return blueCorner;
+    if (redRw > blueRw) return redCorner;
+    return null;
   };
 
   const getFinalScore = () => {
@@ -1749,8 +1673,8 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
       };
     }
     return {
-      blue: (scores.round1?.blue || 0) + (scores.round2?.blue || 0) + (scores.round3?.blue || 0),
-      red: (scores.round1?.red || 0) + (scores.round2?.red || 0) + (scores.round3?.red || 0),
+      blue: sumCornerPoints(scores, totalRounds, 'blue'),
+      red: sumCornerPoints(scores, totalRounds, 'red'),
     };
   };
 
@@ -1764,16 +1688,22 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             red: Number(forcedResult.redScore) || 0,
           }
         : {
-            blue: (scores.round1?.blue || 0) + (scores.round2?.blue || 0) + (scores.round3?.blue || 0),
-            red: (scores.round1?.red || 0) + (scores.round2?.red || 0) + (scores.round3?.red || 0),
+            blue: sumCornerPoints(scores, totalRounds, 'blue'),
+            red: sumCornerPoints(scores, totalRounds, 'red'),
           };
-      const winnerCorner = finishMethod === 'forced'
-        ? (forcedResult.winner || 'draw')
-        : finishMethod === 'rsc'
-          ? (rscWinner || 'draw')
-          : finalScore.blue === finalScore.red
-            ? 'draw'
-            : finalScore.blue > finalScore.red ? 'blue' : 'red';
+      const winnerCorner =
+        finishMethod === 'forced'
+          ? (forcedResult.winner || 'draw')
+          : finishMethod === 'rsc'
+            ? (rscWinner || 'draw')
+            : (() => {
+                if (finalScore.blue > finalScore.red) return 'blue';
+                if (finalScore.red > finalScore.blue) return 'red';
+                const { blue: bRw, red: rRw } = countRoundsWonOnScore(scores, totalRounds);
+                if (bRw > rRw) return 'blue';
+                if (rRw > bRw) return 'red';
+                return 'draw';
+              })();
 
       setIsSavingResult(true);
       setSaveError(null);
@@ -1786,7 +1716,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
           finishMethod: resultMethod || finishMethod,
           blueScore: finalScore.blue,
           redScore: finalScore.red,
-          roundsPlayed: currentRound,
+          roundsPlayed: totalRounds,
         });
         if (error) throw error;
         setResultSaved(true);
@@ -1800,7 +1730,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     };
 
     persistMatchResult();
-  }, [phase, finishMethod, forcedResult, rscWinner, blueCorner, redCorner, currentRound, resultSaved, scores, resultMethod, loadMatchRoomData]);
+  }, [phase, finishMethod, forcedResult, rscWinner, blueCorner, redCorner, currentRound, resultSaved, scores, resultMethod, loadMatchRoomData, totalRounds]);
 
   const resetMatch = () => {
     setPhase('lobby');
@@ -1809,7 +1739,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     setCurrentRound(1);
     setRoundTime(180);
     setRestTime(60);
-    setScores({ round1: null, round2: null, round3: null });
+    setScores(matchEmptyScoresMap(totalRounds));
     setIsPlaying(false);
     setRscWinner(null);
     setFinishMethod(null);
@@ -1827,7 +1757,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
       <PageHeader 
         title={`🥊 ${t('matchRoomTitle')}`}
         description={t('oneThumbReferee')}
-        onBack={() => setActiveTab('insights')}
+        onBack={() => setActiveTab('home')}
       />
 
       {/* Phase 0: Lobby - 회원 선택 */}
@@ -2037,6 +1967,30 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               </SpotlightCard>
             );
           })()}
+
+          {/* 진행 라운드 수 (시작 전) */}
+          {blueCorner && redCorner && (
+            <SpotlightCard className="p-3 sm:p-4 mb-3 sm:mb-4">
+              <div className="text-xs sm:text-sm font-bold text-gray-400 mb-1 text-center">{t('matchRoomTotalRounds')}</div>
+              <div className="text-[10px] sm:text-xs text-gray-500 text-center mb-2">{t('matchRoomTotalRoundsRange')}</div>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2 justify-center">
+                {Array.from({ length: 10 }, (_, i) => i + 3).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setTotalRounds(n)}
+                    className={`min-w-[2.75rem] sm:min-w-[3.25rem] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                      totalRounds === n
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10'
+                    }`}
+                  >
+                    {n}R
+                  </button>
+                ))}
+              </div>
+            </SpotlightCard>
+          )}
 
           {/* MATCH START 버튼 */}
           {blueCorner && redCorner && (
@@ -2299,7 +2253,11 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
           <SpotlightCard className="p-8 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
             <div className="text-center">
               <div className="text-2xl font-bold text-purple-400 mb-2">ROUND {currentRound} 종료</div>
-              <div className="text-4xl font-bold text-white mb-4">휴식 {formatTime(restTime)}</div>
+              {currentRound < totalRounds ? (
+                <div className="text-4xl font-bold text-white mb-4">휴식 {formatTime(restTime)}</div>
+              ) : (
+                <div className="text-base sm:text-lg font-bold text-amber-300 mb-2">라운드 간 휴식 없음 — 바로 채점해 주세요</div>
+              )}
             </div>
           </SpotlightCard>
 
@@ -2620,7 +2578,8 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 
                 {/* 라운드별 상세 기록 */}
                 <div className="space-y-3 mb-4">
-                  {[1, 2, 3].map(round => {
+                  {[...Array(totalRounds)].map((_, i) => {
+                    const round = i + 1;
                     const score = scores[`round${round}`];
                     if (!score) return null;
                     return (
@@ -2659,14 +2618,14 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                       <div className="text-center">
                         <div className="text-sm text-blue-400 mb-1">{blueCorner.name}</div>
                         <div className="text-5xl font-bold text-blue-400">
-                          {(scores.round1?.blue || 0) + (scores.round2?.blue || 0) + (scores.round3?.blue || 0)}
+                          {sumCornerPoints(scores, totalRounds, 'blue')}
                         </div>
                       </div>
                       <span className="text-3xl text-gray-500">-</span>
                       <div className="text-center">
                         <div className="text-sm text-red-400 mb-1">{redCorner.name}</div>
                         <div className="text-5xl font-bold text-red-400">
-                          {(scores.round1?.red || 0) + (scores.round2?.red || 0) + (scores.round3?.red || 0)}
+                          {sumCornerPoints(scores, totalRounds, 'red')}
                         </div>
                       </div>
                     </div>
@@ -2677,16 +2636,21 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                     <div className="text-center p-3 bg-blue-500/10 rounded-lg">
                       <div className="text-xs text-blue-400 mb-1">청코너 우세 라운드</div>
                       <div className="text-2xl font-bold text-blue-400">
-                        {[1, 2, 3].filter(r => scores[`round${r}`]?.dominant === 'blue').length}R
+                        {[...Array(totalRounds)].map((_, i) => i + 1).filter((r) => scores[`round${r}`]?.dominant === 'blue').length}R
                       </div>
                     </div>
                     <div className="text-center p-3 bg-red-500/10 rounded-lg">
                       <div className="text-xs text-red-400 mb-1">홍코너 우세 라운드</div>
                       <div className="text-2xl font-bold text-red-400">
-                        {[1, 2, 3].filter(r => scores[`round${r}`]?.dominant === 'red').length}R
+                        {[...Array(totalRounds)].map((_, i) => i + 1).filter((r) => scores[`round${r}`]?.dominant === 'red').length}R
                       </div>
                     </div>
                   </div>
+                  {sumCornerPoints(scores, totalRounds, 'blue') === sumCornerPoints(scores, totalRounds, 'red') && (
+                    <p className="text-center text-xs text-amber-300/90 mt-3">
+                      총점 동점 시 라운드 점수승이 많은 쪽이 승리합니다.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -2894,4 +2858,4 @@ const AdminManagementView = ({ t = (key) => key, setActiveTab }) => {
   );
 };
 
-export { CoachInsightsView, PlayersManagementView, MatchRoomView, AdminManagementView };
+export { CoachInsightsView, PlayersManagementView, MatchRoomView, AdminManagementView, GymNewMemberRegisterView };

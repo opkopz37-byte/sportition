@@ -587,7 +587,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
         { date: '2024-02-06', type: '훈련', detail: '미트 트레이닝 90분' },
         { date: '2024-02-05', type: '상담', detail: '전략 코칭 세션' },
       ],
-      achievements: ['30일 연속 훈련', '레벨 200 달성', 'Master 티어 달성', 'KO 승리 10회'],
       skills: [
         { name: '펀치력', level: 85 },
         { name: '스피드', level: 92 },
@@ -605,7 +604,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
         { date: '2024-02-07', type: '훈련', detail: '섀도우 복싱 60분' },
         { date: '2024-02-06', type: '경기', detail: '스파링 매치 (무승부)' },
       ],
-      achievements: ['레벨 200 달성', 'Master 티어 달성', '완벽한 디펜스 5회'],
       skills: [
         { name: '펀치력', level: 70 },
         { name: '스피드', level: 88 },
@@ -622,7 +620,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
       recentRecords: [
         { date: '2024-02-06', type: '경기', detail: 'KO 승리 (2라운드)' },
       ],
-      achievements: ['레벨 200 달성', 'KO 파워하우스'],
       skills: [
         { name: '펀치력', level: 92 },
         { name: '스피드', level: 68 },
@@ -637,7 +634,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
       weight: 55, height: 160, joinDate: '2023-04-05', address: '서울시 마포구',
       emergencyContact: '010-6543-2109', notes: '휴면 회원',
       recentRecords: [],
-      achievements: [],
       skills: [
         { name: '펀치력', level: 65 },
         { name: '스피드', level: 70 },
@@ -654,7 +650,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
       recentRecords: [
         { date: '2024-02-07', type: '훈련', detail: '헤비백 트레이닝 120분' },
       ],
-      achievements: ['30일 연속 훈련', '강력한 펀치 마스터'],
       skills: [
         { name: '펀치력', level: 90 },
         { name: '스피드', level: 75 },
@@ -931,26 +926,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                         </div>
                       </div>
                     ))}
-                  </div>
-                </SpotlightCard>
-
-                {/* 업적 */}
-                <SpotlightCard className="p-3 sm:p-5">
-                  <h3 className="text-sm sm:text-base font-bold text-white mb-2 sm:mb-3 flex items-center gap-1.5">
-                    <span className="text-sm sm:text-base">🏆</span>
-                    <span>업적</span>
-                  </h3>
-                  <div className="space-y-1.5 sm:space-y-2">
-                    {selectedMember.achievements.length > 0 ? (
-                      selectedMember.achievements.map((achievement, idx) => (
-                        <div key={idx} className="p-2 bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-1.5">
-                          <span className="text-yellow-400 text-xs sm:text-sm flex-shrink-0">🌟</span>
-                          <span className="text-[10px] sm:text-xs text-white overflow-hidden text-ellipsis">{achievement}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-[10px] sm:text-xs text-gray-500 text-center py-3">업적이 없습니다</div>
-                    )}
                   </div>
                 </SpotlightCard>
 

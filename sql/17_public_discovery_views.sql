@@ -71,3 +71,4 @@ WHERE u.role IN ('player_common', 'player_athlete', 'gym');
 
 GRANT SELECT ON public.public_player_profiles TO authenticated;
 REVOKE ALL ON public.public_player_profiles FROM anon;
+-- 비로그인 랜딩 검색: `sql/29_anon_public_player_profiles_select.sql` 실행 후 anon SELECT 허용

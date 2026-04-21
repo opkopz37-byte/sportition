@@ -2,14 +2,22 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
-import { signIn } from '@/lib/supabase';
+import { signIn, sendPasswordResetEmail } from '@/lib/supabase';
 import TermsOfServiceModal from '@/components/legal/TermsOfServiceModal';
 import {
   OPTIONAL_MARKETING_CONSENT_FULL_TEXT,
   OPTIONAL_MARKETING_CONSENT_TITLE_KO,
 } from '@/lib/legal/termsOfService';
+import {
+  BIRTH_YEAR_OPTIONS,
+  MONTH_OPTIONS,
+  BIRTH_DAY_OPTIONS,
+  isValidCalendarDate,
+} from '@/lib/birthDate';
+import { checkEmailAvailable } from '@/lib/emailAvailability';
 
 /** 숫자만 입력해도 010-1234-5678 / 02-1234-5678 형태로 표시 */
 function formatKoreanPhone(raw) {
@@ -35,32 +43,34 @@ function formatKoreanPhone(raw) {
   return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
 }
 
-const BIRTH_YEAR_MIN = 1910;
-const BIRTH_YEAR_MAX = 2026;
-const BIRTH_YEAR_OPTIONS = Array.from(
-  { length: BIRTH_YEAR_MAX - BIRTH_YEAR_MIN + 1 },
-  (_, i) => BIRTH_YEAR_MAX - i
-);
-const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
-const BIRTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
-
-function isValidCalendarDate(y, m, d) {
-  const yi = Number(y);
-  const mi = Number(m);
-  const di = Number(d);
-  if (!yi || !mi || !di) return false;
-  const dt = new Date(yi, mi - 1, di);
-  return dt.getFullYear() === yi && dt.getMonth() === mi - 1 && dt.getDate() === di;
-}
-
 // 로그인 모달
 const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => key }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [findIdOpen, setFindIdOpen] = useState(false);
+  const [forgotPwOpen, setForgotPwOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetError, setResetError] = useState('');
 
   if (!isOpen) return null;
+
+  const handleSendReset = async (e) => {
+    e.preventDefault();
+    setResetLoading(true);
+    setResetError('');
+    setResetMessage('');
+    const { error: resetErr } = await sendPasswordResetEmail(resetEmail);
+    setResetLoading(false);
+    if (resetErr) {
+      setResetError(t('forgotPasswordError'));
+      return;
+    }
+    setResetMessage(t('forgotPasswordSent'));
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -152,13 +162,135 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
       <div className="mt-6 text-center">
         <span className="text-gray-500 text-sm">{t('noAccount')} </span>
         <button
+          type="button"
           onClick={onSignup}
           className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors"
         >
           {t('signup')}
         </button>
       </div>
+
+      <div className="mt-5 pt-5 border-t border-white/10">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs sm:text-sm">
+          <button
+            type="button"
+            onClick={() => setFindIdOpen(true)}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            {t('findIdLink')}
+          </button>
+          <span className="text-gray-600 select-none" aria-hidden>
+            |
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setResetEmail(email);
+              setResetMessage('');
+              setResetError('');
+              setForgotPwOpen(true);
+            }}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            {t('findPasswordLink')}
+          </button>
+        </div>
+      </div>
     </SpotlightCard>
+
+    {findIdOpen ? (
+      <div
+        className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4"
+        role="presentation"
+        onClick={() => setFindIdOpen(false)}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="find-id-title"
+          className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0c0c12] p-5 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 id="find-id-title" className="text-lg font-bold text-white mb-3">
+            {t('findIdModalTitle')}
+          </h3>
+          <p className="text-sm text-gray-400 whitespace-pre-line leading-relaxed mb-5">{t('findIdModalBody')}</p>
+          <button
+            type="button"
+            className="w-full py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors"
+            onClick={() => setFindIdOpen(false)}
+          >
+            {t('close')}
+          </button>
+        </div>
+      </div>
+    ) : null}
+
+    {forgotPwOpen ? (
+      <div
+        className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4"
+        role="presentation"
+        onClick={() => {
+          setForgotPwOpen(false);
+          setResetMessage('');
+          setResetError('');
+        }}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forgot-pw-title"
+          className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0c0c12] p-5 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 id="forgot-pw-title" className="text-lg font-bold text-white mb-1">
+            {t('forgotPasswordModalTitle')}
+          </h3>
+          <p className="text-xs text-gray-500 mb-4 leading-relaxed">{t('forgotPasswordModalDesc')}</p>
+          <form onSubmit={handleSendReset} className="space-y-3">
+            {resetError ? (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{resetError}</div>
+            ) : null}
+            {resetMessage ? (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-200 text-sm">
+                {resetMessage}
+              </div>
+            ) : null}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">{t('email')}</label>
+              <input
+                type="email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                placeholder={t('email')}
+                required
+                disabled={resetLoading || Boolean(resetMessage)}
+                autoComplete="email"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={resetLoading || Boolean(resetMessage)}
+              className="w-full py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {resetLoading ? '…' : t('forgotPasswordSubmit')}
+            </button>
+            <button
+              type="button"
+              className="w-full py-2 text-sm text-gray-500 hover:text-gray-300"
+              onClick={() => {
+                setForgotPwOpen(false);
+                setResetMessage('');
+                setResetError('');
+              }}
+            >
+              {t('cancel')}
+            </button>
+          </form>
+        </div>
+      </div>
+    ) : null}
   </div>
 </div>
   );
@@ -208,6 +340,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState({ checks: {}, strength: 0 });
   const [showPassword, setShowPassword] = useState(false);
+  /** 이메일(아이디) 중복 확인: idle | checking | available | taken | error | unavailable */
+  const [emailCheckStatus, setEmailCheckStatus] = useState('idle');
   /** null | 'full' 필수 약관 전문 | 'optional' 선택(마케팅) 동의 전문 */
   const [termsModalView, setTermsModalView] = useState(null);
 
@@ -223,7 +357,11 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       setError('이메일을 입력해주세요.');
       return false;
     }
-    
+    if (emailCheckStatus !== 'available') {
+      setError('이메일 중복 확인을 완료해주세요.');
+      return false;
+    }
+
     if (!formData.password) {
       setError('비밀번호를 입력해주세요.');
       return false;
@@ -486,17 +624,57 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
             </div>
           </div>
 
-          {/* 이메일 */}
+          {/* 이메일 (아이디) + 중복 확인 */}
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">이메일 *</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({...formData, email: e.target.value})}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-              placeholder="example@email.com"
-              disabled={loading}
-            />
+            <label className="block text-sm font-medium text-gray-400 mb-2">이메일 (아이디) *</label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value });
+                  setEmailCheckStatus('idle');
+                }}
+                className="flex-1 min-w-0 px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                placeholder="example@email.com"
+                disabled={loading}
+                autoComplete="email"
+              />
+              <button
+                type="button"
+                disabled={loading || !formData.email.trim() || emailCheckStatus === 'checking'}
+                onClick={async () => {
+                  setError('');
+                  setEmailCheckStatus('checking');
+                  const r = await checkEmailAvailable(formData.email);
+                  if (!r.ok) {
+                    setEmailCheckStatus(r.error === 'service_unavailable' ? 'unavailable' : 'error');
+                    setError(
+                      r.error === 'service_unavailable'
+                        ? '이메일 확인 서비스를 사용할 수 없습니다. 환경 설정을 확인하거나 잠시 후 다시 시도해 주세요.'
+                        : '이메일 확인 중 오류가 발생했습니다.'
+                    );
+                    return;
+                  }
+                  if (r.available) {
+                    setEmailCheckStatus('available');
+                    setError('');
+                  } else {
+                    setEmailCheckStatus('taken');
+                    setError('이미 사용 중인 이메일입니다. 다른 이메일을 입력해 주세요.');
+                  }
+                }}
+                className="shrink-0 px-4 py-3 rounded-lg border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {emailCheckStatus === 'checking' ? '확인 중…' : '중복 확인'}
+              </button>
+            </div>
+            {emailCheckStatus === 'available' && (
+              <p className="text-xs text-emerald-400 mt-1.5">사용 가능한 이메일입니다.</p>
+            )}
+            {emailCheckStatus === 'taken' && (
+              <p className="text-xs text-red-400 mt-1.5">이미 등록된 이메일입니다.</p>
+            )}
           </div>
 
           {/* 비밀번호 */}
@@ -968,137 +1146,124 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   );
 };
 
-// 랜딩 페이지
-const LandingPage = ({ onSelectRole, onLoginClick, language, setLanguage }) => {
+// 랜딩 페이지 — 로고, 전적 검색, 로그인·회원가입 (앱 홈과 동일 다크 톤)
+const LandingPage = ({ onLoginClick, onSignupClick, language, setLanguage }) => {
+  const router = useRouter();
   const t = (key) => translations[language][key] || key;
   const [showLangMenu, setShowLangMenu] = useState(false);
   const langRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const goToTierBoardSearch = () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    router.push(`/tier-board?q=${encodeURIComponent(q)}`);
+  };
 
   useEffect(() => {
-const handleClickOutside = (event) => {
-  if (langRef.current && !langRef.current.contains(event.target)) {
-    setShowLangMenu(false);
-  }
-};
-document.addEventListener('mousedown', handleClickOutside);
-return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleClickOutside = (event) => {
+      if (langRef.current && !langRef.current.contains(event.target)) {
+        setShowLangMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
-<div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-[clamp(0.75rem,4vw,1.5rem)] py-[clamp(0.75rem,3vw,1.5rem)] text-center w-full max-w-[100vw] overflow-x-hidden">
-  <div className="fixed z-50 flex items-center gap-[clamp(0.375rem,1.5vw,0.75rem)] top-[clamp(0.5rem,2vw,1.5rem)] right-[clamp(0.5rem,2vw,1.5rem)]">
-    <div className="relative" ref={langRef}>
-      <button 
-        onClick={() => setShowLangMenu(!showLangMenu)}
-        className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white font-medium transition-all flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] px-[clamp(0.5rem,2vw,1rem)] py-[clamp(0.375rem,1.2vw,0.5rem)] text-[clamp(0.6875rem,calc(1.5vw+0.25rem),0.875rem)] min-h-[2.25rem] sm:min-h-0"
-      >
-        <Icon type="globe" className="w-[clamp(0.875rem,2.5vw,1rem)] h-[clamp(0.875rem,2.5vw,1rem)] shrink-0" />
-        <span className="hidden xs:inline whitespace-nowrap">{language === 'ko' ? '한국어' : 'English'}</span>
-        <span className="xs:hidden">{language === 'ko' ? 'KR' : 'EN'}</span>
-      </button>
-      
-      {showLangMenu && (
-        <div className="absolute top-full right-0 mt-1.5 w-[clamp(7.5rem,40vw,8.5rem)] bg-[#0A0A0A] border border-white/10 rounded-lg overflow-hidden shadow-2xl animate-fade-in-up">
+    <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-8 w-full max-w-[100vw] overflow-x-hidden text-center">
+      <div className="fixed z-50 top-4 right-4 sm:top-5 sm:right-5">
+        <div className="relative" ref={langRef}>
           <button
-            onClick={() => { setLanguage('ko'); setShowLangMenu(false); }}
-            className={`w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,1.8vw,0.875rem)] transition-colors flex items-center justify-between ${
-              language === 'ko' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
+            type="button"
+            onClick={() => setShowLangMenu(!showLangMenu)}
+            className="rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] p-2.5 text-white transition-colors"
+            aria-label={language === 'ko' ? '언어 선택' : 'Language'}
           >
-            <span>한국어</span>
-            {language === 'ko' && <span className="text-blue-400">✓</span>}
+            <Icon type="globe" className="w-5 h-5" />
+          </button>
+
+          {showLangMenu && (
+            <div className="absolute top-full right-0 mt-1.5 w-36 bg-[#121212] border border-white/[0.1] rounded-xl overflow-hidden shadow-2xl animate-fade-in-up">
+              <button
+                type="button"
+                onClick={() => {
+                  setLanguage('ko');
+                  setShowLangMenu(false);
+                }}
+                className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center justify-between ${
+                  language === 'ko' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <span>한국어</span>
+                {language === 'ko' && <span className="text-blue-400">✓</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLanguage('en');
+                  setShowLangMenu(false);
+                }}
+                className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center justify-between ${
+                  language === 'en' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <span>English</span>
+                {language === 'en' && <span className="text-blue-400">✓</span>}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="w-full max-w-6xl flex flex-col items-center px-0">
+        <h1
+          className="text-4xl sm:text-5xl md:text-6xl font-bold mb-8 sm:mb-10 tracking-tight bg-gradient-to-r from-blue-400 via-violet-400 to-purple-500 bg-clip-text text-transparent"
+          style={{ fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}
+        >
+          Sportition
+        </h1>
+
+        <div className="w-full relative">
+          <div className="flex w-full min-h-[3.25rem] items-center rounded-2xl border border-white/[0.1] bg-[#121212] pl-4 sm:pl-5 pr-1.5 py-1 shadow-inner focus-within:border-blue-500/35 focus-within:ring-1 focus-within:ring-blue-500/30">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') goToTierBoardSearch();
+              }}
+              placeholder={t('recordSearchPlaceholderTierBoard')}
+              className="flex-1 min-w-0 bg-transparent border-0 py-3 sm:py-3.5 pr-3 text-sm sm:text-base text-white placeholder:text-gray-500 focus:outline-none focus:ring-0"
+            />
+            <button
+              type="button"
+              onClick={goToTierBoardSearch}
+              className="shrink-0 rounded-2xl border border-white/[0.12] bg-white/[0.08] hover:bg-white/[0.12] text-white font-medium px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base transition-colors"
+            >
+              {t('search')}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-10 sm:mt-12 flex w-full justify-center items-stretch gap-3 sm:gap-4">
+          <button
+            type="button"
+            onClick={() => onLoginClick?.()}
+            className="flex-1 rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] text-white text-sm sm:text-base font-medium py-3 px-4 transition-colors"
+          >
+            {t('login')}
           </button>
           <button
-            onClick={() => { setLanguage('en'); setShowLangMenu(false); }}
-            className={`w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,1.8vw,0.875rem)] transition-colors flex items-center justify-between ${
-              language === 'en' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
+            type="button"
+            onClick={() => onSignupClick?.()}
+            className="flex-1 rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] text-white text-sm sm:text-base font-medium py-3 px-4 transition-colors"
           >
-            <span>English</span>
-            {language === 'en' && <span className="text-blue-400">✓</span>}
+            {t('signup')}
           </button>
         </div>
-      )}
+      </div>
     </div>
-
-    <button
-      onClick={onLoginClick}
-      className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white font-medium transition-all flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] group px-[clamp(0.5rem,2vw,1rem)] py-[clamp(0.375rem,1.2vw,0.5rem)] text-[clamp(0.6875rem,calc(1.5vw+0.25rem),0.875rem)] min-h-[2.25rem] sm:min-h-0"
-    >
-      <Icon type="login" className="w-[clamp(0.875rem,2.5vw,1rem)] h-[clamp(0.875rem,2.5vw,1rem)] shrink-0 group-hover:rotate-12 transition-transform" />
-      <span className="hidden xs:inline whitespace-nowrap">{t('login')}</span>
-      <span className="xs:hidden whitespace-nowrap">로그인</span>
-    </button>
-  </div>
-
-  <div className="mb-[clamp(1.25rem,4vw,3rem)] space-y-[clamp(0.5rem,2vw,1rem)] animate-fade-in-up w-full max-w-[min(42rem,100%)] px-[clamp(0.25rem,2vw,0.5rem)]">
-    <div className="inline-flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] px-[clamp(0.5rem,2vw,0.75rem)] py-[clamp(0.125rem,0.8vw,0.25rem)] rounded-full border border-white/10 bg-white/5 backdrop-blur-sm text-[clamp(0.5625rem,calc(1.2vw+0.2rem),0.75rem)] text-gray-400 mb-[clamp(0.375rem,1.5vw,1rem)]">
-      <span className="rounded-full bg-blue-500 animate-pulse shrink-0 w-[clamp(0.25rem,1vw,0.5rem)] h-[clamp(0.25rem,1vw,0.5rem)]" />
-      Sportition {t('version')} 2.0
-    </div>
-    <h1 className="font-bold tracking-tight text-white leading-[1.12] text-[clamp(1.375rem,calc(5vw+0.5rem),4.5rem)] break-keep">
-      <span className="block">{t('buildYourLegacy')}</span>
-      <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-white">
-        {t('buildLegacy')}
-      </span>
-    </h1>
-    <p className="text-gray-400 max-w-[min(36rem,92vw)] mx-auto whitespace-pre-line leading-relaxed text-[clamp(0.75rem,calc(1.6vw+0.35rem),1.125rem)]">
-      {t('landingDesc')}
-    </p>
-  </div>
-
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-[clamp(0.75rem,2.5vw,1.5rem)] w-full max-w-4xl animate-fade-in-up px-[clamp(0.25rem,1.5vw,0.5rem)]" style={{ animationDelay: '200ms' }}>
-    <SpotlightCard 
-      onClick={() => onSelectRole('player_common')}
-      theme="blue"
-      className="p-[clamp(1rem,3vw,2rem)] group text-left min-h-[clamp(11rem,32vh,16rem)] flex flex-col justify-between hover:bg-white/[0.02]"
-    >
-      <div className="min-w-0">
-        <div className="rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 mb-[clamp(0.5rem,2vw,1rem)] group-hover:scale-110 transition-transform w-[clamp(2.25rem,6vw,3rem)] h-[clamp(2.25rem,6vw,3rem)]">
-          <Icon type="zap" className="w-[clamp(1.125rem,3vw,1.5rem)] h-[clamp(1.125rem,3vw,1.5rem)]" />
-        </div>
-        <h3 className="font-bold text-white mb-[clamp(0.25rem,1vw,0.5rem)] group-hover:text-blue-400 transition-colors text-[clamp(1rem,calc(2.4vw+0.25rem),1.5rem)] break-keep">{t('player')}</h3>
-        <p className="text-gray-500 whitespace-pre-line leading-relaxed text-[clamp(0.6875rem,calc(1.35vw+0.3rem),0.875rem)]">
-          {t('playerDesc')}
-        </p>
-      </div>
-      <div className="flex items-center text-gray-400 group-hover:text-white transition-colors mt-2 text-[clamp(0.6875rem,calc(1.35vw+0.3rem),0.875rem)]">
-        <span className="truncate">{t('enterDashboard')}</span>
-        <Icon type="arrowRight" className="ml-[clamp(0.375rem,1vw,0.5rem)] shrink-0 w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)] group-hover:translate-x-1 transition-transform" />
-      </div>
-    </SpotlightCard>
-
-    <SpotlightCard 
-      onClick={() => onSelectRole('gym')} 
-      theme="blue"
-      className="p-[clamp(1rem,3vw,2rem)] group text-left min-h-[clamp(11rem,32vh,16rem)] flex flex-col justify-between hover:bg-white/[0.02]"
-      style={{ '--spotlight-color': '168, 85, 247' }}
-    >
-      <div className="min-w-0">
-        <div className="rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 mb-[clamp(0.5rem,2vw,1rem)] group-hover:scale-110 transition-transform w-[clamp(2.25rem,6vw,3rem)] h-[clamp(2.25rem,6vw,3rem)]">
-          <Icon type="home" className="w-[clamp(1.125rem,3vw,1.5rem)] h-[clamp(1.125rem,3vw,1.5rem)]" />
-        </div>
-        <h3 className="font-bold text-white mb-[clamp(0.25rem,1vw,0.5rem)] group-hover:text-purple-400 transition-colors text-[clamp(1rem,calc(2.4vw+0.25rem),1.5rem)] break-keep">{t('gym')}</h3>
-        <p className="text-gray-500 whitespace-pre-line leading-relaxed text-[clamp(0.6875rem,calc(1.35vw+0.3rem),0.875rem)]">
-          {t('gymDesc')}
-        </p>
-      </div>
-      <div className="flex items-center text-gray-400 group-hover:text-white transition-colors mt-2 text-[clamp(0.6875rem,calc(1.35vw+0.3rem),0.875rem)]">
-        <span className="truncate">{t('openGym')}</span>
-        <Icon type="arrowRight" className="ml-[clamp(0.375rem,1vw,0.5rem)] shrink-0 w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)] group-hover:translate-x-1 transition-transform" />
-      </div>
-    </SpotlightCard>
-  </div>
-
-  <div className="mt-[clamp(1.5rem,4vw,2.5rem)] pb-[clamp(0.75rem,2vw,1rem)]">
-    <Link
-      href="/terms"
-      className="text-[clamp(0.625rem,calc(1.2vw+0.25rem),0.75rem)] text-gray-500 hover:text-gray-300 underline underline-offset-2"
-    >
-      이용약관 · 개인정보 수집·이용 동의 전문
-    </Link>
-  </div>
-</div>
   );
 };
 

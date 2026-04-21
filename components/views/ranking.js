@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
@@ -30,30 +30,74 @@ const getRoleBadgeClass = (role) => {
   return 'bg-gray-500/20 text-gray-400 border border-gray-500/30';
 };
 
-const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
+const matchesNameQuery = (player, qLower) => {
+  if (!qLower) return false;
+  const name = String(player.display_name || '').toLowerCase();
+  const legal = String(player.name || '').toLowerCase();
+  return name.includes(qLower) || legal.includes(qLower);
+};
+
+const TierBoardView = ({
+  t = (key) => key,
+  setActiveTab,
+  publicMode = false,
+  onPlayerClick,
+  initialSearchQuery = '',
+}) => {
   const { profile, user } = useAuth();
+  const isGymAccount = profile?.role === 'gym' || profile?.role === 'admin';
   const [selectedTier, setSelectedTier] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [players, setPlayers] = useState([]);
   const [recentMatches, setRecentMatches] = useState([]);
   const [recentMatchesExpanded, setRecentMatchesExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [playerSearch, setPlayerSearch] = useState('');
+  const [playerSearch, setPlayerSearch] = useState(() => (initialSearchQuery ? String(initialSearchQuery) : ''));
+  const jumpDoneRef = useRef(false);
+  const scrollDoneRef = useRef(false);
+
+  useEffect(() => {
+    if (initialSearchQuery == null || initialSearchQuery === '') return;
+    setPlayerSearch(String(initialSearchQuery));
+    setSelectedTier('All');
+    setCurrentPage(1);
+    jumpDoneRef.current = false;
+    scrollDoneRef.current = false;
+  }, [initialSearchQuery]);
+
+  const goPlayer = (playerId) => {
+    if (onPlayerClick) onPlayerClick(playerId);
+    else if (setActiveTab) setActiveTab(`opponent-profile-${playerId}`);
+  };
 
   useEffect(() => {
     const loadPlayers = async () => {
       setLoading(true);
-      const { data } = await getMatchLeaderboard();
-      setPlayers(data || []);
+      if (publicMode) {
+        try {
+          const res = await fetch('/api/tier-leaderboard', { credentials: 'same-origin' });
+          if (res.ok) {
+            const json = await res.json();
+            setPlayers(json.data || []);
+          } else {
+            setPlayers([]);
+          }
+        } catch {
+          setPlayers([]);
+        }
+      } else {
+        const { data } = await getMatchLeaderboard();
+        setPlayers(data || []);
+      }
       setLoading(false);
     };
 
     loadPlayers();
-  }, []);
+  }, [publicMode]);
 
   useEffect(() => {
     const loadRecentMatches = async () => {
-      if (!user?.id) {
+      if (publicMode || !user?.id || isGymAccount) {
         setRecentMatches([]);
         return;
       }
@@ -72,7 +116,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
     };
 
     loadRecentMatches();
-  }, [user?.id]);
+  }, [user?.id, publicMode, isGymAccount]);
 
   useEffect(() => {
     setRecentMatchesExpanded(false);
@@ -95,9 +139,10 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
     if (!q) return list;
     return list.filter((p) => {
       const name = String(p.display_name || '').toLowerCase();
+      const legal = String(p.name || '').toLowerCase();
       const gym = String(p.gym_name || '').toLowerCase();
       const style = String(p.boxing_style || '').toLowerCase();
-      return name.includes(q) || gym.includes(q) || style.includes(q);
+      return name.includes(q) || legal.includes(q) || gym.includes(q) || style.includes(q);
     });
   }, [players, selectedTier, playerSearch]);
 
@@ -107,53 +152,46 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
     currentPage * ITEMS_PER_PAGE
   );
 
+  useEffect(() => {
+    if (loading || jumpDoneRef.current || !initialSearchQuery?.trim()) return;
+    if (filteredPlayers.length === 0) {
+      jumpDoneRef.current = true;
+      return;
+    }
+    const q = initialSearchQuery.trim().toLowerCase();
+    const idx = filteredPlayers.findIndex((p) => matchesNameQuery(p, q));
+    if (idx >= 0) {
+      setCurrentPage(Math.floor(idx / ITEMS_PER_PAGE) + 1);
+    }
+    jumpDoneRef.current = true;
+  }, [loading, filteredPlayers, initialSearchQuery]);
+
+  useEffect(() => {
+    if (loading || scrollDoneRef.current || !initialSearchQuery?.trim()) return;
+    const q = initialSearchQuery.trim().toLowerCase();
+    const hasTarget = paginatedPlayers.some((p) => matchesNameQuery(p, q));
+    if (!hasTarget) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById('tier-board-search-target');
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        scrollDoneRef.current = true;
+      }
+    }, 100);
+    return () => clearTimeout(t);
+  }, [loading, currentPage, paginatedPlayers, initialSearchQuery]);
+
+  const searchQ = playerSearch.trim().toLowerCase();
+  let firstHighlightAssigned = false;
+
   return (
     <div className="animate-fade-in-up">
       <PageHeader
-        title={t('tierBoard')}
+        title={publicMode ? t('publicTierBoardTitle') : t('tierBoard')}
         description={`${t('tierBoardSubtitleRule')} · ${(t('tierBoardTotalPlayers') || '').replace('{n}', players.length.toLocaleString())}`}
       />
 
-      <div className="mb-4 sm:mb-5">
-        <label htmlFor="tier-board-player-search" className="sr-only">
-          {t('tierBoardSearchPlaceholder')}
-        </label>
-        <div className="relative">
-          <span
-            className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-gray-500"
-            aria-hidden
-          >
-            <Icon type="search" size={18} className="opacity-80" />
-          </span>
-          <input
-            id="tier-board-player-search"
-            type="search"
-            value={playerSearch}
-            onChange={(e) => {
-              setPlayerSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder={t('tierBoardSearchPlaceholder')}
-            autoComplete="off"
-            className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-2.5 pl-10 pr-10 text-sm text-white shadow-inner placeholder:text-gray-500 focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
-          />
-          {playerSearch ? (
-            <button
-              type="button"
-              onClick={() => {
-                setPlayerSearch('');
-                setCurrentPage(1);
-              }}
-              className="absolute right-2 top-1/2 z-[1] -translate-y-1/2 rounded-lg p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
-              aria-label={t('tierBoardSearchClear')}
-            >
-              <Icon type="x" size={16} />
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="mb-4 sm:mb-5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2">
+      <div className="mb-3 sm:mb-4 flex min-w-0 items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2">
         {TIERS.map((tier) => (
           <button
             key={tier}
@@ -172,6 +210,50 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
         ))}
       </div>
 
+      <div className="mb-4 sm:mb-5 w-full min-w-0 max-w-none">
+        <label htmlFor="tier-board-player-search" className="sr-only">
+          {t('tierBoardSearchPlaceholder')}
+        </label>
+        <div className="flex w-full min-h-[3rem] sm:min-h-[3.25rem] items-center rounded-xl border border-white/10 bg-white/[0.06] pl-2 sm:pl-3 pr-1 py-1 shadow-inner focus-within:border-blue-500/40 focus-within:ring-2 focus-within:ring-blue-500/25">
+          <span className="flex shrink-0 items-center text-gray-500 pl-1" aria-hidden>
+            <Icon type="search" size={18} className="opacity-80" />
+          </span>
+          <input
+            id="tier-board-player-search"
+            type="search"
+            value={playerSearch}
+            onChange={(e) => {
+              setPlayerSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder={t('tierBoardSearchPlaceholder')}
+            autoComplete="off"
+            className="flex-1 min-w-0 bg-transparent border-0 py-2.5 sm:py-3 pl-2 pr-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-0"
+          />
+          {playerSearch ? (
+            <button
+              type="button"
+              onClick={() => {
+                setPlayerSearch('');
+                setCurrentPage(1);
+              }}
+              className="shrink-0 rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"
+              aria-label={t('tierBoardSearchClear')}
+            >
+              <Icon type="x" size={16} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="shrink-0 rounded-lg m-0.5 px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium text-white bg-white/10 hover:bg-white/15 border border-white/10"
+            onClick={() => setCurrentPage(1)}
+          >
+            {t('search')}
+          </button>
+        </div>
+      </div>
+
+      {!publicMode && !isGymAccount && (
       <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-2 border-blue-500/30">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 xs:gap-3 sm:gap-4 flex-1 min-w-0">
@@ -200,7 +282,9 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
             </div>
           </div>
       </SpotlightCard>
+      )}
 
+      {!publicMode && !isGymAccount && (
       <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
           <h3 className="text-sm sm:text-base font-bold text-white">전적 분석</h3>
@@ -211,7 +295,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
             {user?.id && (
               <button
                 type="button"
-                onClick={() => setActiveTab(`opponent-profile-${user.id}`)}
+                onClick={() => goPlayer(user.id)}
                 className="text-[10px] sm:text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white whitespace-nowrap"
               >
                 전체보기
@@ -254,6 +338,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
           </div>
         )}
       </SpotlightCard>
+      )}
 
       <SpotlightCard className="overflow-hidden">
         <div className="hidden sm:block bg-white/5 px-2 sm:px-4 py-2 border-b border-white/10 overflow-x-auto">
@@ -280,11 +365,15 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
             const tierColor = getTierColor(player.tier);
             const rank = player.rank_label || player.match_rank || '-';
             const isTopThree = Number.isInteger(player.match_rank) && player.match_rank <= 3;
+            const isHighlight = Boolean(searchQ && matchesNameQuery(player, searchQ));
+            const isFirstTarget = isHighlight && !firstHighlightAssigned;
+            if (isFirstTarget) firstHighlightAssigned = true;
 
             return (
               <div
                 key={player.id}
-                className={`px-2 xs:px-3 sm:px-4 py-2.5 xs:py-3 transition-all hover:bg-white/5 ${isTopThree ? 'bg-gradient-to-r from-white/5 to-transparent' : ''}`}
+                id={isFirstTarget ? 'tier-board-search-target' : undefined}
+                className={`px-2 xs:px-3 sm:px-4 py-2.5 xs:py-3 transition-all hover:bg-white/5 ${isTopThree ? 'bg-gradient-to-r from-white/5 to-transparent' : ''} ${isHighlight ? 'ring-2 ring-cyan-400/45 ring-inset rounded-lg' : ''}`}
               >
                 <div className="sm:hidden">
                   <div className="flex items-center justify-between gap-2 mb-2">
@@ -293,7 +382,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
                         {rank}
                       </div>
                       <button
-                        onClick={() => setActiveTab(`opponent-profile-${player.id}`)}
+                        onClick={() => goPlayer(player.id)}
                         className="flex items-center gap-2 hover:scale-105 transition-transform"
                       >
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
@@ -334,7 +423,7 @@ const TierBoardView = ({ t = (key) => key, setActiveTab }) => {
 
                   <div className="col-span-3">
                     <button
-                      onClick={() => setActiveTab(`opponent-profile-${player.id}`)}
+                      onClick={() => goPlayer(player.id)}
                       className="flex items-center gap-2 w-full hover:scale-105 transition-transform"
                     >
                       <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs sm:text-sm flex-shrink-0">

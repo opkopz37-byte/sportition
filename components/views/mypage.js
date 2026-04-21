@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
+import { DashboardView } from '@/components/views/dashboard';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 import {
@@ -13,99 +14,28 @@ import {
 
 const MyPageView = ({ setActiveTab, t }) => {
   const { profile } = useAuth();
-  
-  const getRoleLabelKey = (role) => {
-    if (role === 'player_common') return 'player_common';
-    if (role === 'player_athlete') return 'player_athlete';
-    if (role === 'gym') return 'gym';
-    return 'player_common';
-  };
-
-  const getWeightClass = (weight) => {
-    if (!weight) return '';
-    if (weight <= 51) return t('minimumWeight') || '미니멈급';
-    if (weight <= 54) return t('lightFlyWeight') || '라이트 플라이급';
-    if (weight <= 57) return t('flyWeight') || '플라이급';
-    if (weight <= 60) return t('bantamWeight') || '밴텀급';
-    if (weight <= 63.5) return t('featherWeight') || '페더급';
-    if (weight <= 67) return t('lightWeight') || '라이트급';
-    if (weight <= 71) return t('welterWeight') || '웰터급';
-    if (weight <= 75) return t('middleWeight') || '미들급';
-    if (weight <= 81) return t('lightHeavyWeight') || '라이트 헤비급';
-    return t('heavyWeight') || '헤비급';
-  };
+  const isPlayer = profile?.role === 'player_common' || profile?.role === 'player_athlete';
+  const isGym = profile?.role === 'gym' || profile?.role === 'admin';
+  const embedDashboard = isPlayer || isGym;
 
   return (
   <div className="animate-fade-in-up">
-    <div className="mb-8">
-      <h2 className="text-3xl font-bold text-white mb-2">{t('myPage')}</h2>
-      <p className="text-gray-500">{t('manageProfile')}</p>
+    <div className="mb-6">
+      <h2 className="text-2xl sm:text-3xl font-bold text-white mb-1">{t('myPage')}</h2>
+      <p className="text-gray-500 text-sm">{t('manageProfile')}</p>
     </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <SpotlightCard className="col-span-1 md:col-span-2 p-6">
-        <div className="flex items-start gap-6">
-          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-4xl">
-            {(profile?.nickname || profile?.name || 'U').charAt(0)}
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                profile?.role === 'player_common' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
-                profile?.role === 'player_athlete' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                profile?.role === 'gym' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-              }`}>
-                {t(getRoleLabelKey(profile?.role))}
-              </span>
-              <h3 className="text-2xl font-bold text-white">{profile?.nickname || profile?.name || '사용자'}</h3>
-            </div>
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-              {profile?.tier && (
-                <>
-                  <span className="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs font-bold">{profile.tier}</span>
-                  <span className="text-gray-500">•</span>
-                </>
-              )}
-              <span className="text-gray-400 text-sm whitespace-nowrap">
-                {profile?.weight ? getWeightClass(profile.weight) : ''}
-                {profile?.boxing_style ? ` ${profile.boxing_style}` : ''}
-                {profile?.gym_name ? ` (${profile.gym_name})` : ''}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              {profile?.email && (
-                <div>
-                  <span className="text-gray-500">{t('email') || '이메일'}: </span>
-                  <span className="text-white">{profile.email}</span>
-                </div>
-              )}
-              {(profile?.phone || profile?.phone_number) && (
-                <div>
-                  <span className="text-gray-500">{t('phone') || '전화번호'}: </span>
-                  <span className="text-white">{profile.phone || profile.phone_number}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </SpotlightCard>
+    {embedDashboard ? (
+      <DashboardView
+        setActiveTab={setActiveTab}
+        t={t}
+        role={profile?.role || 'player_common'}
+        embeddedInMyPage
+      />
+    ) : null}
 
-      <SpotlightCard 
-        className="p-6 cursor-pointer hover:bg-white/[0.02] transition-colors"
-        onClick={() => setActiveTab('mypage-achievements')}
-      >
-        <div className="text-center">
-          <Icon type="trophy" size={32} className="mx-auto mb-3 text-yellow-500" />
-          <div className="text-3xl font-bold text-white mb-1">23</div>
-          <div className="text-sm text-gray-400">{t('totalAchievements')}</div>
-          <div className="text-xs text-blue-400 mt-2">{t('viewAll')} →</div>
-        </div>
-      </SpotlightCard>
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <SpotlightCard 
+    <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${embedDashboard ? 'mt-8' : ''}`}>
+      <SpotlightCard
         className="p-6 cursor-pointer hover:bg-white/[0.02] transition-colors"
         onClick={() => setActiveTab('mypage-activity')}
       >
@@ -140,8 +70,8 @@ const MyPageView = ({ setActiveTab, t }) => {
             { id: 'notifications', label: t('notifications') },
             { id: 'security', label: t('accountSecurity') }
           ].map((setting) => (
-            <button 
-              key={setting.id} 
+            <button
+              key={setting.id}
               onClick={() => setActiveTab(`mypage-${setting.id}`)}
               className="w-full p-3 rounded-lg bg-white/5 hover:bg-white/10 text-left text-white text-sm transition-colors flex items-center justify-between group"
             >
@@ -681,6 +611,8 @@ const NotificationsView = ({ setActiveTab, t = (key) => key }) => {
   );
 };
 
+const MIN_PASSWORD_LEN = 8;
+
 // Account Security 페이지
 const AccountSecurityView = ({ setActiveTab, t = (key) => key }) => {
   const [passwordData, setPasswordData] = useState({
@@ -690,60 +622,120 @@ const AccountSecurityView = ({ setActiveTab, t = (key) => key }) => {
   });
 
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState({ type: null, text: '' });
+
+  const handleSubmitPassword = async (e) => {
+    e.preventDefault();
+    setPasswordMessage({ type: null, text: '' });
+
+    if (passwordData.new.length < MIN_PASSWORD_LEN) {
+      setPasswordMessage({ type: 'error', text: t('passwordTooShort') });
+      return;
+    }
+    if (passwordData.new !== passwordData.confirm) {
+      setPasswordMessage({ type: 'error', text: t('passwordMismatch') });
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const { changePasswordWithCurrentVerification } = await import('@/lib/supabase');
+      const { error } = await changePasswordWithCurrentVerification(
+        passwordData.current,
+        passwordData.new
+      );
+      if (error) {
+        const code = error?.code || error?.status;
+        const msg = String(error.message || error).toLowerCase();
+        const isInvalid =
+          code === 'invalid_credentials' ||
+          msg.includes('invalid login') ||
+          msg.includes('invalid credentials') ||
+          msg.includes('wrong password');
+        setPasswordMessage({
+          type: 'error',
+          text: isInvalid ? t('currentPasswordWrong') : error.message || t('passwordChangeFailed'),
+        });
+        return;
+      }
+      setPasswordMessage({ type: 'ok', text: t('passwordChangedSuccess') });
+      setPasswordData({ current: '', new: '', confirm: '' });
+    } catch (err) {
+      setPasswordMessage({ type: 'error', text: err?.message || t('passwordChangeFailed') });
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
 
   return (
     <div className="animate-fade-in-up">
       <PageHeader 
         title="Account Security" 
-        description="Protect your account with strong security"
+        description={t('protectAccount')}
         onBack={() => setActiveTab('mypage')}
       />
 
       <div className="space-y-4">
         <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-6">Change Password</h3>
+          <h3 className="text-lg font-bold text-white mb-6">{t('changePassword')}</h3>
           
-          <div className="space-y-4">
+          <form onSubmit={handleSubmitPassword} className="space-y-4">
+            {passwordMessage.text ? (
+              <p
+                className={`text-sm rounded-lg px-3 py-2 ${
+                  passwordMessage.type === 'ok'
+                    ? 'bg-green-500/15 text-green-200 border border-green-500/30'
+                    : 'bg-red-500/15 text-red-200 border border-red-500/30'
+                }`}
+              >
+                {passwordMessage.text}
+              </p>
+            ) : null}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">Current Password</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">{t('currentPassword')}</label>
               <input
                 type="password"
+                autoComplete="current-password"
                 value={passwordData.current}
                 onChange={(e) => setPasswordData({...passwordData, current: e.target.value})}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                placeholder="Enter current password"
+                placeholder={t('currentPassword')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">New Password</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">{t('newPassword')}</label>
               <input
                 type="password"
+                autoComplete="new-password"
                 value={passwordData.new}
                 onChange={(e) => setPasswordData({...passwordData, new: e.target.value})}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                placeholder="Enter new password"
+                placeholder={t('newPassword')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">Confirm New Password</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">{t('confirmPassword')}</label>
               <input
                 type="password"
+                autoComplete="new-password"
                 value={passwordData.confirm}
                 onChange={(e) => setPasswordData({...passwordData, confirm: e.target.value})}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                placeholder="Confirm new password"
+                placeholder={t('confirmPassword')}
               />
             </div>
 
             <button 
-              onClick={() => alert('Password changed successfully!')}
-              className="w-full py-3 bg-blue-500 hover:bg-blue-600 rounded-lg text-white font-medium transition-colors"
+              type="submit"
+              disabled={passwordSaving}
+              className="w-full py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:pointer-events-none rounded-lg text-white font-medium transition-colors"
             >
-              Update Password
+              {passwordSaving ? '…' : t('updatePassword')}
             </button>
-          </div>
+          </form>
         </SpotlightCard>
 
         <SpotlightCard className="p-6">
@@ -1499,79 +1491,4 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
   );
 };
 
-// Achievements 페이지
-const AchievementsView = ({ setActiveTab, t = (key) => key }) => {
-  const achievements = [
-    { name: '첫 승리', nameEn: 'First Victory', desc: '첫 경기에서 승리하기', descEn: 'Win your first match', icon: '🏆', unlocked: true, date: '2024-01-15' },
-    { name: 'KO 데뷔', nameEn: 'KO Debut', desc: '첫 KO 승리 달성', descEn: 'Score your first KO', icon: '💥', unlocked: true, date: '2024-01-20' },
-    { name: '스파링 마스터', nameEn: 'Sparring Master', desc: '스파링 50회 완료', descEn: 'Complete 50 sparring sessions', icon: '🥊', unlocked: true, date: '2024-02-01' },
-    { name: '연승 행진', nameEn: 'Winning Streak', desc: '5연승 달성', descEn: 'Win 5 matches in a row', icon: '🔥', unlocked: true, date: '2024-02-05' },
-    { name: '다이아 복서', nameEn: 'Diamond Boxer', desc: 'Diamond 티어 달성', descEn: 'Reach Diamond rank', icon: '💎', unlocked: true, date: '2024-02-10' },
-    { name: '백전노장', nameEn: 'Century Fighter', desc: '100경기 출전', descEn: 'Fight 100 matches', icon: '💯', unlocked: false, progress: 67 },
-    { name: '전설의 챔피언', nameEn: 'Legendary Champion', desc: 'Master 티어 달성', descEn: 'Reach Master rank', icon: '👑', unlocked: false, progress: 45 },
-    { name: '완벽한 시합', nameEn: 'Perfect Match', desc: '무실점 승리', descEn: 'Win without taking damage', icon: '✨', unlocked: false, progress: 0 }
-  ];
-
-  return (
-    <div className="animate-fade-in-up">
-    <PageHeader 
-      title={t('hi') === '안녕하세요' ? '업적' : 'Achievements'} 
-      description={t('hi') === '안녕하세요' ? '복싱 선수로서의 성취를 확인하세요' : 'Track your accomplishments as a boxer'}
-      onBack={() => setActiveTab('mypage')}
-    >
-      <SpotlightCard className="px-6 py-3">
-        <div className="text-center">
-          <div className="text-sm text-gray-400">{t('hi') === '안녕하세요' ? '달성' : 'Unlocked'}</div>
-          <div className="text-2xl font-bold text-yellow-400">
-            {achievements.filter(a => a.unlocked).length}/{achievements.length}
-          </div>
-        </div>
-      </SpotlightCard>
-    </PageHeader>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {achievements.map((achievement, i) => (
-          <SpotlightCard key={i} className={`p-6 ${achievement.unlocked ? '' : 'opacity-60'}`}>
-            <div className="flex items-start gap-4">
-              <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl ${
-                achievement.unlocked ? 'bg-yellow-500/20' : 'bg-white/5'
-              }`}>
-                {achievement.icon}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-lg font-bold text-white">{t('hi') === '안녕하세요' ? achievement.name : achievement.nameEn}</h3>
-                  {achievement.unlocked && (
-                    <Icon type="star" size={20} className="text-yellow-400" fill="currentColor" />
-                  )}
-                </div>
-                <p className="text-sm text-gray-400 mb-3">{t('hi') === '안녕하세요' ? achievement.desc : achievement.descEn}</p>
-                
-                {achievement.unlocked ? (
-                  <div className="text-xs text-green-400">
-                    {t('hi') === '안녕하세요' ? `달성일: ${achievement.date}` : `Unlocked on ${achievement.date}`}
-                  </div>
-                ) : (
-                  <div>
-                    <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-                      <span>{t('hi') === '안녕하세요' ? '진행도' : 'Progress'}</span>
-                      <span>{achievement.progress}%</span>
-                    </div>
-                    <div className="w-full bg-white/5 rounded-full h-2">
-                      <div 
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
-                        style={{ width: `${achievement.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </SpotlightCard>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-export { MyPageView, EditProfileView, PrivacySettingsView, NotificationsView, AccountSecurityView, ActivityHistoryView, OpponentProfileView, AchievementsView };
+export { MyPageView, EditProfileView, PrivacySettingsView, NotificationsView, AccountSecurityView, ActivityHistoryView, OpponentProfileView };

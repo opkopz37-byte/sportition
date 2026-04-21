@@ -8,8 +8,8 @@ const MyPageView = ({ setActiveTab, t }) => (
       <p className="text-gray-500">{t('manageProfile')}</p>
     </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <SpotlightCard className="col-span-1 md:col-span-2 p-6">
+    <div className="grid grid-cols-1 gap-4 mb-6">
+      <SpotlightCard className="p-6">
         <div className="flex items-start gap-6">
           <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
             <Icon type="user" size={40} />
@@ -28,18 +28,6 @@ const MyPageView = ({ setActiveTab, t }) => (
             </div>
             <p className="text-gray-400 text-sm">빠른 스피드와 정확한 펀치로 링을 지배하는 선수입니다!</p>
           </div>
-        </div>
-      </SpotlightCard>
-
-      <SpotlightCard 
-        className="p-6 cursor-pointer hover:bg-white/[0.02] transition-colors"
-        onClick={() => setActiveTab('mypage-achievements')}
-      >
-        <div className="text-center">
-          <Icon type="trophy" size={32} className="mx-auto mb-3 text-yellow-500" />
-          <div className="text-3xl font-bold text-white mb-1">23</div>
-          <div className="text-sm text-gray-400">{t('totalAchievements')}</div>
-          <div className="text-xs text-blue-400 mt-2">{t('viewAll')} →</div>
         </div>
       </SpotlightCard>
     </div>
@@ -1275,81 +1263,6 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentName }) =
             </div>
           </SpotlightCard>
         </div>
-      </div>
-    </div>
-  );
-};
-
-// Achievements 페이지
-const AchievementsView = ({ setActiveTab, t = (key) => key }) => {
-  const achievements = [
-    { name: '첫 승리', nameEn: 'First Victory', desc: '첫 경기에서 승리하기', descEn: 'Win your first match', icon: '🏆', unlocked: true, date: '2024-01-15' },
-    { name: 'KO 데뷔', nameEn: 'KO Debut', desc: '첫 KO 승리 달성', descEn: 'Score your first KO', icon: '💥', unlocked: true, date: '2024-01-20' },
-    { name: '스파링 마스터', nameEn: 'Sparring Master', desc: '스파링 50회 완료', descEn: 'Complete 50 sparring sessions', icon: '🥊', unlocked: true, date: '2024-02-01' },
-    { name: '연승 행진', nameEn: 'Winning Streak', desc: '5연승 달성', descEn: 'Win 5 matches in a row', icon: '🔥', unlocked: true, date: '2024-02-05' },
-    { name: '다이아 복서', nameEn: 'Diamond Boxer', desc: 'Diamond 티어 달성', descEn: 'Reach Diamond rank', icon: '💎', unlocked: true, date: '2024-02-10' },
-    { name: '백전노장', nameEn: 'Century Fighter', desc: '100경기 출전', descEn: 'Fight 100 matches', icon: '💯', unlocked: false, progress: 67 },
-    { name: '전설의 챔피언', nameEn: 'Legendary Champion', desc: 'Master 티어 달성', descEn: 'Reach Master rank', icon: '👑', unlocked: false, progress: 45 },
-    { name: '완벽한 시합', nameEn: 'Perfect Match', desc: '무실점 승리', descEn: 'Win without taking damage', icon: '✨', unlocked: false, progress: 0 }
-  ];
-
-  return (
-    <div className="animate-fade-in-up">
-    <PageHeader 
-      title={t('hi') === '안녕하세요' ? '업적' : 'Achievements'} 
-      description={t('hi') === '안녕하세요' ? '복싱 선수로서의 성취를 확인하세요' : 'Track your accomplishments as a boxer'}
-      onBack={() => setActiveTab('mypage')}
-    >
-      <SpotlightCard className="px-6 py-3">
-        <div className="text-center">
-          <div className="text-sm text-gray-400">{t('hi') === '안녕하세요' ? '달성' : 'Unlocked'}</div>
-          <div className="text-2xl font-bold text-yellow-400">
-            {achievements.filter(a => a.unlocked).length}/{achievements.length}
-          </div>
-        </div>
-      </SpotlightCard>
-    </PageHeader>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {achievements.map((achievement, i) => (
-          <SpotlightCard key={i} className={`p-6 ${achievement.unlocked ? '' : 'opacity-60'}`}>
-            <div className="flex items-start gap-4">
-              <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl ${
-                achievement.unlocked ? 'bg-yellow-500/20' : 'bg-white/5'
-              }`}>
-                {achievement.icon}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-lg font-bold text-white">{t('hi') === '안녕하세요' ? achievement.name : achievement.nameEn}</h3>
-                  {achievement.unlocked && (
-                    <Icon type="star" size={20} className="text-yellow-400" fill="currentColor" />
-                  )}
-                </div>
-                <p className="text-sm text-gray-400 mb-3">{t('hi') === '안녕하세요' ? achievement.desc : achievement.descEn}</p>
-                
-                {achievement.unlocked ? (
-                  <div className="text-xs text-green-400">
-                    {t('hi') === '안녕하세요' ? `달성일: ${achievement.date}` : `Unlocked on ${achievement.date}`}
-                  </div>
-                ) : (
-                  <div>
-                    <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-                      <span>{t('hi') === '안녕하세요' ? '진행도' : 'Progress'}</span>
-                      <span>{achievement.progress}%</span>
-                    </div>
-                    <div className="w-full bg-white/5 rounded-full h-2">
-                      <div 
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
-                        style={{ width: `${achievement.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </SpotlightCard>
-        ))}
       </div>
     </div>
   );

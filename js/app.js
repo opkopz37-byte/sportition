@@ -144,7 +144,6 @@ function SportitionApp() {
       case 'mypage-notifications': return <NotificationsView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-security': return <AccountSecurityView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-activity': return <ActivityHistoryView setActiveTab={setActiveTab} t={t} />;
-      case 'mypage-achievements': return <AchievementsView setActiveTab={setActiveTab} t={t} />;
       default: return null;
     }
   };

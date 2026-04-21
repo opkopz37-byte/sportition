@@ -2,9 +2,15 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
+import DashboardAttendanceInline from '@/components/views/DashboardAttendanceInline';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 import { computeMatchPoints, getNextTierInfo, getTierRingProgress } from '@/lib/tierLadder';
+
+const dashDevLog = (...args) => {
+  if (process.env.NODE_ENV === 'development') console.log(...args);
+};
+
 // 대시보드 뷰
 
 const LIVE_MATCH_POINTS_SNAPSHOT_KEY = 'sportition_live_match_points_v1';
@@ -108,7 +114,7 @@ function buildLiveRankingNews(leaderboardTop) {
   return rows;
 }
 
-const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' }) => {
+const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common', embeddedInMyPage = false }) => {
   const { profile, user } = useAuth();
   const [statistics, setStatistics] = useState(null);
   const [attendance, setAttendance] = useState([]);
@@ -140,13 +146,13 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
   }, [profile?.match_points, profile?.tier_points, profile?.wins, profile?.draws, profile?.losses]);
 
   useEffect(() => {
-    console.log('[Dashboard] 컴포넌트 마운트/업데이트');
-    console.log('[Dashboard] 프로필 데이터:', profile);
-    console.log('[Dashboard] 사용자 데이터:', user);
+    dashDevLog('[Dashboard] 컴포넌트 마운트/업데이트');
+    dashDevLog('[Dashboard] 프로필 데이터:', profile);
+    dashDevLog('[Dashboard] 사용자 데이터:', user);
 
     const loadUserData = async () => {
       if (user?.id) {
-        console.log('[Dashboard] 사용자 데이터 로드 시작:', user.id);
+        dashDevLog('[Dashboard] 사용자 데이터 로드 시작:', user.id);
         const supabaseModule = await import('@/lib/supabase');
         const {
           getUserStatistics,
@@ -168,21 +174,21 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
         ]);
 
         if (statsResult.data) {
-          console.log('[Dashboard] 통계 데이터 로드:', statsResult.data);
+          dashDevLog('[Dashboard] 통계 데이터 로드:', statsResult.data);
           setStatistics(statsResult.data);
         } else {
           console.warn('[Dashboard] 통계 데이터 없음');
         }
         
         if (attendanceResult.data) {
-          console.log('[Dashboard] 출석 데이터 로드:', attendanceResult.data.length, '건');
+          dashDevLog('[Dashboard] 출석 데이터 로드:', attendanceResult.data.length, '건');
           setAttendance(attendanceResult.data);
         } else {
           console.warn('[Dashboard] 출석 데이터 없음');
         }
 
         if (lbResult.data && lbResult.data.length > 0) {
-          console.log('[Dashboard] 실시간 랭킹(티어보드 연동):', lbResult.data.length, '건');
+          dashDevLog('[Dashboard] 실시간 랭킹(티어보드 연동):', lbResult.data.length, '건');
           setRankingNews(buildLiveRankingNews(lbResult.data));
         } else {
           console.warn('[Dashboard] 랭킹 데이터 없음');
@@ -550,33 +556,33 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
       </div>
     ) : null;
 
-  // ── 체육관 전용 대시보드 ──────────────────────────────────
-  if (role === 'gym' || profile?.role === 'gym') {
+  // ── 체육관 전용 대시보드 (마이페이지에 임베드 — 출석·인사이트·캘린더·관리 메뉴 제외) ──
+  const isGymRole = (r) => r === 'gym' || r === 'admin';
+  if (isGymRole(role) || isGymRole(profile?.role)) {
     return (
-      <>
       <div className="animate-fade-in-up space-y-3 xs:space-y-4 sm:space-y-6">
-        {/* 헤더 */}
-        <div className="mb-4 xs:mb-6 sm:mb-8">
-          <div className="flex items-center gap-2 mb-1.5 xs:mb-2 flex-wrap">
-            <h2 className="text-xl xs:text-2xl sm:text-3xl font-bold text-white">
-              안녕하세요, {profile?.gym_name || profile?.name || '체육관'}!
-            </h2>
-            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
-              체육관
-            </span>
+        {!embeddedInMyPage && (
+          <div className="mb-4 xs:mb-6 sm:mb-8">
+            <div className="flex items-center gap-2 mb-1.5 xs:mb-2 flex-wrap">
+              <h2 className="text-xl xs:text-2xl sm:text-3xl font-bold text-white">
+                {t('hi')}, {profile?.gym_name || profile?.name || '—'}!
+              </h2>
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                {t('gym')}
+              </span>
+            </div>
+            <p className="text-xs xs:text-sm text-gray-500">{t('manageProfile')}</p>
           </div>
-          <p className="text-xs xs:text-sm text-gray-500">오늘의 체육관 현황을 확인하세요</p>
-        </div>
+        )}
 
-        {/* 체육관 정보 카드 */}
         <SpotlightCard className="p-4 xs:p-5 sm:p-6">
-          <div className="flex items-center gap-3 sm:gap-4 pb-4 border-b border-white/5 mb-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <div className="w-14 h-14 xs:w-16 xs:h-16 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-2xl xs:text-3xl shadow-lg flex-shrink-0">
               🏋️
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-lg xs:text-xl sm:text-2xl font-bold text-white truncate">
-                {profile?.gym_name || '체육관'}
+                {profile?.gym_name || profile?.name || '—'}
               </h3>
               <div className="flex flex-col gap-0.5 mt-1">
                 {profile?.gym_location && (
@@ -591,156 +597,60 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
               </div>
             </div>
           </div>
-
-          {/* 출석 통계 */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 xs:gap-3">
-            <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-lg xs:rounded-xl p-3 border border-blue-500/20">
-              <div className="text-[10px] xs:text-xs text-blue-300 mb-1 whitespace-nowrap">오늘 출석</div>
-              <div className="text-xl xs:text-2xl font-bold text-white">{attendance?.length || 0}</div>
-              <div className="text-[9px] xs:text-[10px] text-gray-500">명</div>
-            </div>
-            <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-lg xs:rounded-xl p-3 border border-emerald-500/20">
-              <div className="text-[10px] xs:text-xs text-emerald-300 mb-1 whitespace-nowrap">이달 출석</div>
-              <div className="text-xl xs:text-2xl font-bold text-white">
-                {attendance?.filter(a => {
-                  const d = new Date(a.check_in_time || a.attendance_date);
-                  return d.getMonth() === new Date().getMonth();
-                }).length || 0}
-              </div>
-              <div className="text-[9px] xs:text-[10px] text-gray-500">건</div>
-            </div>
-            <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-purple-500/10 to-purple-600/5 rounded-lg xs:rounded-xl p-3 border border-purple-500/20">
-              <div className="text-[10px] xs:text-xs text-purple-300 mb-1 whitespace-nowrap">스킬 포인트</div>
-              <div className="text-xl xs:text-2xl font-bold text-white">{profile?.skill_points || 0}</div>
-              <div className="text-[9px] xs:text-[10px] text-gray-500">pt</div>
-            </div>
-          </div>
         </SpotlightCard>
 
-        {/* 빠른 관리 메뉴 */}
         <div>
-          <h3 className="text-sm xs:text-base font-bold text-white mb-2 xs:mb-3">빠른 메뉴</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 xs:gap-3">
+          <h3 className="text-sm xs:text-base font-bold text-white mb-2 xs:mb-3">{t('quickActions')}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 xs:gap-3">
             <button
-              onClick={() => setActiveTab('attendance')}
-              className="p-3 xs:p-4 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 rounded-xl transition-all text-left group"
-            >
-              <div className="text-xl xs:text-2xl mb-1.5">📋</div>
-              <div className="text-xs xs:text-sm font-bold text-white">출석 관리</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">회원 출석 확인</div>
-            </button>
-
-            <button
+              type="button"
               onClick={() => setActiveTab('approval')}
               className="p-3 xs:p-4 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/40 rounded-xl transition-all text-left group"
             >
               <div className="text-xl xs:text-2xl mb-1.5">✅</div>
-              <div className="text-xs xs:text-sm font-bold text-white">스킬 승인</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">승인 요청 처리</div>
+              <div className="text-xs xs:text-sm font-bold text-white">{t('approval')}</div>
+              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">{t('homeSkillApproval')}</div>
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('players')}
               className="p-3 xs:p-4 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 rounded-xl transition-all text-left group"
             >
               <div className="text-xl xs:text-2xl mb-1.5">👥</div>
-              <div className="text-xs xs:text-sm font-bold text-white">회원 관리</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">선수 목록 확인</div>
+              <div className="text-xs xs:text-sm font-bold text-white">{t('members')}</div>
+              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">{t('homeMemberList')}</div>
             </button>
 
             <button
-              onClick={() => setActiveTab('insights')}
-              className="p-3 xs:p-4 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 hover:border-orange-500/40 rounded-xl transition-all text-left group"
-            >
-              <div className="text-xl xs:text-2xl mb-1.5">📊</div>
-              <div className="text-xs xs:text-sm font-bold text-white">코치 인사이트</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">훈련 분석 보기</div>
-            </button>
-
-            <button
+              type="button"
               onClick={() => setActiveTab('match')}
               className="p-3 xs:p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 rounded-xl transition-all text-left group"
             >
               <div className="text-xl xs:text-2xl mb-1.5">🥊</div>
-              <div className="text-xs xs:text-sm font-bold text-white">경기 관리</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">경기 일정 확인</div>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('admin')}
-              className="p-3 xs:p-4 bg-gray-500/10 hover:bg-gray-500/20 border border-gray-500/20 hover:border-gray-500/40 rounded-xl transition-all text-left group"
-            >
-              <div className="text-xl xs:text-2xl mb-1.5">⚙️</div>
-              <div className="text-xs xs:text-sm font-bold text-white">관리자 설정</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">체육관 설정</div>
+              <div className="text-xs xs:text-sm font-bold text-white">{t('matchRoom')}</div>
+              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">{t('homeSparring')}</div>
             </button>
           </div>
         </div>
-
-        {/* 출석 캘린더 - 체육관도 확인 가능 */}
-        <SpotlightCard className="p-4 xs:p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-3 xs:mb-4">
-            <h3 className="text-sm xs:text-base font-bold text-white">출석 캘린더</h3>
-            <div className="flex items-center gap-1.5 xs:gap-2">
-              <button
-                onClick={() => {
-                  if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(y => y - 1); }
-                  else setCurrentMonth(m => m - 1);
-                }}
-                className="w-6 h-6 xs:w-7 xs:h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all text-xs"
-              >‹</button>
-              <span className="text-xs xs:text-sm font-bold text-white whitespace-nowrap">
-                {currentYear}년 {currentMonth + 1}월
-              </span>
-              <button
-                onClick={() => {
-                  if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); }
-                  else setCurrentMonth(m => m + 1);
-                }}
-                className="w-6 h-6 xs:w-7 xs:h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all text-xs"
-              >›</button>
-            </div>
-          </div>
-          <div className="grid grid-cols-7 gap-0.5 xs:gap-1">
-            {['월','화','수','목','금','토','일'].map(d => (
-              <div key={d} className="text-center text-[9px] xs:text-[10px] text-gray-500 py-1 font-medium">{d}</div>
-            ))}
-            {calendarDays.map((day, i) => (
-              <button
-                type="button"
-                key={i}
-                disabled={!day}
-                onClick={() => day && handleCalendarDayClick(day)}
-                className={`aspect-square flex items-center justify-center rounded-md xs:rounded-lg text-[10px] xs:text-xs font-medium transition-all
-                  ${!day ? 'invisible' :
-                    attendanceDays.includes(day) ? 'bg-purple-500/30 text-purple-300 border border-purple-500/30 hover:bg-purple-500/40' :
-                    isTodayCell(day) ? 'bg-white/10 text-white border border-white/20 hover:bg-white/15' :
-                    'text-gray-400 hover:bg-white/10'
-                  }`}
-              >
-                {day}
-              </button>
-            ))}
-          </div>
-        </SpotlightCard>
       </div>
-      {calendarDayModal}
-      </>
     );
   }
   // ── 체육관 전용 대시보드 끝 ──────────────────────────────
 
   return (
     <div className="animate-fade-in-up space-y-3 xs:space-y-4 sm:space-y-6">
-      {/* 헤더 */}
-      <div className="mb-4 xs:mb-6 sm:mb-8">
-        <div className="flex items-center gap-1.5 xs:gap-2 mb-1.5 xs:mb-2 flex-wrap">
-          <h2 className="text-xl xs:text-2xl sm:text-3xl font-bold text-white">
-            {t('hi')}, {profile?.nickname || profile?.name || '사용자'} {profile?.role ? t(profile.role) : ''}!
-          </h2>
+      {/* 헤더 — 마이페이지에 넣을 때는 상단 제목과 중복되므로 생략 */}
+      {!embeddedInMyPage && (
+        <div className="mb-4 xs:mb-6 sm:mb-8">
+          <div className="flex items-center gap-1.5 xs:gap-2 mb-1.5 xs:mb-2 flex-wrap">
+            <h2 className="text-xl xs:text-2xl sm:text-3xl font-bold text-white">
+              {t('hi')}, {profile?.nickname || profile?.name || '사용자'} {profile?.role ? t(profile.role) : ''}!
+            </h2>
+          </div>
+          <p className="text-xs xs:text-sm text-gray-500">{t('todayActivity')}</p>
         </div>
-        <p className="text-xs xs:text-sm text-gray-500">{t('todayActivity')}</p>
-      </div>
+      )}
 
       {/* 실시간 랭킹 헤드라인 */}
       {rankingNews.length > 0 && (
@@ -1042,151 +952,9 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
           </SpotlightCard>
         </div>
 
-        {/* 오른쪽: Training Days Calendar */}
-        <div>
-          <SpotlightCard className="p-6 bg-[#1a1a1a] h-full">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-white">{t('trainingDays')}</h3>
-              <button 
-                onClick={() => setCalendarViewMode(calendarViewMode === 'day' ? 'month' : 'day')}
-                className="flex items-center gap-2 px-3 py-1 rounded-lg hover:bg-white/5 transition-colors"
-              >
-                <span className="text-sm text-gray-400">
-                  {calendarViewMode === 'day' ? `${currentYear}${t('year')} ${monthNames[lang][currentMonth]}` : `${currentYear}${t('year')}`}
-                </span>
-                <Icon type="calendar" size={16} className="text-gray-400" />
-              </button>
-            </div>
-
-            {/* 월 선택 모드 */}
-            {calendarViewMode === 'month' && (
-              <div className="animate-fade-in">
-                {/* 년도 네비게이션 */}
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/5">
-                  <button 
-                    onClick={() => setCurrentYear(currentYear - 1)}
-                    className="p-2 hover:bg-white/5 rounded-lg transition-colors"
-                  >
-                    <Icon type="chevronLeft" size={20} className="text-gray-400" />
-                  </button>
-                  <span className="text-xl font-bold text-white">{currentYear}{t('year')}</span>
-                  <button 
-                    onClick={() => setCurrentYear(currentYear + 1)}
-                    className="p-2 hover:bg-white/5 rounded-lg transition-colors"
-                  >
-                    <Icon type="chevronRight" size={20} className="text-gray-400" />
-                  </button>
-                </div>
-
-                {/* 12개월 선택 */}
-                <div className="grid grid-cols-3 gap-3">
-                  {monthNames[lang].map((month, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setCurrentMonth(idx);
-                        setCalendarViewMode('day');
-                      }}
-                      className={`p-4 rounded-lg transition-all ${
-                        currentMonth === idx
-                          ? 'bg-blue-500 text-white font-bold shadow-lg scale-105'
-                          : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white hover:scale-105'
-                      }`}
-                    >
-                      {month}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 일별 달력 모드 */}
-            {calendarViewMode === 'day' && (
-              <div className="animate-fade-in">
-                {/* 요일 헤더 */}
-                <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
-                  {daysOfWeek[lang].map((day, i) => (
-                    <div key={i} className="text-center text-[10px] sm:text-xs text-gray-500 font-medium">
-                      {day}
-                    </div>
-                  ))}
-                </div>
-                
-                {/* 날짜 그리드 */}
-                <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-4 sm:mb-6">
-                  {calendarDays.map((day, i) => {
-                    const todayCell = day && isTodayCell(day);
-                    const hasWorkout = workoutDays.includes(day);
-                    const hasAttendance = attendanceDays.includes(day);
-                    const hasMatch = day && matchDaysInMonth.has(day);
-                    const hasSkill = day && skillDaysInMonth.has(day);
-
-                    return (
-                      <button
-                        type="button"
-                        key={i}
-                        onClick={() => day && handleCalendarDayClick(day)}
-                        disabled={!day}
-                        className={`aspect-square flex items-center justify-center text-xs sm:text-sm rounded-lg transition-all relative ${
-                          day === null
-                            ? 'invisible'
-                            : todayCell
-                            ? 'bg-blue-500 text-white font-bold cursor-pointer hover:bg-blue-600 shadow-lg ring-2 ring-blue-400/50'
-                            : hasWorkout
-                            ? 'bg-yellow-400/80 text-black font-bold cursor-pointer hover:bg-yellow-500 shadow-md'
-                            : hasAttendance
-                            ? 'bg-emerald-500/70 text-white font-medium cursor-pointer hover:bg-emerald-600 shadow-md'
-                            : 'text-gray-300 hover:bg-white/10 cursor-pointer hover:text-white'
-                        }`}
-                      >
-                        {day}
-                        {todayCell && (
-                          <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-white animate-pulse" />
-                        )}
-                        {day && hasMatch && (
-                          <div
-                            className="absolute bottom-0.5 left-0.5 sm:bottom-1 sm:left-1 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-red-500"
-                            title={t('calendarLegendMatch')}
-                          />
-                        )}
-                        {day && hasSkill && (
-                          <div
-                            className="absolute bottom-0.5 right-0.5 sm:bottom-1 sm:right-1 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-violet-400"
-                            title={t('calendarLegendSkill')}
-                          />
-                        )}
-                        {!todayCell && hasWorkout && !hasMatch && !hasSkill && (
-                          <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 transform -translate-x-1/2 w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full bg-black" />
-                        )}
-                        {!todayCell && hasAttendance && !hasWorkout && (
-                          <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 transform -translate-x-1/2 w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full bg-white" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="space-y-2 text-xs pt-4 border-t border-white/5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-lg bg-blue-500 ring-2 ring-blue-400/50" />
-                    <span className="text-gray-400">{t('currentDay')}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-lg bg-yellow-400/80" />
-                    <span className="text-gray-400">{lang === 'ko' ? '출석(트레이닝)' : 'Attendance'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 inline-block rounded-full bg-red-500" />
-                    <span className="text-gray-400">{t('calendarLegendMatch')}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 inline-block rounded-full bg-violet-400" />
-                    <span className="text-gray-400">{t('calendarLegendSkill')}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </SpotlightCard>
+        {/* 오른쪽: 출석 (대시보드 전용 컴팩트 레이아웃) */}
+        <div className="min-h-[280px] lg:min-h-0">
+          <DashboardAttendanceInline t={t} />
         </div>
       </div>
 
@@ -1196,7 +964,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
         <div>
           <SpotlightCard 
             className="p-3 xs:p-4 sm:p-6 bg-[#1a1a1a] cursor-pointer hover:bg-[#1e1e1e] transition-all"
-            onClick={() => setActiveTab && setActiveTab('dashboard-steps')}
+            onClick={() => setActiveTab && setActiveTab('ranking')}
           >
             <div className="mb-3 xs:mb-4">
               <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white mb-0.5 xs:mb-1">{t('tierPoints')}</h3>
@@ -1401,8 +1169,6 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common' 
           </SpotlightCard>
         </div>
       </div>
-
-      {calendarDayModal}
     </div>
   );
 };

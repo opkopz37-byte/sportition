@@ -3,21 +3,21 @@
 import { PageHeader, SpotlightCard, Icon } from '@/components/ui';
 
 /**
- * 로드맵 > 스킬 정보 — 스킬 시스템 설명·가이드라인 전용 (인터랙티브 트리는 액티브 스킬 탭)
+ * 로드맵 > 스킬 정보 — 스킬 시스템 설명·가이드라인 전용 (인터랙티브 트리는 스킬 탭)
  */
 const SkillTreeView = ({ t = (key) => key, setActiveTab }) => {
   return (
     <div className="animate-fade-in-up space-y-4 xs:space-y-6">
       <PageHeader
         title={t('skillTree')}
-        description="액티브 스킬·스킬 트리·진영을 이해하고 빌드를 설계할 때 참고하세요"
+        description="스킬·스킬 트리·진영을 이해하고 빌드를 설계할 때 참고하세요"
       >
         <button
           type="button"
-          onClick={() => setActiveTab('roadmap-active-skills')}
+          onClick={() => setActiveTab('skills')}
           className="px-3 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-sm font-bold text-white shadow-lg shadow-violet-900/30 transition-all"
         >
-          액티브 스킬 트리 열기
+          스킬 트리 열기
         </button>
       </PageHeader>
 
@@ -88,7 +88,7 @@ const SkillTreeView = ({ t = (key) => key, setActiveTab }) => {
             자식 노드에 포인트를 쓸 수 있습니다.
           </li>
           <li>
-            <span className="text-gray-300">액티브 스킬</span> 화면에서 맵을 드래그·휠·핀치로 이동·확대할 수 있습니다.
+            <span className="text-gray-300">스킬</span> 화면에서 맵을 드래그·휠·핀치로 이동·확대할 수 있습니다.
           </li>
           <li>
             <span className="text-gray-300">스킬 포인트</span>는 출석이 기록될 때마다 쌓입니다. 부족하면 출석을 이어가며
@@ -109,8 +109,8 @@ const SkillTreeView = ({ t = (key) => key, setActiveTab }) => {
             <dd className="text-gray-300">트리 상에서 먼저 채워야 다음 노드가 열리는 관계입니다.</dd>
           </div>
           <div>
-            <dt className="text-gray-500 text-xs uppercase tracking-wide mb-0.5">액티브 스킬</dt>
-            <dd className="text-gray-300">트리에서 찍어 둔 노드 구성이 곧 액티브 빌드입니다.</dd>
+            <dt className="text-gray-500 text-xs uppercase tracking-wide mb-0.5">스킬</dt>
+            <dd className="text-gray-300">트리에서 찍어 둔 노드 구성이 곧 빌드입니다.</dd>
           </div>
           <div>
             <dt className="text-gray-500 text-xs uppercase tracking-wide mb-0.5">스타일</dt>
@@ -122,7 +122,7 @@ const SkillTreeView = ({ t = (key) => key, setActiveTab }) => {
       <div className="flex flex-wrap gap-3 justify-center pb-2">
         <button
           type="button"
-          onClick={() => setActiveTab('roadmap-active-skills')}
+          onClick={() => setActiveTab('skills')}
           className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 text-white font-bold text-sm shadow-lg"
         >
           트리에서 찍기

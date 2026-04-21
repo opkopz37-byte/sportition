@@ -110,82 +110,33 @@ const PageHeader = ({ title, description, onBack, children }) => (
 // 메뉴 구조 - 다국어 키 사용
 const getMenuStructure = (t) => ({
   player_common: [
-    { id: 'dashboard', labelKey: 'dashboard', icon: 'dashboard', submenus: [] },
-    { id: 'attendance', labelKey: 'attendance', icon: 'calendar', submenus: [] },
-    { 
-      id: 'roadmap', 
-      labelKey: 'roadmap', 
-      icon: 'map', 
-      alert: true,
-      submenus: [
-        { id: 'skill-tree', labelKey: 'skillTree' },
-        { id: 'active-skills', labelKey: 'activeSkills' }
-      ]
-    },
-    { 
-      id: 'ranking', 
-      labelKey: 'ranking', 
-      icon: 'trophy',
-      submenus: [
-        { id: 'tier-board', labelKey: 'tierBoard' },
-        { id: 'style', labelKey: 'style' },
-        { id: 'regional', labelKey: 'regional' }
-      ]
-    },
-    { 
-      id: 'statistics', 
-      labelKey: 'statistics', 
-      icon: 'chart',
-      submenus: [
-        { id: 'style-stats', labelKey: 'styleStats' },
-        { id: 'tier-stats', labelKey: 'tierStats' }
-      ]
-    },
+    { id: 'home', labelKey: 'appHome', icon: 'home', submenus: [] },
     { id: 'mypage', labelKey: 'myPage', icon: 'user', submenus: [] },
+    { id: 'skills', labelKey: 'skillsNav', icon: 'map', submenus: [] },
+    { id: 'ranking', labelKey: 'ranking', icon: 'trophy', submenus: [] },
   ],
   player_athlete: [
-    { id: 'dashboard', labelKey: 'dashboard', icon: 'dashboard', submenus: [] },
-    { id: 'attendance', labelKey: 'attendance', icon: 'calendar', submenus: [] },
-    {
-      id: 'roadmap',
-      labelKey: 'roadmap',
-      icon: 'map',
-      alert: true,
-      submenus: [
-        { id: 'skill-tree', labelKey: 'skillTree' },
-        { id: 'active-skills', labelKey: 'activeSkills' }
-      ]
-    },
-    {
-      id: 'ranking',
-      labelKey: 'ranking',
-      icon: 'trophy',
-      submenus: [
-        { id: 'tier-board', labelKey: 'tierBoard' },
-        { id: 'style', labelKey: 'style' },
-        { id: 'regional', labelKey: 'regional' }
-      ]
-    },
-    {
-      id: 'statistics',
-      labelKey: 'statistics',
-      icon: 'chart',
-      submenus: [
-        { id: 'style-stats', labelKey: 'styleStats' },
-        { id: 'tier-stats', labelKey: 'tierStats' }
-      ]
-    },
+    { id: 'home', labelKey: 'appHome', icon: 'home', submenus: [] },
     { id: 'mypage', labelKey: 'myPage', icon: 'user', submenus: [] },
+    { id: 'skills', labelKey: 'skillsNav', icon: 'map', submenus: [] },
+    { id: 'ranking', labelKey: 'ranking', icon: 'trophy', submenus: [] },
   ],
   gym: [
-    { id: 'dashboard', labelKey: 'dashboard', icon: 'home', submenus: [] },
-    { id: 'attendance', labelKey: 'attendance', icon: 'calendar', submenus: [] },
+    { id: 'home', labelKey: 'appHome', icon: 'home', submenus: [] },
     { id: 'approval', labelKey: 'approval', icon: 'checkCircle', submenus: [] },
     { id: 'players', labelKey: 'members', icon: 'users', submenus: [] },
     { id: 'match', labelKey: 'matchRoom', icon: 'trophy', submenus: [] },
-    { id: 'admin', labelKey: 'management', icon: 'settings', submenus: [] },
+    { id: 'ranking', labelKey: 'ranking', icon: 'chart', submenus: [] },
     { id: 'mypage', labelKey: 'myPage', icon: 'user', submenus: [] },
-  ]
+  ],
+  admin: [
+    { id: 'home', labelKey: 'appHome', icon: 'home', submenus: [] },
+    { id: 'approval', labelKey: 'approval', icon: 'checkCircle', submenus: [] },
+    { id: 'players', labelKey: 'members', icon: 'users', submenus: [] },
+    { id: 'match', labelKey: 'matchRoom', icon: 'trophy', submenus: [] },
+    { id: 'ranking', labelKey: 'ranking', icon: 'chart', submenus: [] },
+    { id: 'mypage', labelKey: 'myPage', icon: 'user', submenus: [] },
+  ],
 });
 
 // SpotlightCard 컴포넌트

@@ -6,10 +6,17 @@ import { useAuth } from '@/lib/AuthContext';
 import { searchPublicPlayerProfiles } from '@/lib/supabase';
 
 // 네비게이션 메뉴 아이템
+const navItemIsActive = (item, activeTab) => {
+  if (activeTab === item.id) return true;
+  if (item.id === 'mypage' && typeof activeTab === 'string' && activeTab.startsWith('mypage')) return true;
+  return false;
+};
+
 const NavMenuItem = ({ item, activeTab, setActiveTab, theme, t }) => {
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef(null);
   const hasSubmenus = item.submenus && item.submenus.length > 0;
+  const itemActive = navItemIsActive(item, activeTab);
 
   const handleMouseEnter = () => {
 if (timeoutRef.current) {
@@ -42,10 +49,10 @@ return () => {
     type="button"
     onClick={() => !hasSubmenus && setActiveTab(item.id)}
     className={`shrink-0 whitespace-nowrap px-[clamp(0.5rem,1.5vw,1rem)] py-[clamp(0.375rem,1vw,0.5rem)] rounded-lg text-[clamp(0.75rem,calc(0.9vw+0.4rem),0.875rem)] font-medium transition-all duration-200 flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] relative ${
-      activeTab === item.id ? 'text-white bg-white/5' : 'text-gray-500 hover:text-gray-300'
+      itemActive ? 'text-white bg-white/5' : 'text-gray-500 hover:text-gray-300'
     }`}
   >
-    <Icon type={item.icon} className={`w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0 ${activeTab === item.id ? `text-${theme.accent}-400` : ''}`} />
+    <Icon type={item.icon} className={`w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0 ${itemActive ? `text-${theme.accent}-400` : ''}`} />
     <span className="whitespace-nowrap">{t(item.labelKey)}</span>
     {item.alert && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full" />}
   </button>
@@ -75,6 +82,12 @@ const Navbar = ({ role, activeTab, setActiveTab, onLogout, language, setLanguage
   const isPlayerRole = role === 'player_common' || role === 'player_athlete';
   const theme = role === 'player_common' ? THEME_ATHLETE : (role === 'player_athlete' ? THEME_COACH : THEME_GYM);
   const menuItems = getMenuStructure(t)[role] || [];
+  /** 홈·랭킹에서는 상단 선수 검색 숨김 (그 외 탭에서는 표시) */
+  const hideNavbarSearch =
+    activeTab === 'home' ||
+    activeTab === 'ranking' ||
+    (typeof activeTab === 'string' && activeTab.startsWith('ranking-'));
+  const showNavbarSearch = isPlayerRole && !hideNavbarSearch;
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -119,6 +132,7 @@ return () => document.removeEventListener('mousedown', handleClickOutside);
   const MobileMenuItem = ({ item, depth = 0, activeTab, setActiveTab, setShowMobileMenu, theme, t }) => {
 const hasSubmenus = item.submenus && item.submenus.length > 0;
 const [isExpanded, setIsExpanded] = useState(false);
+const itemActive = navItemIsActive(item, activeTab);
 
 return (
   <div className={depth > 0 ? 'ml-3 sm:ml-4' : ''}>
@@ -132,7 +146,7 @@ return (
         }
       }}
       className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
-        activeTab === item.id 
+        itemActive 
           ? (theme.accent === 'blue' 
               ? 'bg-blue-500/20 text-blue-400 font-bold' 
               : 'bg-emerald-500/20 text-emerald-400 font-bold')
@@ -188,7 +202,7 @@ return (
         <Icon type={showMobileMenu ? "x" : "menu"} size={18} />
       </button>
 
-      <div className="flex items-center gap-[clamp(0.25rem,1.2vw,0.5rem)] font-bold text-white tracking-tight cursor-pointer min-w-0 shrink-0" onClick={() => setActiveTab(menuItems[0]?.id || 'dashboard')}>
+      <div className="flex items-center gap-[clamp(0.25rem,1.2vw,0.5rem)] font-bold text-white tracking-tight cursor-pointer min-w-0 shrink-0" onClick={() => setActiveTab(menuItems[0]?.id || 'mypage')}>
         <div className={`rounded-lg flex items-center justify-center shrink-0 w-[clamp(1.375rem,3.5vw,1.75rem)] h-[clamp(1.375rem,3.5vw,1.75rem)] ${
           theme.accent === 'blue' 
             ? 'bg-blue-500/20 text-blue-500' 
@@ -216,18 +230,7 @@ return (
     </div>
 
     <div className="flex items-center gap-[clamp(0.25rem,1.5vw,0.75rem)] min-w-0 flex-1 sm:flex-1 justify-end flex-wrap sm:flex-nowrap w-full min-[520px]:w-auto overflow-visible">
-      {role === 'gym' && (
-        <button
-          onClick={() => window.open('/attendance', '_blank', 'width=1920,height=1080,toolbar=no,location=no,status=no,menubar=no,scrollbars=no')}
-          className="relative p-1.5 rounded-lg transition-colors text-gray-400 hover:text-white hover:bg-white/5 group"
-          title="출석체크 키오스크 열기"
-        >
-          <Icon type="clipboard" size={16} className="sm:w-[18px] sm:h-[18px]" />
-          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-green-500 rounded-full border border-black animate-pulse" />
-        </button>
-      )}
-
-      {isPlayerRole && (
+      {showNavbarSearch ? (
         <div className="relative flex-1 min-w-0 max-w-none min-[520px]:max-w-md xl:max-w-lg 2xl:max-w-xl" ref={searchRef}>
           <div className="relative w-full">
             <input
@@ -312,7 +315,7 @@ return (
             </div>
           )}
         </div>
-      )}
+      ) : null}
       
       <div className="relative" ref={langRef}>
         <button 
@@ -460,7 +463,7 @@ return (
           </button>
         </div>
 
-        {isPlayerRole && (
+        {showNavbarSearch ? (
           <div className="p-3 border-b border-white/10">
             <div className="relative">
               <input
@@ -542,7 +545,7 @@ return (
               </div>
             )}
           </div>
-        )}
+        ) : null}
 
         <div className="py-1">
           {menuItems.map(item => (
