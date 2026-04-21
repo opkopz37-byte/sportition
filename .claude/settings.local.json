@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const fs=require\\('fs'\\);const files=['lib/supabase.js','lib/AuthContext.js','components/views/dashboard.js','components/views/coach.js','next.config.js','lib/logger.js'];for\\(const f of files\\){try{require.resolve\\('./'+f\\);console.log\\('OK',f\\);}catch\\(e\\){console.log\\('ERR',f,e.message\\);}}\")"
+    ]
+  }
+}
