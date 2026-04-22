@@ -456,11 +456,22 @@ function mapGymMemberRow(row) {
     memoRaw.replace(/^주소:\s*[^\n]+\n?/, '').trim() ||
     (memoRaw && !addrMatch ? memoRaw : '—');
 
+  const membershipTypeKey = ['basic', 'standard', 'premium'].includes(row.membership_type)
+    ? row.membership_type
+    : 'basic';
+  const genderKey = row.gender === 'female' ? 'female' : 'male';
+  const birthDateIso = priv?.birth_date ? String(priv.birth_date).slice(0, 10) : '';
+
   return {
     id: row.id,
     gymUserId: row.gym_user_id || null,
     userRole: row.role || 'player_common',
     name: displayName,
+    nameRaw: row.name || null,
+    nicknameRaw: row.nickname || null,
+    membershipTypeKey,
+    genderKey,
+    birthDateIso,
     status: hasActivity ? 'active' : 'inactive',
     tier: row.tier || '—',
     level: 0,
@@ -884,8 +895,185 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState(null);
+  /** 'info' | 'edit' | 'attendance' */
+  const [memberDetailMode, setMemberDetailMode] = useState('info');
+  const [attendanceRows, setAttendanceRows] = useState([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState(null);
+  const [memberEditSaving, setMemberEditSaving] = useState(false);
+  const [memberEditForm, setMemberEditForm] = useState(null);
+  const [deleteStep, setDeleteStep] = useState(0);
+  const [deleteEmailInput, setDeleteEmailInput] = useState('');
+  const [deletingMember, setDeletingMember] = useState(false);
+  const [actionMessage, setActionMessage] = useState(null);
 
   const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
+
+  const openMemberEditForm = (m) => {
+    if (!m) return;
+    setMemberEditForm({
+      displayName: (m.nicknameRaw || m.nameRaw || m.name || '').trim() || '',
+      phone: m.phone && m.phone !== '—' ? m.phone : '',
+      birthDate: m.birthDateIso || '',
+      gender: m.genderKey || 'male',
+      height: m.height != null ? String(m.height) : '',
+      weight: m.weight != null ? String(m.weight) : '',
+      membership_type: m.membershipTypeKey || 'basic',
+      address: m.address && m.address !== '—' ? m.address : '',
+      notes: m.notes && m.notes !== '—' ? m.notes : '',
+      representative_phone: m.emergencyContact && m.emergencyContact !== '—' ? m.emergencyContact : '',
+    });
+    setMemberDetailMode('edit');
+    setActionMessage(null);
+  };
+
+  const openAttendancePanel = async (m) => {
+    if (!m?.id) return;
+    setMemberDetailMode('attendance');
+    setAttendanceRows([]);
+    setAttendanceError(null);
+    setAttendanceLoading(true);
+    try {
+      const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
+      if (typeof isSupabaseConfigured === 'function' && !isSupabaseConfigured()) {
+        setAttendanceError('Supabase가 설정되지 않았습니다.');
+        setAttendanceLoading(false);
+        return;
+      }
+      const supa = getSupabase();
+      const { data: sessionData } = await supa.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        setAttendanceError('로그인이 필요합니다.');
+        setAttendanceLoading(false);
+        return;
+      }
+      const res = await fetch(`/api/gym-members/${encodeURIComponent(m.id)}/attendance`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAttendanceError(json.error || '출석 기록을 불러오지 못했습니다.');
+        setAttendanceRows([]);
+      } else {
+        setAttendanceRows(Array.isArray(json.rows) ? json.rows : []);
+      }
+    } catch (e) {
+      setAttendanceError(e.message || '출석 기록을 불러오지 못했습니다.');
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  const saveMemberEdit = async () => {
+    if (!selectedMember?.id || !memberEditForm) return;
+    setMemberEditSaving(true);
+    setActionMessage(null);
+    try {
+      const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
+      if (typeof isSupabaseConfigured === 'function' && !isSupabaseConfigured()) {
+        setActionMessage({ type: 'err', text: 'Supabase가 설정되지 않았습니다.' });
+        return;
+      }
+      const supa = getSupabase();
+      const { data: sessionData } = await supa.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        setActionMessage({ type: 'err', text: '로그인이 필요합니다.' });
+        return;
+      }
+      const d = memberEditForm.displayName.trim();
+      if (!d) {
+        setActionMessage({ type: 'err', text: '이름(표시)을 입력해 주세요.' });
+        return;
+      }
+      const res = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: d,
+          nickname: d,
+          phone: memberEditForm.phone || null,
+          birth_date: memberEditForm.birthDate || null,
+          gender: memberEditForm.gender,
+          height: memberEditForm.height ? parseInt(memberEditForm.height, 10) : null,
+          weight: memberEditForm.weight ? parseFloat(memberEditForm.weight) : null,
+          membership_type: memberEditForm.membership_type,
+          address: memberEditForm.address,
+          notes: memberEditForm.notes,
+          representative_phone: memberEditForm.representative_phone,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: json.error || '저장에 실패했습니다.' });
+        return;
+      }
+      setActionMessage({ type: 'ok', text: '저장되었습니다.' });
+      setMemberDetailMode('info');
+      setMemberEditForm(null);
+      await loadMembers();
+    } catch (e) {
+      setActionMessage({ type: 'err', text: e.message || '저장에 실패했습니다.' });
+    } finally {
+      setMemberEditSaving(false);
+    }
+  };
+
+  const runDeleteMember = async () => {
+    if (!selectedMember?.id) return;
+    if (deleteEmailInput.trim().toLowerCase() !== (selectedMember.email || '').toLowerCase()) {
+      setActionMessage({ type: 'err', text: '이메일이 일치하지 않습니다.' });
+      return;
+    }
+    setDeletingMember(true);
+    setActionMessage(null);
+    try {
+      const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
+      if (typeof isSupabaseConfigured === 'function' && !isSupabaseConfigured()) {
+        setActionMessage({ type: 'err', text: 'Supabase가 설정되지 않았습니다.' });
+        return;
+      }
+      const supa = getSupabase();
+      const { data: sessionData } = await supa.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        setActionMessage({ type: 'err', text: '로그인이 필요합니다.' });
+        return;
+      }
+      const res = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: json.error || '삭제에 실패했습니다.' });
+        return;
+      }
+      setSelectedMember(null);
+      setDeleteStep(0);
+      setDeleteEmailInput('');
+      setMemberDetailMode('info');
+      await loadMembers();
+    } catch (e) {
+      setActionMessage({ type: 'err', text: e.message || '삭제에 실패했습니다.' });
+    } finally {
+      setDeletingMember(false);
+    }
+  };
+
+  const closeMemberModal = () => {
+    setSelectedMember(null);
+    setMemberDetailMode('info');
+    setDeleteStep(0);
+    setDeleteEmailInput('');
+    setMemberEditForm(null);
+    setActionMessage(null);
+    setAttendanceRows([]);
+  };
 
   const loadMembers = useCallback(async () => {
     if (!gymName) {
@@ -1167,8 +1355,14 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     </div>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setSelectedMember(member)}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMemberDetailMode('info');
+                    setDeleteStep(0);
+                    setActionMessage(null);
+                    setSelectedMember(member);
+                  }}
                   className="w-full sm:w-auto px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white/5 hover:bg-white/10 rounded-lg text-[11px] sm:text-xs text-white transition-all whitespace-nowrap"
                 >
                   {t('viewDetails')}
@@ -1181,12 +1375,19 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
 
       {/* 회원 상세보기 모달 */}
       {selectedMember && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 xs:p-3 sm:p-4 animate-fade-in overflow-y-auto"
-          onClick={() => setSelectedMember(null)}
+          onClick={() => {
+            if (deleteStep > 0) {
+              setDeleteStep(0);
+              setDeleteEmailInput('');
+            } else {
+              closeMemberModal();
+            }
+          }}
         >
-          <div 
-            className="bg-[#0A0A0A] border border-white/20 rounded-2xl max-w-[calc(100vw-16px)] xs:max-w-[calc(100vw-24px)] sm:max-w-4xl w-full max-h-[95vh] xs:max-h-[92vh] sm:max-h-[90vh] flex flex-col my-auto"
+          <div
+            className="relative bg-[#0A0A0A] border border-white/20 rounded-2xl max-w-[calc(100vw-16px)] xs:max-w-[calc(100vw-24px)] sm:max-w-4xl w-full max-h-[95vh] xs:max-h-[92vh] sm:max-h-[90vh] flex flex-col my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* 모달 헤더 */}
@@ -1199,9 +1400,11 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 mb-0.5 xs:mb-1 flex-wrap">
                       <h2 className="text-sm xs:text-base sm:text-xl lg:text-2xl font-bold text-white whitespace-nowrap">{selectedMember.name}</h2>
-                      <span className={`px-1 xs:px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] xs:text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
-                        selectedMember.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
-                      }`}>
+                      <span
+                        className={`px-1 xs:px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] xs:text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
+                          selectedMember.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                        }`}
+                      >
                         {selectedMember.status === 'active' ? '활동중' : '휴면'}
                       </span>
                       <span className="px-1 xs:px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] xs:text-[9px] sm:text-[10px] font-bold bg-purple-500/20 text-purple-400 whitespace-nowrap">
@@ -1213,8 +1416,9 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     </div>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setSelectedMember(null)}
+                <button
+                  type="button"
+                  onClick={closeMemberModal}
                   className="w-7 h-7 xs:w-8 xs:h-8 sm:w-10 sm:h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
                 >
                   <span className="text-base xs:text-lg sm:text-xl">✕</span>
@@ -1222,139 +1426,464 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
               </div>
             </div>
 
+            {actionMessage?.text && (
+              <div
+                className={`mx-2.5 xs:mx-3 sm:mx-5 mt-2 xs:mt-2.5 rounded-lg px-3 py-2 text-xs sm:text-sm ${
+                  actionMessage.type === 'ok' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'
+                }`}
+              >
+                {actionMessage.text}
+              </div>
+            )}
+
             {/* 모달 내용 */}
             <div className="p-2.5 xs:p-3 sm:p-5 overflow-y-auto flex-1 min-h-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 xs:gap-3 sm:gap-5">
-                {/* 기본 정보 */}
-                <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
-                  <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
-                    <span className="text-xs xs:text-sm sm:text-base">📋</span>
-                    <span>기본 정보</span>
-                  </h3>
-                  <div className="space-y-1 xs:space-y-1.5 sm:space-y-2">
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">이메일</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium overflow-hidden text-ellipsis text-right">{selectedMember.email}</span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">회원 DB ID</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-mono break-all text-right">{selectedMember.id}</span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">체육관 연동</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium text-right max-w-[60%]">
-                        {selectedMember.gymUserId
-                          ? selectedMember.gymUserId === profile?.id
-                            ? '이 체육관 계정과 연동'
-                            : '다른 체육관 계정'
-                          : '이름만 일치(레거시)'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">연락처</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.phone}</span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">생년월일</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.birthDate}</span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">성별</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.gender}</span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">가입일</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.joinDate}</span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">주소</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium overflow-hidden text-ellipsis text-right">{selectedMember.address}</span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">비상연락처</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.emergencyContact}</span>
-                    </div>
-                    <div className="flex justify-between py-1 xs:py-1.5 gap-2">
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">최근 방문</span>
-                      <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.lastVisit}</span>
-                    </div>
-                  </div>
-                </SpotlightCard>
-
-                {/* 신체 정보 */}
-                <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
-                  <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
-                    <span className="text-xs xs:text-sm sm:text-base">💪</span>
-                    <span>신체 정보</span>
-                  </h3>
-                  <div className="space-y-1.5 xs:space-y-2 sm:space-y-3">
-                    <div className="p-1.5 xs:p-2 sm:p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400">체중</span>
-                        <span className="text-sm xs:text-base sm:text-xl font-bold text-blue-400">
-                          {selectedMember.weight != null ? `${selectedMember.weight}kg` : '—'}
+              {memberDetailMode === 'info' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 xs:gap-3 sm:gap-5">
+                  <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
+                    <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
+                      <span className="text-xs xs:text-sm sm:text-base">📋</span>
+                      <span>기본 정보</span>
+                    </h3>
+                    <div className="space-y-1 xs:space-y-1.5 sm:space-y-2">
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">이메일</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium overflow-hidden text-ellipsis text-right">
+                          {selectedMember.email}
                         </span>
                       </div>
-                    </div>
-                    <div className="p-1.5 xs:p-2 sm:p-3 bg-purple-500/10 rounded-lg border border-purple-500/30">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400">신장</span>
-                        <span className="text-sm xs:text-base sm:text-xl font-bold text-purple-400">
-                          {selectedMember.height != null ? `${selectedMember.height}cm` : '—'}
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">회원 DB ID</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-mono break-all text-right">{selectedMember.id}</span>
+                      </div>
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">체육관 연동</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium text-right max-w-[60%]">
+                          {selectedMember.gymUserId
+                            ? selectedMember.gymUserId === profile?.id
+                              ? '이 체육관 계정과 연동'
+                              : '다른 체육관 계정'
+                            : '이름만 일치(레거시)'}
                         </span>
                       </div>
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">연락처</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.phone}</span>
+                      </div>
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">생년월일</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.birthDate}</span>
+                      </div>
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">성별</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.gender}</span>
+                      </div>
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">가입일</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.joinDate}</span>
+                      </div>
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">주소</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium overflow-hidden text-ellipsis text-right">{selectedMember.address}</span>
+                      </div>
+                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">비상연락처</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.emergencyContact}</span>
+                      </div>
+                      <div className="flex justify-between py-1 xs:py-1.5 gap-2">
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">최근 방문</span>
+                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.lastVisit}</span>
+                      </div>
                     </div>
-                    <div className="p-1.5 xs:p-2 sm:p-3 bg-white/5 rounded-lg">
-                      <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 mb-1">특이사항</div>
-                      <div className="text-[9px] xs:text-[10px] sm:text-xs text-white">{selectedMember.notes}</div>
-                    </div>
-                  </div>
-                </SpotlightCard>
+                  </SpotlightCard>
 
-                {/* 최근 활동 */}
-                <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
-                  <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
-                    <span className="text-xs xs:text-sm sm:text-base">📊</span>
-                    <span>최근 활동</span>
-                  </h3>
-                  <div className="space-y-1 xs:space-y-1.5 sm:space-y-2">
-                    {selectedMember.recentRecords.length > 0 ? (
-                      selectedMember.recentRecords.map((record, idx) => (
-                        <div key={idx} className="p-1.5 xs:p-2 bg-white/5 rounded-lg">
-                          <div className="flex items-center gap-1 xs:gap-1.5 mb-0.5 flex-wrap">
-                            <span className={`px-1 xs:px-1.5 py-0.5 rounded text-[8px] xs:text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
-                              record.type === '운동' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
-                            }`}>
-                              {record.type}
-                            </span>
-                            <span className="text-[8px] xs:text-[9px] sm:text-[10px] text-gray-400 whitespace-nowrap">{record.date}</span>
-                          </div>
-                          <div className="text-[9px] xs:text-[10px] sm:text-xs text-white overflow-hidden text-ellipsis">{record.detail}</div>
+                  <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
+                    <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
+                      <span className="text-xs xs:text-sm sm:text-base">💪</span>
+                      <span>신체 정보</span>
+                    </h3>
+                    <div className="space-y-1.5 xs:space-y-2 sm:space-y-3">
+                      <div className="p-1.5 xs:p-2 sm:p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400">체중</span>
+                          <span className="text-sm xs:text-base sm:text-xl font-bold text-blue-400">
+                            {selectedMember.weight != null ? `${selectedMember.weight}kg` : '—'}
+                          </span>
                         </div>
-                      ))
-                    ) : (
-                      <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500 text-center py-2 xs:py-3">최근 활동이 없습니다</div>
-                    )}
+                      </div>
+                      <div className="p-1.5 xs:p-2 sm:p-3 bg-purple-500/10 rounded-lg border border-purple-500/30">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400">신장</span>
+                          <span className="text-sm xs:text-base sm:text-xl font-bold text-purple-400">
+                            {selectedMember.height != null ? `${selectedMember.height}cm` : '—'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-1.5 xs:p-2 sm:p-3 bg-white/5 rounded-lg">
+                        <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 mb-1">특이사항</div>
+                        <div className="text-[9px] xs:text-[10px] sm:text-xs text-white">{selectedMember.notes}</div>
+                      </div>
+                    </div>
+                  </SpotlightCard>
+
+                  <SpotlightCard className="p-2.5 xs:p-3 sm:p-5 sm:col-span-2">
+                    <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
+                      <span className="text-xs xs:text-sm sm:text-base">📊</span>
+                      <span>최근 활동</span>
+                    </h3>
+                    <div className="space-y-1 xs:space-y-1.5 sm:space-y-2">
+                      {selectedMember.recentRecords.length > 0 ? (
+                        selectedMember.recentRecords.map((record, idx) => (
+                          <div key={idx} className="p-1.5 xs:p-2 bg-white/5 rounded-lg">
+                            <div className="flex items-center gap-1 xs:gap-1.5 mb-0.5 flex-wrap">
+                              <span
+                                className={`px-1 xs:px-1.5 py-0.5 rounded text-[8px] xs:text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
+                                  record.type === '운동' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
+                                }`}
+                              >
+                                {record.type}
+                              </span>
+                              <span className="text-[8px] xs:text-[9px] sm:text-[10px] text-gray-400 whitespace-nowrap">{record.date}</span>
+                            </div>
+                            <div className="text-[9px] xs:text-[10px] sm:text-xs text-white overflow-hidden text-ellipsis">{record.detail}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500 text-center py-2 xs:py-3">최근 활동이 없습니다</div>
+                      )}
+                    </div>
+                  </SpotlightCard>
+                </div>
+              )}
+
+              {memberDetailMode === 'edit' && memberEditForm && (
+                <div className="space-y-3 sm:space-y-4 max-w-2xl">
+                  <p className="text-xs sm:text-sm text-gray-400">회원 프로필을 수정합니다. (로그인 이메일은 변경할 수 없습니다.)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    <label className="sm:col-span-2 block">
+                      <span className="text-xs text-gray-500 mb-1 block">이름(표시)</span>
+                      <input
+                        value={memberEditForm.displayName}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, displayName: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs text-gray-500 mb-1 block">연락처</span>
+                      <input
+                        value={memberEditForm.phone}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, phone: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs text-gray-500 mb-1 block">생년월일</span>
+                      <input
+                        type="date"
+                        value={memberEditForm.birthDate}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, birthDate: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white [color-scheme:dark]"
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs text-gray-500 mb-1 block">성별</span>
+                      <select
+                        value={memberEditForm.gender}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, gender: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                      >
+                        <option value="male">남성</option>
+                        <option value="female">여성</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="text-xs text-gray-500 mb-1 block">멤버십</span>
+                      <select
+                        value={memberEditForm.membership_type}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, membership_type: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                      >
+                        <option value="basic">베이직</option>
+                        <option value="standard">스탠다드</option>
+                        <option value="premium">프리미엄</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="text-xs text-gray-500 mb-1 block">신장(cm)</span>
+                      <input
+                        value={memberEditForm.height}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, height: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                        inputMode="numeric"
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs text-gray-500 mb-1 block">체중(kg)</span>
+                      <input
+                        value={memberEditForm.weight}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, weight: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                        inputMode="decimal"
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="text-xs text-gray-500 mb-1 block">주소</span>
+                      <input
+                        value={memberEditForm.address}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, address: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="text-xs text-gray-500 mb-1 block">특이사항(메모)</span>
+                      <textarea
+                        value={memberEditForm.notes}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, notes: e.target.value } : f))}
+                        rows={3}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="text-xs text-gray-500 mb-1 block">비상 연락처</span>
+                      <input
+                        value={memberEditForm.representative_phone}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, representative_phone: e.target.value } : f))}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
                   </div>
-                </SpotlightCard>
-              </div>
+                </div>
+              )}
+
+              {memberDetailMode === 'attendance' && (
+                <div>
+                  {attendanceLoading && <div className="py-8 text-center text-gray-400">불러오는 중…</div>}
+                  {attendanceError && <div className="py-4 text-center text-red-400 text-sm">{attendanceError}</div>}
+                  {!attendanceLoading && !attendanceError && (
+                    <div className="overflow-x-auto rounded-xl border border-white/10">
+                      <table className="min-w-full text-left text-xs sm:text-sm">
+                        <thead>
+                          <tr className="border-b border-white/10 bg-white/5">
+                            <th className="px-3 py-2 font-bold text-gray-300">출석일</th>
+                            <th className="px-3 py-2 font-bold text-gray-300">체크인 시각</th>
+                            <th className="px-3 py-2 font-bold text-gray-300">위치/메모</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attendanceRows.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="px-3 py-6 text-center text-gray-500">
+                                출석 기록이 없습니다.
+                              </td>
+                            </tr>
+                          ) : (
+                            attendanceRows.map((row) => (
+                              <tr key={row.id} className="border-b border-white/5">
+                                <td className="px-3 py-2 text-white tabular-nums">
+                                  {row.attendance_date || '—'}
+                                </td>
+                                <td className="px-3 py-2 text-gray-300">
+                                  {row.check_in_time
+                                    ? new Date(row.check_in_time).toLocaleString('ko-KR', {
+                                        month: '2-digit',
+                                        day: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })
+                                    : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-gray-400">{row.location || '—'}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 모달 푸터 */}
-            <div className="p-2 xs:p-3 sm:p-4 border-t border-white/10 bg-white/5 flex gap-1.5 xs:gap-2 sm:gap-3 flex-shrink-0">
-              <button className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all">
-                정보 수정
-              </button>
-              <button className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all">
-                출석 기록
-              </button>
-              <button 
-                onClick={() => setSelectedMember(null)}
-                className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all"
-              >
-                닫기
-              </button>
-            </div>
+            {memberDetailMode === 'info' && (
+              <div className="p-2 xs:p-3 sm:p-4 border-t border-white/10 bg-white/5 flex flex-col xs:flex-row gap-1.5 xs:gap-2 sm:gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionMessage(null);
+                    openMemberEditForm(selectedMember);
+                  }}
+                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all"
+                >
+                  정보 수정
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionMessage(null);
+                    openAttendancePanel(selectedMember);
+                  }}
+                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all"
+                >
+                  출석 기록
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionMessage(null);
+                    setDeleteEmailInput('');
+                    setDeleteStep(1);
+                  }}
+                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-red-500/20 hover:bg-red-500/35 text-red-300 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all border border-red-500/30"
+                >
+                  회원 삭제
+                </button>
+                <button
+                  type="button"
+                  onClick={closeMemberModal}
+                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all"
+                >
+                  닫기
+                </button>
+              </div>
+            )}
+
+            {memberDetailMode === 'edit' && (
+              <div className="p-2 xs:p-3 sm:p-4 border-t border-white/10 bg-white/5 flex gap-1.5 xs:gap-2 sm:gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMemberDetailMode('info');
+                    setMemberEditForm(null);
+                    setActionMessage(null);
+                  }}
+                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={saveMemberEdit}
+                  disabled={memberEditSaving}
+                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm disabled:opacity-50"
+                >
+                  {memberEditSaving ? '저장 중…' : '저장'}
+                </button>
+              </div>
+            )}
+
+            {memberDetailMode === 'attendance' && (
+              <div className="p-2 xs:p-3 sm:p-4 border-t border-white/10 bg-white/5 flex gap-1.5 xs:gap-2 sm:gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMemberDetailMode('info');
+                    setAttendanceError(null);
+                  }}
+                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm"
+                >
+                  상세로 돌아가기
+                </button>
+                <button
+                  type="button"
+                  onClick={closeMemberModal}
+                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm"
+                >
+                  닫기
+                </button>
+              </div>
+            )}
+
+            {/* 삭제 확인: 1단계 경고 → 2단계 이메일 입력 */}
+            {deleteStep > 0 && (
+              <div className="absolute inset-0 z-40 flex items-center justify-center p-3 sm:p-6 rounded-2xl bg-black/80 backdrop-blur-sm">
+                <div
+                  className="w-full max-w-md rounded-2xl border border-red-500/40 bg-[#111] p-4 sm:p-6 shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {deleteStep === 1 && (
+                    <>
+                      <h3 className="text-lg font-bold text-red-300 mb-2">회원을 삭제하시겠습니까?</h3>
+                      <p className="text-sm text-gray-300 leading-relaxed mb-1">
+                        이 작업은 <strong className="text-white">되돌릴 수 없습니다</strong>. 해당 회원의 로그인 계정이 삭제되고, 연동된
+                        서비스 데이터가 함께 제거될 수 있습니다.
+                      </p>
+                      <p className="text-xs text-amber-200/90 mb-4">신중히 결정한 뒤에만 진행해 주세요.</p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteStep(0);
+                            setDeleteEmailInput('');
+                          }}
+                          className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteStep(2);
+                            setDeleteEmailInput('');
+                            setActionMessage(null);
+                          }}
+                          className="flex-1 py-2.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white text-sm font-bold"
+                        >
+                          정말 삭제하기
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {deleteStep === 2 && (
+                    <>
+                      <h3 className="text-lg font-bold text-red-300 mb-2">최종 확인</h3>
+                      <p className="text-sm text-gray-300 mb-2">
+                        삭제를 확정하려면 아래에 이 회원의 <strong className="text-white">이메일 주소</strong>를{' '}
+                        <span className="text-amber-200">한 글자도 틀리지 않게</span> 입력하세요.
+                      </p>
+                      <p className="text-xs text-gray-500 font-mono break-all mb-3 rounded bg-white/5 px-2 py-1.5 border border-white/10">
+                        {selectedMember.email}
+                      </p>
+                      <input
+                        type="text"
+                        value={deleteEmailInput}
+                        onChange={(e) => setDeleteEmailInput(e.target.value)}
+                        placeholder="이메일 전체를 입력"
+                        className="w-full rounded-lg border border-red-500/40 bg-black/40 px-3 py-2.5 text-sm text-white placeholder-gray-500 mb-3"
+                        autoComplete="off"
+                      />
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteStep(1);
+                            setDeleteEmailInput('');
+                            setActionMessage(null);
+                          }}
+                          className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold"
+                        >
+                          이전
+                        </button>
+                        <button
+                          type="button"
+                          onClick={runDeleteMember}
+                          disabled={
+                            deletingMember ||
+                            deleteEmailInput.trim().toLowerCase() !== (selectedMember.email || '').toLowerCase()
+                          }
+                          className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold"
+                        >
+                          {deletingMember ? '삭제 중…' : '영구 삭제 실행'}
+                        </button>
+                      </div>
+                      {actionMessage?.type === 'err' && actionMessage.text && (
+                        <p className="text-red-300 text-xs mt-3 text-center break-words">{actionMessage.text}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
