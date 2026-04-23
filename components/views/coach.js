@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
+import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 import {
@@ -426,6 +427,34 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab }) => (
   </div>
 );
 
+/** 전화번호에 자동으로 하이픈 포맷을 적용한다 (숫자만 추출 후 한국 형식으로 분할) */
+function formatPhoneNumber(value) {
+  if (value == null) return '';
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return '';
+  // 휴대전화(010/011/016/017/018/019) - 11자리
+  if (/^(010|011|016|017|018|019)/.test(digits)) {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+  }
+  // 서울(02)
+  if (digits.startsWith('02')) {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+  }
+  // 기타 지역 (0XX)
+  if (/^0\d\d/.test(digits)) {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+  }
+  return digits;
+}
+
 /** users + statistics 조인 행 → 회원관리 UI 객체 */
 function mapGymMemberRow(row) {
   const stats = row.statistics || {};
@@ -478,7 +507,7 @@ function mapGymMemberRow(row) {
     rankLabel: '',
     attendance: totalAttendance,
     lastVisit: '—',
-    phone: priv?.phone || '—',
+    phone: priv?.phone ? formatPhoneNumber(priv.phone) : '—',
     membershipType: membershipKo,
     email: row.email || '—',
     birthDate: birthStr,
@@ -487,7 +516,7 @@ function mapGymMemberRow(row) {
     height: row.height != null ? row.height : null,
     joinDate,
     address: addressDisplay,
-    emergencyContact: priv?.representative_phone || '—',
+    emergencyContact: priv?.representative_phone ? formatPhoneNumber(priv.representative_phone) : '—',
     notes: notesDisplay,
     wins,
     losses,
@@ -595,30 +624,43 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
     }
   };
 
+  const cancelRegistration = () => {
+    setNewMemberForm({ ...NEW_MEMBER_FORM_INITIAL });
+    setEmailCheckStatus('idle');
+    setActiveTab('players');
+  };
+
   return (
-    <div className="animate-fade-in-up max-w-4xl mx-auto w-full">
-      <PageHeader
-        title={t('newMemberRegistration')}
-        description="새로운 회원의 정보를 입력하세요"
-        onBack={() => setActiveTab('players')}
-      />
+    <div className="animate-fade-in-up w-full">
+      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
+          {t('newMemberRegistration')}
+        </h2>
+        <button
+          type="button"
+          onClick={cancelRegistration}
+          disabled={registeringMember}
+          className="flex-shrink-0 px-4 py-2 text-base sm:text-lg font-bold text-gray-300 hover:text-white transition-colors disabled:opacity-50"
+        >
+          취소
+        </button>
+      </div>
 
       {!gymName && (
         <SpotlightCard className="p-4 mb-4 border border-amber-500/30 bg-amber-500/10">
-          <p className="text-sm text-amber-200">체육관명이 프로필에 없습니다. 마이페이지에서 체육관명을 설정한 뒤 다시 시도해 주세요.</p>
+          <p className="text-base text-amber-200">체육관명이 프로필에 없습니다. 마이페이지에서 체육관명을 설정한 뒤 다시 시도해 주세요.</p>
         </SpotlightCard>
       )}
 
       <div className="space-y-6 sm:space-y-8 pb-8">
         <div>
-          <h3 className="text-base sm:text-2xl font-bold text-white mb-3 sm:mb-6 flex items-center gap-2">
-            <span>📋</span>
+          <h3 className="text-2xl sm:text-3xl font-bold text-white mb-5 sm:mb-6 flex items-center gap-2">
             <span>기본 정보</span>
             <span className="text-red-400">*</span>
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">
                 이름 <span className="text-red-400">*</span>
               </label>
               <input
@@ -626,11 +668,11 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
                 value={newMemberForm.name}
                 onChange={(e) => setNewMemberForm({ ...newMemberForm, name: e.target.value })}
                 placeholder="홍길동"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-base sm:text-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all"
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">
                 이메일 (아이디) <span className="text-red-400">*</span>
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -642,7 +684,7 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
                     setEmailCheckStatus('idle');
                   }}
                   placeholder="example@email.com"
-                  className="flex-1 min-w-0 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                  className="flex-1 min-w-0 px-4 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-base sm:text-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all"
                   autoComplete="email"
                 />
                 <button
@@ -669,43 +711,43 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
                       alert('이미 사용 중인 이메일입니다. 다른 이메일을 입력해 주세요.');
                     }
                   }}
-                  className="shrink-0 px-4 py-3 rounded-xl border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+                  className="shrink-0 px-5 py-4 rounded-xl border border-white/15 bg-white/10 hover:bg-white/15 text-white text-base sm:text-lg font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
                 >
                   {emailCheckStatus === 'checking' ? '확인 중…' : '중복 확인'}
                 </button>
               </div>
               {emailCheckStatus === 'available' && (
-                <p className="text-xs text-emerald-400 mt-1.5">사용 가능한 이메일입니다.</p>
+                <p className="text-base text-emerald-400 mt-2 font-medium">사용 가능한 이메일입니다.</p>
               )}
               {emailCheckStatus === 'taken' && (
-                <p className="text-xs text-red-400 mt-1.5">이미 등록된 이메일입니다.</p>
+                <p className="text-base text-red-400 mt-2 font-medium">이미 등록된 이메일입니다.</p>
               )}
             </div>
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">
                 연락처 <span className="text-red-400">*</span>
               </label>
               <input
                 type="tel"
                 value={newMemberForm.phone}
-                onChange={(e) => setNewMemberForm({ ...newMemberForm, phone: e.target.value })}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, phone: formatPhoneNumber(e.target.value) })}
                 placeholder="010-1234-5678"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-base sm:text-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all"
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">
                 생년월일 <span className="text-red-400">*</span>
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[10px] text-gray-500 mb-1">연도</label>
+                  <label className="block text-sm font-medium text-gray-200 mb-2">연도</label>
                   <select
                     value={newMemberForm.birthYear}
                     onChange={(e) =>
                       setNewMemberForm({ ...newMemberForm, birthYear: e.target.value })
                     }
-                    className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-all text-sm"
+                    className="w-full px-2 sm:px-3 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all text-base sm:text-lg"
                   >
                     <option value="">선택</option>
                     {BIRTH_YEAR_OPTIONS.map((y) => (
@@ -716,13 +758,13 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] text-gray-500 mb-1">월</label>
+                  <label className="block text-sm font-medium text-gray-200 mb-2">월</label>
                   <select
                     value={newMemberForm.birthMonth}
                     onChange={(e) =>
                       setNewMemberForm({ ...newMemberForm, birthMonth: e.target.value })
                     }
-                    className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-all text-sm"
+                    className="w-full px-2 sm:px-3 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all text-base sm:text-lg"
                   >
                     <option value="">선택</option>
                     {MONTH_OPTIONS.map((mo) => (
@@ -733,13 +775,13 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] text-gray-500 mb-1">일</label>
+                  <label className="block text-sm font-medium text-gray-200 mb-2">일</label>
                   <select
                     value={newMemberForm.birthDay}
                     onChange={(e) =>
                       setNewMemberForm({ ...newMemberForm, birthDay: e.target.value })
                     }
-                    className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-all text-sm"
+                    className="w-full px-2 sm:px-3 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all text-base sm:text-lg"
                   >
                     <option value="">선택</option>
                     {BIRTH_DAY_OPTIONS.map((day) => (
@@ -752,13 +794,13 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
               </div>
             </div>
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">
                 성별 <span className="text-red-400">*</span>
               </label>
               <select
                 value={newMemberForm.gender}
                 onChange={(e) => setNewMemberForm({ ...newMemberForm, gender: e.target.value })}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-base sm:text-lg text-white focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all"
               >
                 <option value="남성">남성</option>
                 <option value="여성">여성</option>
@@ -768,115 +810,65 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
         </div>
 
         <div>
-          <h3 className="text-base sm:text-2xl font-bold text-white mb-3 sm:mb-6 flex items-center gap-2">
-            <span>💪</span>
-            <span>신체 정보</span>
-          </h3>
+          <h3 className="text-2xl sm:text-3xl font-bold text-white mb-5 sm:mb-6">신체 정보</h3>
           <div className="grid grid-cols-2 gap-4 sm:gap-6">
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">체중 (kg)</label>
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">체중 (kg)</label>
               <input
                 type="number"
                 value={newMemberForm.weight}
                 onChange={(e) => setNewMemberForm({ ...newMemberForm, weight: e.target.value })}
                 placeholder="70"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-base sm:text-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all"
               />
             </div>
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">신장 (cm)</label>
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">신장 (cm)</label>
               <input
                 type="number"
                 value={newMemberForm.height}
                 onChange={(e) => setNewMemberForm({ ...newMemberForm, height: e.target.value })}
                 placeholder="175"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-base sm:text-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all"
               />
             </div>
           </div>
         </div>
 
         <div>
-          <h3 className="text-base sm:text-2xl font-bold text-white mb-3 sm:mb-6 flex items-center gap-2">
-            <span>📞</span>
-            <span>연락 정보</span>
-          </h3>
+          <h3 className="text-2xl sm:text-3xl font-bold text-white mb-5 sm:mb-6">연락 정보</h3>
           <div className="grid grid-cols-1 gap-4 sm:gap-6">
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">주소</label>
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">주소</label>
               <input
                 type="text"
                 value={newMemberForm.address}
                 onChange={(e) => setNewMemberForm({ ...newMemberForm, address: e.target.value })}
                 placeholder="서울시 강남구"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-base sm:text-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all"
               />
             </div>
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">비상연락처</label>
+              <label className="block text-base sm:text-lg font-bold text-white mb-2.5">비상연락처</label>
               <input
                 type="tel"
                 value={newMemberForm.emergencyContact}
-                onChange={(e) => setNewMemberForm({ ...newMemberForm, emergencyContact: e.target.value })}
+                onChange={(e) => setNewMemberForm({ ...newMemberForm, emergencyContact: formatPhoneNumber(e.target.value) })}
                 placeholder="010-9876-5432"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                className="w-full px-4 py-4 bg-white/[0.07] border border-white/15 rounded-xl text-base sm:text-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all"
               />
             </div>
           </div>
         </div>
 
-        <div>
-          <h3 className="text-base sm:text-2xl font-bold text-white mb-3 sm:mb-6 flex items-center gap-2">
-            <span>📝</span>
-            <span>특이사항</span>
-          </h3>
-          <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-2">메모</label>
-            <textarea
-              value={newMemberForm.notes}
-              onChange={(e) => setNewMemberForm({ ...newMemberForm, notes: e.target.value })}
-              placeholder="부상 이력, 특별 주의사항 등을 입력하세요..."
-              rows={4}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all resize-y min-h-[6rem]"
-            />
-          </div>
-        </div>
-
-        <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
-          <div className="flex items-start gap-3">
-            <span className="text-blue-400 text-xl flex-shrink-0">ℹ️</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-blue-400 font-bold text-sm mb-1">회원 등록 안내</div>
-              <div className="text-xs sm:text-sm text-gray-400">
-                • <span className="text-red-400">*</span> 표시된 항목은 필수 입력 항목입니다.
-                <br />
-                • 회원 등록 후 초기 비밀번호는 생년월일(YYYYMMDD)로 설정됩니다.
-                <br />• 회원에게 초기 비밀번호 변경을 안내해 주세요.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              setNewMemberForm({ ...NEW_MEMBER_FORM_INITIAL });
-              setEmailCheckStatus('idle');
-              setActiveTab('players');
-            }}
-            className="flex-1 py-4 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-base transition-all disabled:opacity-50"
-            disabled={registeringMember}
-          >
-            취소
-          </button>
+        <div className="pt-2">
           <button
             type="button"
             onClick={handleRegisterNewMember}
             disabled={registeringMember || !gymName}
-            className="flex-1 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl font-bold text-base transition-all shadow-lg shadow-blue-500/30 disabled:opacity-50"
+            className="w-full py-5 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl font-bold text-lg sm:text-xl transition-all shadow-lg shadow-blue-500/30 disabled:opacity-50"
           >
-            {registeringMember ? '등록 중…' : '✓ 등록 완료'}
+            {registeringMember ? '등록 중…' : '등록 완료'}
           </button>
         </div>
       </div>
@@ -888,9 +880,7 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
 const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
   const { profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all'); // all, active, inactive
-  /** 'all' | 'athlete' — 모든 회원 vs 선수(player_athlete)만 */
-  const [memberRoleScope, setMemberRoleScope] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all'); // all | active | inactive | athlete
   const [selectedMember, setSelectedMember] = useState(null); // 상세보기 모달용
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(true);
@@ -903,6 +893,8 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
   const [memberEditSaving, setMemberEditSaving] = useState(false);
   const [memberEditForm, setMemberEditForm] = useState(null);
   const [deleteStep, setDeleteStep] = useState(0);
+  const [showResetPw, setShowResetPw] = useState(false);
+  const [resettingPw, setResettingPw] = useState(false);
   const [deleteEmailInput, setDeleteEmailInput] = useState('');
   const [deletingMember, setDeletingMember] = useState(false);
   const [actionMessage, setActionMessage] = useState(null);
@@ -1065,6 +1057,41 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
     }
   };
 
+  const runResetPassword = async () => {
+    if (!selectedMember?.id) return;
+    setResettingPw(true);
+    setActionMessage(null);
+    try {
+      const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
+      if (typeof isSupabaseConfigured === 'function' && !isSupabaseConfigured()) {
+        setActionMessage({ type: 'err', text: 'Supabase가 설정되지 않았습니다.' });
+        return;
+      }
+      const supa = getSupabase();
+      const { data: sessionData } = await supa.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        setActionMessage({ type: 'err', text: '로그인이 필요합니다.' });
+        return;
+      }
+      const res = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}/reset-password`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: json.error || '비밀번호 초기화에 실패했습니다.' });
+        return;
+      }
+      setShowResetPw(false);
+      setActionMessage({ type: 'ok', text: '비밀번호가 123456으로 초기화되었습니다.' });
+    } catch (e) {
+      setActionMessage({ type: 'err', text: e.message || '비밀번호 초기화에 실패했습니다.' });
+    } finally {
+      setResettingPw(false);
+    }
+  };
+
   const closeMemberModal = () => {
     setSelectedMember(null);
     setMemberDetailMode('info');
@@ -1073,6 +1100,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
     setMemberEditForm(null);
     setActionMessage(null);
     setAttendanceRows([]);
+    setShowResetPw(false);
   };
 
   const loadMembers = useCallback(async () => {
@@ -1177,36 +1205,30 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
     });
   }, [members]);
 
-  const scopeMembers = useMemo(() => {
-    if (memberRoleScope === 'athlete') {
-      return members.filter((m) => m.userRole === 'player_athlete');
-    }
-    return members;
-  }, [members, memberRoleScope]);
-
-  const filteredMembers = scopeMembers.filter((m) => {
+  const filteredMembers = members.filter((m) => {
     const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || m.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    let matchesFilter = true;
+    if (filterStatus === 'active') matchesFilter = m.status === 'active';
+    else if (filterStatus === 'inactive') matchesFilter = m.status === 'inactive';
+    else if (filterStatus === 'athlete') matchesFilter = m.userRole === 'player_athlete';
+    return matchesSearch && matchesFilter;
   });
 
   return (
     <div className="animate-fade-in-up">
-      <PageHeader 
-        title={t('members')} 
-        description={t('viewAndManageMembers')}
-        onBack={() => setActiveTab('home')}
-      >
-        <button 
+      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
+          {t('members')}
+        </h2>
+        <button
           type="button"
           onClick={() => setActiveTab('gym-register-member')}
-          className="px-3 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold rounded-xl transition-all hover:scale-105 flex items-center gap-1 sm:gap-2 text-sm sm:text-base"
+          className="flex-shrink-0 px-3 py-2 sm:px-5 sm:py-2.5 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold rounded-xl transition-all hover:scale-105 flex items-center gap-1 sm:gap-2 text-sm sm:text-base"
         >
           <span>+</span>
-          <span className="hidden xs:inline">{t('newMemberRegistration')}</span>
-          <span className="xs:hidden">신규등록</span>
+          <span>신규등록</span>
         </button>
-      </PageHeader>
+      </div>
 
       {!gymName && (
         <SpotlightCard className="p-4 mb-4 border border-amber-500/30 bg-amber-500/10">
@@ -1217,166 +1239,115 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
         </SpotlightCard>
       )}
 
-      {/* 검색 및 필터 */}
-      <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4">
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="flex-1 w-full min-w-0 max-w-none">
-            <div className="flex w-full min-h-[3rem] sm:min-h-[3.25rem] items-center rounded-xl border border-white/10 bg-white/5 pl-3 sm:pl-4 pr-1 py-1 focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/25">
-              <input
-                id="coach-member-search"
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t('searchMemberName')}
-                className="flex-1 min-w-0 bg-transparent border-0 py-2.5 sm:py-3 pr-2 text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-sm sm:text-base"
-              />
-              <button
-                type="button"
-                className="shrink-0 rounded-lg m-0.5 px-3 sm:px-5 py-2 sm:py-2.5 text-sm font-medium text-white bg-white/10 hover:bg-white/15 border border-white/10"
-                aria-label={t('search')}
-              >
-                {t('search')}
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-1.5 sm:gap-2">
-            {[
-              { key: 'all', label: t('allMembers') },
-              { key: 'active', label: t('activeMembers') },
-              { key: 'inactive', label: t('dormant') },
-            ].map((filter) => (
-              <button
-                key={filter.key}
-                type="button"
-                onClick={() => setFilterStatus(filter.key)}
-                className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold transition-all text-[11px] sm:text-sm whitespace-nowrap ${
-                  filterStatus === filter.key
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
+      {/* 통계 숫자 인라인 */}
+      <div className="flex items-start gap-6 sm:gap-10 mb-6 sm:mb-8 px-1">
+        <div>
+          <div className="text-sm sm:text-base font-semibold text-gray-300 mb-1.5">{t('totalMembersCount')}</div>
+          <div className="text-4xl sm:text-5xl font-black text-white tabular-nums leading-none">{members.length}</div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">구분</span>
-          <div className="flex flex-wrap gap-1.5 sm:gap-2">
-            {[
-              { key: 'all', label: t('memberScopeAll') },
-              { key: 'athlete', label: t('memberScopeAthletes') },
-            ].map((row) => (
-              <button
-                key={row.key}
-                type="button"
-                onClick={() => setMemberRoleScope(row.key)}
-                className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold transition-all text-[11px] sm:text-sm whitespace-nowrap ${
-                  memberRoleScope === row.key
-                    ? 'bg-purple-500/90 text-white'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                }`}
-              >
-                {row.label}
-              </button>
-            ))}
-          </div>
+        <div className="h-14 sm:h-16 w-px bg-white/10 mt-1" />
+        <div>
+          <div className="text-sm sm:text-base font-semibold text-gray-300 mb-1.5">{t('activeMembers')}</div>
+          <div className="text-3xl sm:text-4xl font-bold text-emerald-400 tabular-nums leading-none">{members.filter((m) => m.status === 'active').length}</div>
+        </div>
+        <div>
+          <div className="text-sm sm:text-base font-semibold text-gray-300 mb-1.5">{t('dormant')}</div>
+          <div className="text-3xl sm:text-4xl font-bold text-gray-400 tabular-nums leading-none">{members.filter((m) => m.status === 'inactive').length}</div>
         </div>
       </div>
 
-      {/* 선수 통계 — 선택한 구분(모든 회원 / 선수) 기준, DB 갱신 시 자동 반영 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-5">
-        <SpotlightCard className="p-2.5 sm:p-3">
-          <div className="text-center">
-            <div className="text-xl sm:text-2xl font-bold text-white mb-0.5">{scopeMembers.length}</div>
-            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{t('totalMembersCount')}</div>
-          </div>
-        </SpotlightCard>
-        <SpotlightCard className="p-2.5 sm:p-3">
-          <div className="text-center">
-            <div className="text-xl sm:text-2xl font-bold text-emerald-400 mb-0.5">{scopeMembers.filter((m) => m.status === 'active').length}</div>
-            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{t('activeMembers')}</div>
-          </div>
-        </SpotlightCard>
-        <SpotlightCard className="p-2.5 sm:p-3">
-          <div className="text-center">
-            <div className="text-xl sm:text-2xl font-bold text-red-400 mb-0.5">{scopeMembers.filter((m) => m.status === 'inactive').length}</div>
-            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{t('dormant')}</div>
-          </div>
-        </SpotlightCard>
-        <SpotlightCard className="p-2.5 sm:p-3">
-          <div className="text-center">
-            <div className="text-xl sm:text-2xl font-bold text-purple-400 mb-0.5">{scopeMembers.filter((m) => m.membershipType === '프리미엄').length}</div>
-            <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{t('premium')}</div>
-          </div>
-        </SpotlightCard>
+      {/* 검색 바 */}
+      <div className="mb-3 sm:mb-4 relative">
+        <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          id="coach-member-search"
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={t('searchMemberName')}
+          className="w-full pl-12 pr-4 py-3.5 bg-white/[0.04] border border-white/10 rounded-2xl text-white placeholder-gray-500 focus:outline-none focus:border-white/25 focus:bg-white/[0.06] transition-all text-base"
+        />
       </div>
 
-      {/* 회원 목록 */}
-      <SpotlightCard className="overflow-hidden">
-        <div className="divide-y divide-white/5">
-          {membersLoading && (
-            <div className="p-12 text-center text-gray-400">회원 정보를 불러오는 중...</div>
-          )}
-          {!membersLoading && membersError && (
-            <div className="p-12 text-center text-red-400">{membersError}</div>
-          )}
-          {!membersLoading && !membersError && !gymName && (
-            <div className="p-12 text-center text-gray-400">체육관 이름이 없어 목록을 불러올 수 없습니다.</div>
-          )}
-          {!membersLoading && !membersError && gymName && filteredMembers.length === 0 && (
-            <div className="p-12 text-center text-gray-400">
-              이 체육관(<span className="text-white font-medium">{gymName}</span>)에 소속으로 등록된 회원이 없습니다. 회원 프로필의 소속 체육관명이 정확히 일치하는지 확인하세요.
+      {/* 필터 칩 */}
+      <div className="flex gap-2 mb-5 sm:mb-6 overflow-x-auto pb-1 -mx-1 px-1">
+        {[
+          { key: 'all', label: t('allMembers') },
+          { key: 'active', label: t('activeMembers') },
+          { key: 'inactive', label: t('dormant') },
+          { key: 'athlete', label: t('memberScopeAthletes') },
+        ].map((filter) => (
+          <button
+            key={filter.key}
+            type="button"
+            onClick={() => setFilterStatus(filter.key)}
+            className={`px-4 py-2.5 rounded-full font-semibold transition-all text-sm sm:text-base whitespace-nowrap flex-shrink-0 ${
+              filterStatus === filter.key
+                ? 'bg-white text-black'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 회원 목록 - 카드 형태로 완전히 재구성 */}
+      <div className="space-y-2.5">
+        {membersLoading && (
+          <div className="py-16 text-center text-gray-400 text-base">회원 정보를 불러오는 중...</div>
+        )}
+        {!membersLoading && membersError && (
+          <div className="py-16 text-center text-red-400 text-base">{membersError}</div>
+        )}
+        {!membersLoading && !membersError && !gymName && (
+          <div className="py-16 text-center text-gray-400 text-base">체육관 이름이 없어 목록을 불러올 수 없습니다.</div>
+        )}
+        {!membersLoading && !membersError && gymName && filteredMembers.length === 0 && (
+          <div className="py-16 text-center text-gray-400 text-base">
+            이 체육관(<span className="text-white font-medium">{gymName}</span>)에 소속으로 등록된 회원이 없습니다.
+          </div>
+        )}
+        {!membersLoading && !membersError && gymName && filteredMembers.map((member) => (
+          <button
+            key={member.id}
+            type="button"
+            onClick={() => {
+              setMemberDetailMode('info');
+              setDeleteStep(0);
+              setActionMessage(null);
+              setSelectedMember(member);
+            }}
+            className="w-full p-4 sm:p-5 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center gap-4 group"
+          >
+            <div className="relative flex-shrink-0">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-blue-500/80 to-purple-600/80 flex items-center justify-center text-white font-bold text-lg">
+                {member.name.charAt(0)}
+              </div>
+              <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-[#0A0A0A] ${
+                member.status === 'active' ? 'bg-emerald-400' : 'bg-red-500'
+              }`} />
             </div>
-          )}
-          {!membersLoading && !membersError && gymName && filteredMembers.map((member) => (
-            <div key={member.id} className="p-2 sm:p-4 hover:bg-white/5 transition-all cursor-pointer">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-                <div className="flex items-center gap-2 sm:gap-3 flex-1 w-full min-w-0">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-base sm:text-lg">
-                    {member.name.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
-                      <h3 className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{member.name}</h3>
-                      <span className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
-                        member.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {member.status === 'active' ? t('activeMembers') : t('dormant')}
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-purple-500/20 text-purple-400 whitespace-nowrap">
-                        {member.membershipType}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2 gap-y-0.5 text-[10px] sm:text-xs text-gray-400">
-                      <span className="whitespace-nowrap">📞 {member.phone}</span>
-                      <span className="hidden sm:inline">•</span>
-                      <span className="whitespace-nowrap">📅 {member.attendance}일</span>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMemberDetailMode('info');
-                    setDeleteStep(0);
-                    setActionMessage(null);
-                    setSelectedMember(member);
-                  }}
-                  className="w-full sm:w-auto px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white/5 hover:bg-white/10 rounded-lg text-[11px] sm:text-xs text-white transition-all whitespace-nowrap"
-                >
-                  {t('viewDetails')}
-                </button>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-white truncate mb-1">{member.name}</h3>
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                <span className="truncate">{member.phone || '연락처 없음'}</span>
+                <span className="text-gray-600">·</span>
+                <span className="whitespace-nowrap tabular-nums">{member.attendance}일</span>
               </div>
             </div>
-          ))}
-        </div>
-      </SpotlightCard>
+            <Icon type="chevronRight" size={20} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+          </button>
+        ))}
+      </div>
 
       {/* 회원 상세보기 모달 */}
       {selectedMember && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 xs:p-3 sm:p-4 animate-fade-in overflow-y-auto"
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-stretch sm:items-center sm:justify-center sm:p-4 animate-fade-in"
           onClick={() => {
             if (deleteStep > 0) {
               setDeleteStep(0);
@@ -1387,48 +1358,94 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
           }}
         >
           <div
-            className="relative bg-[#0A0A0A] border border-white/20 rounded-2xl max-w-[calc(100vw-16px)] xs:max-w-[calc(100vw-24px)] sm:max-w-4xl w-full max-h-[95vh] xs:max-h-[92vh] sm:max-h-[90vh] flex flex-col my-auto"
+            className="relative bg-[#0A0A0A] sm:border sm:border-white/20 sm:rounded-2xl w-full h-full sm:max-w-4xl sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* 모달 헤더 */}
-            <div className="p-2.5 xs:p-3 sm:p-5 border-b border-white/10 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 flex-shrink-0">
-              <div className="flex items-center justify-between gap-1.5 xs:gap-2">
-                <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 xs:w-12 xs:h-12 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-base xs:text-lg sm:text-2xl shadow-lg flex-shrink-0">
+            <div className="p-4 sm:p-5 border-b border-white/10 flex-shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-blue-500/80 to-purple-600/80 flex items-center justify-center text-white font-bold text-xl sm:text-2xl flex-shrink-0">
                     {selectedMember.name.charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 mb-0.5 xs:mb-1 flex-wrap">
-                      <h2 className="text-sm xs:text-base sm:text-xl lg:text-2xl font-bold text-white whitespace-nowrap">{selectedMember.name}</h2>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <h2 className="text-lg sm:text-2xl font-bold text-white truncate">{selectedMember.name}</h2>
                       <span
-                        className={`px-1 xs:px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] xs:text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
+                        className={`px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-bold whitespace-nowrap ${
                           selectedMember.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
                         }`}
                       >
                         {selectedMember.status === 'active' ? '활동중' : '휴면'}
                       </span>
-                      <span className="px-1 xs:px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] xs:text-[9px] sm:text-[10px] font-bold bg-purple-500/20 text-purple-400 whitespace-nowrap">
-                        {selectedMember.membershipType}
-                      </span>
                     </div>
-                    <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 text-[9px] xs:text-[10px] sm:text-xs text-gray-400 flex-wrap">
-                      <span className="whitespace-nowrap">출석 {selectedMember.attendance}일</span>
+                    <div className="text-sm text-gray-400">
+                      출석 {selectedMember.attendance}일
                     </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={closeMemberModal}
-                  className="w-7 h-7 xs:w-8 xs:h-8 sm:w-10 sm:h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
+                  className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
                 >
-                  <span className="text-base xs:text-lg sm:text-xl">✕</span>
+                  <span className="text-xl">✕</span>
                 </button>
               </div>
             </div>
 
+            {/* 액션 버튼 — 상단 배치 (info 모드) */}
+            {memberDetailMode === 'info' && (
+              <div className="px-4 sm:px-5 pt-3 sm:pt-4 flex-shrink-0">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionMessage(null);
+                      openMemberEditForm(selectedMember);
+                    }}
+                    className="py-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/20 hover:border-white/30 text-white rounded-lg font-semibold text-sm transition-all"
+                  >
+                    정보 수정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionMessage(null);
+                      openAttendancePanel(selectedMember);
+                    }}
+                    className="py-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/20 hover:border-white/30 text-white rounded-lg font-semibold text-sm transition-all"
+                  >
+                    출석 기록
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionMessage(null);
+                      setShowResetPw(true);
+                    }}
+                    className="py-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/20 hover:border-white/30 text-white rounded-lg font-semibold text-sm transition-all"
+                  >
+                    비밀번호 초기화
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionMessage(null);
+                      setDeleteEmailInput('');
+                      setDeleteStep(1);
+                    }}
+                    className="py-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/20 hover:border-white/30 text-white rounded-lg font-semibold text-sm transition-all"
+                  >
+                    회원 삭제
+                  </button>
+                </div>
+              </div>
+            )}
+
             {actionMessage?.text && (
               <div
-                className={`mx-2.5 xs:mx-3 sm:mx-5 mt-2 xs:mt-2.5 rounded-lg px-3 py-2 text-xs sm:text-sm ${
+                className={`mx-4 sm:mx-5 mt-2.5 rounded-lg px-3 py-2 text-xs sm:text-sm ${
                   actionMessage.type === 'ok' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'
                 }`}
               >
@@ -1437,120 +1454,70 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
             )}
 
             {/* 모달 내용 */}
-            <div className="p-2.5 xs:p-3 sm:p-5 overflow-y-auto flex-1 min-h-0">
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0">
               {memberDetailMode === 'info' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 xs:gap-3 sm:gap-5">
-                  <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
-                    <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
-                      <span className="text-xs xs:text-sm sm:text-base">📋</span>
-                      <span>기본 정보</span>
-                    </h3>
-                    <div className="space-y-1 xs:space-y-1.5 sm:space-y-2">
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">이메일</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium overflow-hidden text-ellipsis text-right">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
+                  <SpotlightCard className="p-4 sm:p-5">
+                    <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">기본 정보</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">이메일</span>
+                        <span className="text-sm text-white font-medium truncate text-right">
                           {selectedMember.email}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">회원 DB ID</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-mono break-all text-right">{selectedMember.id}</span>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">연락처</span>
+                        <span className="text-sm text-white font-medium whitespace-nowrap">{selectedMember.phone}</span>
                       </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">체육관 연동</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium text-right max-w-[60%]">
-                          {selectedMember.gymUserId
-                            ? selectedMember.gymUserId === profile?.id
-                              ? '이 체육관 계정과 연동'
-                              : '다른 체육관 계정'
-                            : '이름만 일치(레거시)'}
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">생년월일</span>
+                        <span className="text-sm text-white font-medium whitespace-nowrap">{selectedMember.birthDate}</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">성별</span>
+                        <span className="text-sm text-white font-medium whitespace-nowrap">{selectedMember.gender}</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">가입일</span>
+                        <span className="text-sm text-white font-medium whitespace-nowrap">{selectedMember.joinDate}</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">주소</span>
+                        <span className="text-sm text-white font-medium truncate text-right">{selectedMember.address}</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">비상연락처</span>
+                        <span className="text-sm text-white font-medium whitespace-nowrap">{selectedMember.emergencyContact}</span>
+                      </div>
+                      <div className="flex justify-between py-2 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">최근 방문</span>
+                        <span className="text-sm text-white font-medium whitespace-nowrap">{selectedMember.lastVisit}</span>
+                      </div>
+                    </div>
+                  </SpotlightCard>
+
+                  <SpotlightCard className="p-4 sm:p-5">
+                    <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">신체 정보</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">체중</span>
+                        <span className="text-sm text-white font-medium whitespace-nowrap tabular-nums">
+                          {selectedMember.weight != null ? `${selectedMember.weight}kg` : '—'}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">연락처</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.phone}</span>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">신장</span>
+                        <span className="text-sm text-white font-medium whitespace-nowrap tabular-nums">
+                          {selectedMember.height != null ? `${selectedMember.height}cm` : '—'}
+                        </span>
                       </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">생년월일</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.birthDate}</span>
+                      <div className="flex justify-between py-2 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">특이사항</span>
+                        <span className="text-sm text-white font-medium truncate text-right">
+                          {selectedMember.notes || '—'}
+                        </span>
                       </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">성별</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.gender}</span>
-                      </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">가입일</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.joinDate}</span>
-                      </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">주소</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium overflow-hidden text-ellipsis text-right">{selectedMember.address}</span>
-                      </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 border-b border-white/5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">비상연락처</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.emergencyContact}</span>
-                      </div>
-                      <div className="flex justify-between py-1 xs:py-1.5 gap-2">
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">최근 방문</span>
-                        <span className="text-[9px] xs:text-[10px] sm:text-xs text-white font-medium whitespace-nowrap">{selectedMember.lastVisit}</span>
-                      </div>
-                    </div>
-                  </SpotlightCard>
-
-                  <SpotlightCard className="p-2.5 xs:p-3 sm:p-5">
-                    <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
-                      <span className="text-xs xs:text-sm sm:text-base">💪</span>
-                      <span>신체 정보</span>
-                    </h3>
-                    <div className="space-y-1.5 xs:space-y-2 sm:space-y-3">
-                      <div className="p-1.5 xs:p-2 sm:p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400">체중</span>
-                          <span className="text-sm xs:text-base sm:text-xl font-bold text-blue-400">
-                            {selectedMember.weight != null ? `${selectedMember.weight}kg` : '—'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-1.5 xs:p-2 sm:p-3 bg-purple-500/10 rounded-lg border border-purple-500/30">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400">신장</span>
-                          <span className="text-sm xs:text-base sm:text-xl font-bold text-purple-400">
-                            {selectedMember.height != null ? `${selectedMember.height}cm` : '—'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-1.5 xs:p-2 sm:p-3 bg-white/5 rounded-lg">
-                        <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-400 mb-1">특이사항</div>
-                        <div className="text-[9px] xs:text-[10px] sm:text-xs text-white">{selectedMember.notes}</div>
-                      </div>
-                    </div>
-                  </SpotlightCard>
-
-                  <SpotlightCard className="p-2.5 xs:p-3 sm:p-5 sm:col-span-2">
-                    <h3 className="text-xs xs:text-sm sm:text-base font-bold text-white mb-1.5 xs:mb-2 sm:mb-3 flex items-center gap-1 xs:gap-1.5">
-                      <span className="text-xs xs:text-sm sm:text-base">📊</span>
-                      <span>최근 활동</span>
-                    </h3>
-                    <div className="space-y-1 xs:space-y-1.5 sm:space-y-2">
-                      {selectedMember.recentRecords.length > 0 ? (
-                        selectedMember.recentRecords.map((record, idx) => (
-                          <div key={idx} className="p-1.5 xs:p-2 bg-white/5 rounded-lg">
-                            <div className="flex items-center gap-1 xs:gap-1.5 mb-0.5 flex-wrap">
-                              <span
-                                className={`px-1 xs:px-1.5 py-0.5 rounded text-[8px] xs:text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
-                                  record.type === '운동' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
-                                }`}
-                              >
-                                {record.type}
-                              </span>
-                              <span className="text-[8px] xs:text-[9px] sm:text-[10px] text-gray-400 whitespace-nowrap">{record.date}</span>
-                            </div>
-                            <div className="text-[9px] xs:text-[10px] sm:text-xs text-white overflow-hidden text-ellipsis">{record.detail}</div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500 text-center py-2 xs:py-3">최근 활동이 없습니다</div>
-                      )}
                     </div>
                   </SpotlightCard>
                 </div>
@@ -1571,8 +1538,9 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     <label>
                       <span className="text-xs text-gray-500 mb-1 block">연락처</span>
                       <input
+                        type="tel"
                         value={memberEditForm.phone}
-                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, phone: e.target.value } : f))}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, phone: formatPhoneNumber(e.target.value) } : f))}
                         className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
                       />
                     </label>
@@ -1594,18 +1562,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                       >
                         <option value="male">남성</option>
                         <option value="female">여성</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span className="text-xs text-gray-500 mb-1 block">멤버십</span>
-                      <select
-                        value={memberEditForm.membership_type}
-                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, membership_type: e.target.value } : f))}
-                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-                      >
-                        <option value="basic">베이직</option>
-                        <option value="standard">스탠다드</option>
-                        <option value="premium">프리미엄</option>
                       </select>
                     </label>
                     <label>
@@ -1646,8 +1602,9 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                     <label className="sm:col-span-2">
                       <span className="text-xs text-gray-500 mb-1 block">비상 연락처</span>
                       <input
+                        type="tel"
                         value={memberEditForm.representative_phone}
-                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, representative_phone: e.target.value } : f))}
+                        onChange={(e) => setMemberEditForm((f) => (f ? { ...f, representative_phone: formatPhoneNumber(e.target.value) } : f))}
                         className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
                       />
                     </label>
@@ -1704,49 +1661,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
               )}
             </div>
 
-            {/* 모달 푸터 */}
-            {memberDetailMode === 'info' && (
-              <div className="p-2 xs:p-3 sm:p-4 border-t border-white/10 bg-white/5 flex flex-col xs:flex-row gap-1.5 xs:gap-2 sm:gap-3 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActionMessage(null);
-                    openMemberEditForm(selectedMember);
-                  }}
-                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all"
-                >
-                  정보 수정
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActionMessage(null);
-                    openAttendancePanel(selectedMember);
-                  }}
-                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all"
-                >
-                  출석 기록
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActionMessage(null);
-                    setDeleteEmailInput('');
-                    setDeleteStep(1);
-                  }}
-                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-red-500/20 hover:bg-red-500/35 text-red-300 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all border border-red-500/30"
-                >
-                  회원 삭제
-                </button>
-                <button
-                  type="button"
-                  onClick={closeMemberModal}
-                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm transition-all"
-                >
-                  닫기
-                </button>
-              </div>
-            )}
 
             {memberDetailMode === 'edit' && (
               <div className="p-2 xs:p-3 sm:p-4 border-t border-white/10 bg-white/5 flex gap-1.5 xs:gap-2 sm:gap-3 flex-shrink-0">
@@ -1791,6 +1705,47 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                 >
                   닫기
                 </button>
+              </div>
+            )}
+
+            {/* 비밀번호 초기화 확인 모달 */}
+            {showResetPw && (
+              <div className="absolute inset-0 z-40 flex items-center justify-center p-3 sm:p-6 rounded-2xl bg-black/80 backdrop-blur-sm">
+                <div
+                  className="w-full max-w-md rounded-2xl border border-amber-500/40 bg-[#111] p-5 sm:p-6 shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className="text-lg font-bold text-amber-300 mb-2">비밀번호를 초기화하시겠습니까?</h3>
+                  <p className="text-sm text-gray-300 leading-relaxed mb-2">
+                    <strong className="text-white">{selectedMember.name}</strong> 회원의 비밀번호가{' '}
+                    <strong className="text-amber-200">123456</strong>으로 초기화됩니다.
+                  </p>
+                  <p className="text-xs text-gray-500 mb-4">초기화 즉시 적용되어 회원이 123456으로 로그인할 수 있습니다. 회원에게 직접 안내해 주세요.</p>
+                  {actionMessage?.type === 'err' && actionMessage.text && (
+                    <p className="text-red-300 text-xs mb-3 break-words">{actionMessage.text}</p>
+                  )}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowResetPw(false);
+                        setActionMessage(null);
+                      }}
+                      disabled={resettingPw}
+                      className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold disabled:opacity-50"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={runResetPassword}
+                      disabled={resettingPw}
+                      className="flex-1 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold disabled:opacity-50"
+                    >
+                      {resettingPw ? '초기화 중…' : '123456으로 초기화'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1938,8 +1893,26 @@ function countRoundsWonOnScore(scores, totalRounds) {
   return { blue, red };
 }
 
+/**
+ * 판정승 승자 (총점 → 홀수 라운드만 이긴 라운드 수).
+ * 총점 동점 + 짝수 라운드 → 무승부(라운드 우세로 결정하지 않음).
+ */
+function resolveDecisionWinnerCorner(scores, totalRounds) {
+  const blueTotal = sumCornerPoints(scores, totalRounds, 'blue');
+  const redTotal = sumCornerPoints(scores, totalRounds, 'red');
+  if (blueTotal > redTotal) return 'blue';
+  if (redTotal > blueTotal) return 'red';
+  const n = Math.floor(Number(totalRounds)) || 0;
+  if (n % 2 === 0) return 'draw';
+  const { blue: bRw, red: rRw } = countRoundsWonOnScore(scores, totalRounds);
+  if (bRw > rRw) return 'blue';
+  if (rRw > bRw) return 'red';
+  return 'draw';
+}
+
 // 매칭 룸 페이지 (코치)
 const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
+  const { profile } = useAuth();
   // Phase: 'lobby' | 'matching' | 'fighting' | 'rest' | 'finish'
   const [phase, setPhase] = useState('lobby');
   const [blueCorner, setBlueCorner] = useState(null);
@@ -1967,11 +1940,6 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [isSavingResult, setIsSavingResult] = useState(false);
   const [resultSaved, setResultSaved] = useState(false);
   const [saveError, setSaveError] = useState(null);
-  const [matchRoomStats, setMatchRoomStats] = useState({
-    todayMatches: 0,
-    todayRounds: 0,
-    poolWinRate: 0,
-  });
 
   const formatMemberRecord = (wins, losses, draws, totalMatches) => {
     const w = Number(wins) || 0;
@@ -1997,47 +1965,43 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     try {
       const { supabase } = await import('@/lib/supabase');
 
-      const { data: users, error: usersError } = await supabase
-        .from('public_player_profiles')
-        .select(
-          'id, name, nickname, display_name, weight, rank, wins, losses, draws, total_matches, win_rate'
-        )
-        .order('rank', { ascending: true, nullsFirst: false });
+      const gymUserId = profile?.id ? String(profile.id).trim() : '';
+      const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
+
+      if (!gymUserId && !gymName) {
+        setAttendedMembers([]);
+        if (opts.showLoading) setIsLoadingMembers(false);
+        return;
+      }
+
+      let query = supabase
+        .from('users')
+        .select('id, name, nickname, weight, statistics ( total_matches, wins, losses, draws )')
+        .in('role', ['player_common', 'player_athlete']);
+
+      if (gymUserId && gymName) {
+        query = query.or(`gym_user_id.eq.${gymUserId},and(gym_name.eq.${gymName},gym_user_id.is.null)`);
+      } else if (gymUserId) {
+        query = query.eq('gym_user_id', gymUserId);
+      } else {
+        query = query.eq('gym_name', gymName);
+      }
+
+      const { data: users, error: usersError } = await query;
 
       if (usersError) throw usersError;
 
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date();
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const { data: todayRows } = await supabase
-        .from('matches')
-        .select('rounds')
-        .gte('played_at', startOfDay.toISOString())
-        .lte('played_at', endOfDay.toISOString());
-
-      let todayMatches = 0;
-      let todayRounds = 0;
-      if (todayRows?.length) {
-        todayMatches = Math.round(todayRows.length / 2);
-        const sumRounds = todayRows.reduce((s, row) => s + (Number(row.rounds) || 0), 0);
-        todayRounds = Math.round(sumRounds / 2);
-      }
-
-      const avatarPool = ['🥊', '🥋', '⚡', '💪', '🔥', '⭐', '🏅', '🛡️'];
-      const mappedMembers = (users || []).map((user, index) => {
-        const wins = Number(user.wins) || 0;
-        const losses = Number(user.losses) || 0;
-        const draws = Number(user.draws) || 0;
-        const totalMatches = Number(user.total_matches) || wins + losses + draws;
-        const winRate =
-          totalMatches > 0
-            ? Math.round((wins / totalMatches) * 1000) / 10
-            : normalizeWinRate(user.win_rate);
+      const mappedMembers = (users || []).map((user) => {
+        const stats = Array.isArray(user.statistics) ? user.statistics[0] : user.statistics;
+        const wins = Number(stats?.wins) || 0;
+        const losses = Number(stats?.losses) || 0;
+        const draws = Number(stats?.draws) || 0;
+        const totalMatches = Number(stats?.total_matches) || wins + losses + draws;
+        const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 1000) / 10 : 0;
         return {
           id: user.id,
-          name: user.display_name || user.name || user.nickname || '이름 미등록',
+          name: user.nickname || user.name || '이름 미등록',
+          avatarUrl: null,
           weight: Number.isFinite(Number(user.weight)) ? Number(user.weight) : null,
           record: formatMemberRecord(wins, losses, draws, totalMatches),
           winRate,
@@ -2045,7 +2009,6 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
           losses,
           draws,
           totalMatches,
-          avatar: avatarPool[index % avatarPool.length],
         };
       });
 
@@ -2057,29 +2020,19 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
         return a.name.localeCompare(b.name, 'ko');
       });
 
-      const sumWins = sorted.reduce((s, m) => s + (m.wins || 0), 0);
-      const sumTotal = sorted.reduce((s, m) => s + (m.totalMatches || 0), 0);
-      const poolWinRate = sumTotal > 0 ? Math.round((sumWins / sumTotal) * 1000) / 10 : 0;
-
-      setMatchRoomStats({
-        todayMatches,
-        todayRounds,
-        poolWinRate,
-      });
       setAttendedMembers(sorted);
     } catch (error) {
       console.error('[MatchRoomView] 회원 로드 실패:', error);
       if (opts.showLoading) {
         setMemberLoadError(error.message || '회원 정보를 불러오지 못했습니다.');
         setAttendedMembers([]);
-        setMatchRoomStats({ todayMatches: 0, todayRounds: 0, poolWinRate: 0 });
       }
     } finally {
       if (opts.showLoading) {
         setIsLoadingMembers(false);
       }
     }
-  }, []);
+  }, [profile?.id, profile?.gym_name]);
 
   useEffect(() => {
     loadMatchRoomData({ showLoading: true });
@@ -2184,13 +2137,9 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
       if (forcedResult.winner === 'red') return redCorner;
       return null;
     }
-    const blueTotal = sumCornerPoints(scores, totalRounds, 'blue');
-    const redTotal = sumCornerPoints(scores, totalRounds, 'red');
-    if (blueTotal > redTotal) return blueCorner;
-    if (redTotal > blueTotal) return redCorner;
-    const { blue: blueRw, red: redRw } = countRoundsWonOnScore(scores, totalRounds);
-    if (blueRw > redRw) return blueCorner;
-    if (redRw > blueRw) return redCorner;
+    const corner = resolveDecisionWinnerCorner(scores, totalRounds);
+    if (corner === 'blue') return blueCorner;
+    if (corner === 'red') return redCorner;
     return null;
   };
 
@@ -2225,14 +2174,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
           ? (forcedResult.winner || 'draw')
           : finishMethod === 'rsc'
             ? (rscWinner || 'draw')
-            : (() => {
-                if (finalScore.blue > finalScore.red) return 'blue';
-                if (finalScore.red > finalScore.blue) return 'red';
-                const { blue: bRw, red: rRw } = countRoundsWonOnScore(scores, totalRounds);
-                if (bRw > rRw) return 'blue';
-                if (rRw > bRw) return 'red';
-                return 'draw';
-              })();
+            : resolveDecisionWinnerCorner(scores, totalRounds);
 
       setIsSavingResult(true);
       setSaveError(null);
@@ -2283,104 +2225,53 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
   return (
     <div className="animate-fade-in-up">
-      <PageHeader 
-        title={`🥊 ${t('matchRoomTitle')}`}
-        description={t('oneThumbReferee')}
+      <PageHeader
+        title={t('matchRoomTitle')}
         onBack={() => setActiveTab('home')}
       />
 
       {/* Phase 0: Lobby - 회원 선택 */}
       {phase === 'lobby' && (
         <>
-          {/* 매칭 프로세스 안내 */}
-          <div className="mb-3 sm:mb-5 p-2 sm:p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg sm:rounded-xl">
-            <div className="flex items-center justify-center gap-1.5 sm:gap-2 overflow-x-auto">
-              <div className={`flex items-center gap-1 sm:gap-1.5 ${blueCorner ? 'text-emerald-400' : 'text-gray-500'}`}>
-                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
-                  blueCorner ? 'bg-emerald-500/20 border-2 border-emerald-400' : 'bg-white/10 border-2 border-white/20'
-                }`}>
-                  {blueCorner ? '✓' : '1'}
-                </div>
-                <span className="font-bold text-[11px] sm:text-sm whitespace-nowrap">{t('blueCorner')}</span>
-              </div>
-              <div className="text-gray-500 text-xs">→</div>
-              <div className={`flex items-center gap-1 sm:gap-1.5 ${redCorner ? 'text-emerald-400' : blueCorner ? 'text-white' : 'text-gray-500'}`}>
-                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
-                  redCorner ? 'bg-emerald-500/20 border-2 border-emerald-400' : 
-                  blueCorner ? 'bg-white/20 border-2 border-white/40' : 'bg-white/10 border-2 border-white/20'
-                }`}>
-                  {redCorner ? '✓' : '2'}
-                </div>
-                <span className="font-bold text-[11px] sm:text-sm whitespace-nowrap">{t('redCorner')}</span>
-              </div>
-              <div className="text-gray-500 text-xs">→</div>
-              <div className={`flex items-center gap-1 sm:gap-1.5 ${blueCorner && redCorner ? 'text-white animate-pulse' : 'text-gray-500'}`}>
-                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
-                  blueCorner && redCorner ? 'bg-emerald-500/20 border-2 border-emerald-400' : 'bg-white/10 border-2 border-white/20'
-                }`}>
-                  3
-                </div>
-                <span className="font-bold text-[11px] sm:text-sm whitespace-nowrap">{t('matchStart')}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 통계 */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-5">
-            <SpotlightCard className="p-2 sm:p-3">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 rounded-lg bg-blue-500/20 flex items-center justify-center text-base sm:text-xl">
-                  👥
-                </div>
-                <div className="min-w-0">
-                  <div className="text-base sm:text-xl font-bold text-white">{attendedMembers.length}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('attendedMembers')}</div>
-                </div>
-              </div>
-            </SpotlightCard>
-            <SpotlightCard className="p-2 sm:p-3">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 rounded-lg bg-red-500/20 flex items-center justify-center text-base sm:text-xl">
-                  🥊
-                </div>
-                <div className="min-w-0">
-                  <div className="text-base sm:text-xl font-bold text-white">{matchRoomStats.todayMatches}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('todayMatches')}</div>
-                </div>
-              </div>
-            </SpotlightCard>
-            <SpotlightCard className="p-2 sm:p-3">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 rounded-lg bg-purple-500/20 flex items-center justify-center text-base sm:text-xl">
-                  ⚡
-                </div>
-                <div className="min-w-0">
-                  <div className="text-base sm:text-xl font-bold text-white">{matchRoomStats.todayRounds}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('totalRounds')}</div>
-                </div>
-              </div>
-            </SpotlightCard>
-            <SpotlightCard className="p-2 sm:p-3">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 rounded-lg bg-yellow-500/20 flex items-center justify-center text-base sm:text-xl">
-                  🏆
-                </div>
-                <div className="min-w-0">
-                  <div className="text-base sm:text-xl font-bold text-white">
-                    {matchRoomStats.poolWinRate}%
+          {/* 진행 단계 스테퍼 */}
+          <div className="mb-3 sm:mb-5 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10">
+            <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+              {[
+                { label: t('blueCorner'), done: !!blueCorner, active: !blueCorner },
+                { label: t('redCorner'), done: !!redCorner, active: !!blueCorner && !redCorner },
+                { label: t('matchStart'), done: false, active: !!blueCorner && !!redCorner },
+              ].map((step, i, arr) => (
+                <div key={i} className="flex items-center gap-2 sm:gap-3">
+                  <div className={`flex items-center gap-1.5 sm:gap-2 ${
+                    step.done ? 'text-emerald-400' : step.active ? 'text-white' : 'text-gray-600'
+                  }`}>
+                    <div className={`relative w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold transition-all ${
+                      step.done
+                        ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-400/60'
+                        : step.active
+                        ? 'bg-white text-black ring-2 ring-white/30 animate-pulse'
+                        : 'bg-white/5 text-gray-500 ring-1 ring-white/10'
+                    }`}>
+                      {step.done ? '✓' : i + 1}
+                    </div>
+                    <span className="font-semibold text-[11px] sm:text-[13px] whitespace-nowrap tracking-tight">
+                      {step.label}
+                    </span>
                   </div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('winRate')}</div>
+                  {i < arr.length - 1 && (
+                    <span className={`text-xs ${step.done ? 'text-emerald-500/60' : 'text-gray-700'}`}>›</span>
+                  )}
                 </div>
-              </div>
-            </SpotlightCard>
+              ))}
+            </div>
           </div>
 
           {/* 코너 선택 영역 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-5">
             {/* 청코너 */}
             <SpotlightCard className={`p-3 sm:p-5 border-2 transition-all ${
-              !blueCorner && !redCorner 
-                ? 'border-blue-500 shadow-lg shadow-blue-500/30 animate-pulse' 
+              !blueCorner
+                ? 'border-blue-500 shadow-lg shadow-blue-500/30 animate-pulse'
                 : 'border-blue-500/50'
             }`}>
               <div className="text-center mb-2 sm:mb-3">
@@ -2389,7 +2280,11 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               </div>
               {blueCorner ? (
                 <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg text-center">
-                  <div className="text-xl sm:text-2xl mb-1">{blueCorner.avatar}</div>
+                  <ProfileAvatarImg
+                    avatarUrl={blueCorner.avatarUrl}
+                    name={blueCorner.name}
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-blue-400/60 mx-auto mb-1 text-xl"
+                  />
                   <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{blueCorner.name}</div>
                   <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'} • {blueCorner.record}</div>
                   <div className="flex gap-1.5 sm:gap-2 mt-2">
@@ -2433,7 +2328,11 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               </div>
               {redCorner ? (
                 <div className="p-2 sm:p-3 bg-red-500/20 rounded-lg text-center">
-                  <div className="text-xl sm:text-2xl mb-1">{redCorner.avatar}</div>
+                  <ProfileAvatarImg
+                    avatarUrl={redCorner.avatarUrl}
+                    name={redCorner.name}
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-red-400/60 mx-auto mb-1 text-xl"
+                  />
                   <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{redCorner.name}</div>
                   <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'} • {redCorner.record}</div>
                   <div className="flex gap-1.5 sm:gap-2 mt-2">
@@ -2471,32 +2370,6 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             </SpotlightCard>
           </div>
 
-          {/* 예상 승률 (DB 전적 기반) */}
-          {blueCorner && redCorner && (() => {
-            const bluePct = computeExpectedBlueWinPercent(blueCorner, redCorner);
-            const redPct = Math.round((100 - bluePct) * 10) / 10;
-            return (
-              <SpotlightCard className="p-2 sm:p-3 mb-3 sm:mb-4 bg-gradient-to-r from-blue-500/10 to-red-500/10 border border-white/20">
-                <div className="flex items-center justify-between gap-1 sm:gap-2">
-                  <div className="text-blue-400 font-bold text-xs sm:text-sm whitespace-nowrap truncate max-w-[38%]">
-                    {blueCorner.name}
-                  </div>
-                  <div className="text-center flex-1 min-w-0 mx-1 sm:mx-2">
-                    <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 whitespace-nowrap">{t('expectedWinRate')}</div>
-                    <div className="flex items-center justify-center gap-1 sm:gap-2">
-                      <span className="text-blue-400 font-bold text-sm sm:text-base tabular-nums">{bluePct}%</span>
-                      <span className="text-gray-500 text-xs">:</span>
-                      <span className="text-red-400 font-bold text-sm sm:text-base tabular-nums">{redPct}%</span>
-                    </div>
-                  </div>
-                  <div className="text-red-400 font-bold text-xs sm:text-sm whitespace-nowrap truncate max-w-[38%] text-right">
-                    {redCorner.name}
-                  </div>
-                </div>
-              </SpotlightCard>
-            );
-          })()}
-
           {/* 진행 라운드 수 (시작 전) */}
           {blueCorner && redCorner && (
             <SpotlightCard className="p-3 sm:p-4 mb-3 sm:mb-4">
@@ -2533,41 +2406,41 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
           {/* 회원 선택 모달 */}
           {selectingCorner && (
-            <div 
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+            <div
+              className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-stretch sm:items-center sm:justify-center sm:p-4 animate-fade-in"
               onClick={() => setSelectingCorner(null)}
             >
-              <div 
-                className="bg-[#0A0A0A] border border-white/20 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+              <div
+                className="bg-[#0A0A0A] sm:border sm:border-white/20 sm:rounded-2xl w-full h-full sm:max-w-3xl sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* 모달 헤더 */}
-                <div className={`p-6 border-b border-white/10 ${
-                  selectingCorner === 'blue' 
-                    ? 'bg-gradient-to-r from-blue-500/20 to-blue-500/10' 
+                <div className={`p-4 sm:p-6 border-b border-white/10 flex-shrink-0 ${
+                  selectingCorner === 'blue'
+                    ? 'bg-gradient-to-r from-blue-500/20 to-blue-500/10'
                     : 'bg-gradient-to-r from-red-500/20 to-red-500/10'
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="text-4xl">{selectingCorner === 'blue' ? '🟦' : '🟥'}</div>
-                      <div>
-                        <h3 className={`text-2xl font-bold ${selectingCorner === 'blue' ? 'text-blue-400' : 'text-red-400'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="text-3xl sm:text-4xl flex-shrink-0">{selectingCorner === 'blue' ? '🟦' : '🟥'}</div>
+                      <div className="min-w-0">
+                        <h3 className={`text-lg sm:text-2xl font-bold truncate ${selectingCorner === 'blue' ? 'text-blue-400' : 'text-red-400'}`}>
                           {selectingCorner === 'blue' ? '청코너' : '홍코너'} 선수 선택
                         </h3>
-                        <p className="text-sm text-gray-400">회원가입한 회원을 선택하세요 (체급순)</p>
+                        <p className="text-xs sm:text-sm text-gray-400 truncate">회원가입한 회원을 선택하세요 (체급순)</p>
                       </div>
                     </div>
-                    <button 
+                    <button
                       onClick={() => setSelectingCorner(null)}
-                      className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
                     >
-                      <span className="text-2xl">✕</span>
+                      <span className="text-xl sm:text-2xl">✕</span>
                     </button>
                   </div>
                 </div>
 
                 {/* 회원 리스트 */}
-                <div className="p-6 overflow-y-auto max-h-[60vh]">
+                <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
                   {isLoadingMembers ? (
                     <div className="py-12 text-center text-gray-400">회원 정보를 불러오는 중...</div>
                   ) : memberLoadError ? (
@@ -2597,23 +2470,27 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                               }
                             }}
                             disabled={isDisabled}
-                            className={`w-full p-5 rounded-xl border transition-all text-left ${
+                            className={`w-full p-3 sm:p-4 rounded-xl border transition-all text-left ${
                               isDisabled
                                 ? 'bg-white/5 border-white/20 opacity-40 cursor-not-allowed'
-                                : 'bg-gradient-to-r from-white/5 to-white/[0.02] border-white/10 hover:bg-white/10 hover:scale-[1.02] hover:border-white/30'
+                                : 'bg-gradient-to-r from-white/5 to-white/[0.02] border-white/10 hover:bg-white/10 hover:border-white/30'
                             }`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4">
-                                <div className="text-4xl">{member.avatar}</div>
-                                <div>
-                                  <div className="font-bold text-white text-xl mb-1">{member.name}</div>
-                                  <div className="text-sm text-gray-400">{member.weight ? `${member.weight}kg` : '체중 미등록'} • {member.record}</div>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                                <ProfileAvatarImg
+                                  avatarUrl={member.avatarUrl}
+                                  name={member.name}
+                                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-white/20 flex-shrink-0 text-lg sm:text-xl"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-bold text-white text-base sm:text-xl mb-0.5 sm:mb-1 truncate">{member.name}</div>
+                                  <div className="text-xs sm:text-sm text-gray-400 truncate">{member.weight ? `${member.weight}kg` : '체중 미등록'} • {member.record}</div>
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <div className="text-xs text-gray-500 mb-1">승률</div>
-                                <div className="text-2xl font-bold text-emerald-400">{member.winRate}%</div>
+                              <div className="text-right flex-shrink-0">
+                                <div className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">승률</div>
+                                <div className="text-lg sm:text-2xl font-bold text-emerald-400 tabular-nums">{member.winRate}%</div>
                               </div>
                             </div>
                             {isDisabled && (
@@ -2629,7 +2506,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 </div>
 
                 {/* 모달 푸터 */}
-                <div className="p-4 border-t border-white/10 bg-white/5">
+                <div className="p-4 border-t border-white/10 bg-white/5 flex-shrink-0">
                   <button 
                     onClick={() => setSelectingCorner(null)}
                     className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold transition-all"
@@ -2657,7 +2534,11 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             </div>
             <div className="grid grid-cols-3 gap-4 items-center">
               <div className="text-center p-6 bg-blue-500/20 rounded-xl">
-                <div className="text-4xl mb-2">{blueCorner.avatar}</div>
+                <ProfileAvatarImg
+                  avatarUrl={blueCorner.avatarUrl}
+                  name={blueCorner.name}
+                  className="w-16 h-16 rounded-full border-2 border-blue-400/60 mx-auto mb-2 text-2xl"
+                />
                 <div className="text-xl font-bold text-blue-400">{blueCorner.name}</div>
                 <div className="text-sm text-gray-400">{blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'}</div>
               </div>
@@ -2665,7 +2546,11 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 <div className="text-4xl font-bold text-white">VS</div>
               </div>
               <div className="text-center p-6 bg-red-500/20 rounded-xl">
-                <div className="text-4xl mb-2">{redCorner.avatar}</div>
+                <ProfileAvatarImg
+                  avatarUrl={redCorner.avatarUrl}
+                  name={redCorner.name}
+                  className="w-16 h-16 rounded-full border-2 border-red-400/60 mx-auto mb-2 text-2xl"
+                />
                 <div className="text-xl font-bold text-red-400">{redCorner.name}</div>
                 <div className="text-sm text-gray-400">{redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'}</div>
               </div>
@@ -2978,8 +2863,14 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
       )}
 
       {showForceStopModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-[#0A0A0A] border border-white/20 rounded-2xl p-6">
+        <div
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-stretch sm:items-center sm:justify-center sm:p-4"
+          onClick={() => setShowForceStopModal(false)}
+        >
+          <div
+            className="w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[90vh] bg-[#0A0A0A] sm:border sm:border-white/20 sm:rounded-2xl p-5 sm:p-6 overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-xl font-bold text-white mb-2">⛔ 경기 강제 종료</h3>
             <p className="text-sm text-gray-400 mb-5">승자와 최종 점수를 입력하면 즉시 경기를 종료하고 전적에 반영합니다.</p>
 
@@ -3086,7 +2977,15 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             <div className="text-center mb-8">
               <div className="text-6xl mb-4">🏆</div>
               <div className="text-3xl font-bold text-yellow-400 mb-2">
-                {resultMethod === 'ko' ? 'KO 승리!' : resultMethod === 'tko' ? 'TKO 승리!' : finishMethod === 'forced' ? '강제 종료 판정' : '판정 승리!'}
+                {resultMethod === 'ko'
+                  ? 'KO 승리!'
+                  : resultMethod === 'tko'
+                    ? 'TKO 승리!'
+                    : finishMethod === 'forced'
+                      ? '강제 종료 판정'
+                      : finishMethod === 'decision' && resolveDecisionWinnerCorner(scores, totalRounds) === 'draw'
+                        ? '판정 무승부!'
+                        : '판정 승리!'}
               </div>
               <div className="text-5xl font-bold text-white mb-4">{calculateWinner()?.name || '무승부'}</div>
               {finishMethod === 'rsc' ? (
@@ -3177,7 +3076,9 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                   </div>
                   {sumCornerPoints(scores, totalRounds, 'blue') === sumCornerPoints(scores, totalRounds, 'red') && (
                     <p className="text-center text-xs text-amber-300/90 mt-3">
-                      총점 동점 시 라운드 점수승이 많은 쪽이 승리합니다.
+                      {totalRounds % 2 === 1
+                        ? '총점 동점 시 이긴 라운드가 더 많은 쪽이 승리합니다.'
+                        : '총점 동점 시 무승부입니다.'}
                     </p>
                   )}
                 </div>

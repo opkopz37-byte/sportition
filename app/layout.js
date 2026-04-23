@@ -1,5 +1,6 @@
 import './globals.css'
 import { AuthProvider } from '@/lib/AuthContext'
+import MouseGlow from '@/components/MouseGlow'
 
 export const metadata = {
   title: 'Sportition - Sports Community Platform',
@@ -18,6 +19,7 @@ export default function RootLayout({ children }) {
     <html lang="ko">
       <body>
         <AuthProvider>
+          <MouseGlow />
           {children}
         </AuthProvider>
       </body>

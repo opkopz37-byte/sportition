@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import Link from 'next/link';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { DashboardView } from '@/components/views/dashboard';
@@ -10,6 +11,7 @@ import {
   TERMS_OF_SERVICE_FULL_TEXT,
   TERMS_DOCUMENT_TITLE_KO,
 } from '@/lib/legal/termsOfService';
+import { formatAuthPasswordErrorMessage, isAuthPasswordPolicyError } from '@/lib/authPasswordErrors';
 // 마이페이지 뷰들
 
 const MyPageView = ({ setActiveTab, t }) => {
@@ -21,8 +23,7 @@ const MyPageView = ({ setActiveTab, t }) => {
   return (
   <div className="animate-fade-in-up">
     <div className="mb-6">
-      <h2 className="text-2xl sm:text-3xl font-bold text-white mb-1">{t('myPage')}</h2>
-      <p className="text-gray-500 text-sm">{t('manageProfile')}</p>
+      <h2 className="text-2xl sm:text-3xl font-bold text-white">{t('myPage')}</h2>
     </div>
 
     {embedDashboard ? (
@@ -34,41 +35,14 @@ const MyPageView = ({ setActiveTab, t }) => {
       />
     ) : null}
 
-    <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${embedDashboard ? 'mt-8' : ''}`}>
-      <SpotlightCard
-        className="p-6 cursor-pointer hover:bg-white/[0.02] transition-colors"
-        onClick={() => setActiveTab('mypage-activity')}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-white">{t('recentActivity')}</h3>
-          <Icon type="chevronRight" size={20} className="text-gray-500" />
-        </div>
-        <div className="space-y-3">
-          {[
-            { icon: 'trophy', text: t('matchVictory'), time: `2 ${t('hoursAgo')}` },
-            { icon: 'star', text: t('newSkillUnlocked'), time: `1 ${t('daysAgo')}` },
-            { icon: 'trendingUp', text: t('rankUp'), time: `3 ${t('daysAgo')}` },
-          ].map((activity, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-white/5">
-              <Icon type={activity.icon} size={16} className="text-blue-400" />
-              <div className="flex-1">
-                <div className="text-sm text-white">{activity.text}</div>
-                <div className="text-xs text-gray-500">{activity.time}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </SpotlightCard>
-
+    <div className={`${embedDashboard ? 'mt-8' : ''}`}>
       <SpotlightCard className="p-6">
         <h3 className="text-lg font-bold text-white mb-4">{t('settings')}</h3>
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {[
             { id: 'edit-profile', label: t('editProfile') },
             { id: 'terms', label: t('termsOfService') },
             { id: 'privacy', label: t('privacySettings') },
-            { id: 'notifications', label: t('notifications') },
-            { id: 'security', label: t('accountSecurity') }
           ].map((setting) => (
             <button
               key={setting.id}
@@ -91,7 +65,7 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
   const { profile, user, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const [formData, setFormData] = useState({
     nickname: '',
     phone: '',
@@ -183,456 +157,223 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
   };
 
   return (
-    <div className="animate-fade-in-up">
-      <PageHeader 
-        title={t('editProfile')} 
-        description={t('updateInfo')}
+    <div className="animate-fade-in-up w-full">
+      <PageHeader
+        title={t('editProfile')}
         onBack={() => setActiveTab('mypage')}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <SpotlightCard className="p-6">
-            <h3 className="text-lg font-bold text-white mb-6">{t('basicInfo')}</h3>
-            
-            <div className="space-y-4">
+      <SpotlightCard className="p-5 sm:p-6">
+        <h3 className="text-lg font-bold text-white mb-6">기본 정보</h3>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">닉네임</label>
+            <input
+              type="text"
+              value={formData.nickname}
+              onChange={(e) => setFormData({...formData, nickname: e.target.value})}
+              placeholder="닉네임을 입력하세요"
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">이메일</label>
+            <input
+              type="email"
+              value={profile?.email || ''}
+              disabled
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-gray-400 cursor-not-allowed"
+            />
+            <p className="text-xs text-gray-500 mt-1">이메일은 변경할 수 없습니다</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">전화번호</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              placeholder="010-1234-5678"
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">키 (cm)</label>
+              <input
+                type="number"
+                value={formData.height}
+                onChange={(e) => setFormData({...formData, height: e.target.value})}
+                placeholder="175"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">체중 (kg)</label>
+              <input
+                type="number"
+                value={formData.weight}
+                onChange={(e) => setFormData({...formData, weight: e.target.value})}
+                placeholder="70"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              />
+            </div>
+          </div>
+
+          {profile?.role === 'player_common' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">소속 체육관</label>
+              <input
+                type="text"
+                value={formData.gym_name}
+                onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
+                placeholder="체육관 이름을 입력하세요"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              />
+            </div>
+          )}
+
+          {profile?.role === 'player_athlete' && (
+            <>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">{t('nickname') || '닉네임'}</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">복싱 스타일</label>
+                <select
+                  value={formData.boxing_style}
+                  onChange={(e) => setFormData({...formData, boxing_style: e.target.value})}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
+                >
+                  <option value="">선택하세요</option>
+                  <option value="아웃복서">아웃복서</option>
+                  <option value="인파이터">인파이터</option>
+                  <option value="스워머">스워머</option>
+                  <option value="펀처">펀처</option>
+                  <option value="카운터 펀처">카운터 펀처</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">소속 체육관</label>
                 <input
                   type="text"
-                  value={formData.nickname}
-                  onChange={(e) => setFormData({...formData, nickname: e.target.value})}
-                  placeholder={t('enterNickname')}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  value={formData.gym_name}
+                  onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
+                  placeholder="체육관 이름을 입력하세요"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
                 />
               </div>
+            </>
+          )}
 
+          {profile?.role === 'gym' && (
+            <>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">{t('email') || '이메일'}</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">체육관 이름</label>
                 <input
-                  type="email"
-                  value={profile?.email || ''}
-                  disabled
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-gray-400 cursor-not-allowed"
+                  type="text"
+                  value={formData.gym_name}
+                  onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
+                  placeholder="체육관 이름을 입력하세요"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
                 />
-                <p className="text-xs text-gray-500 mt-1">{t('emailCannotChange')}</p>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">{t('phone') || '전화번호'}</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">체육관 위치</label>
+                <input
+                  type="text"
+                  value={formData.gym_location}
+                  onChange={(e) => setFormData({...formData, gym_location: e.target.value})}
+                  placeholder="체육관 위치를 입력하세요"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">대표 전화번호</label>
                 <input
                   type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                  placeholder="010-1234-5678"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  value={formData.representative_phone}
+                  onChange={(e) => setFormData({...formData, representative_phone: e.target.value})}
+                  placeholder="대표 전화번호를 입력하세요"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
                 />
               </div>
+            </>
+          )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">{t('height') || '키 (cm)'}</label>
-                  <input
-                    type="number"
-                    value={formData.height}
-                    onChange={(e) => setFormData({...formData, height: e.target.value})}
-                    placeholder="175"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">{t('weight') || '체중 (kg)'}</label>
-                  <input
-                    type="number"
-                    value={formData.weight}
-                    onChange={(e) => setFormData({...formData, weight: e.target.value})}
-                    placeholder="70"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                  />
-                </div>
-              </div>
-
-              {profile?.role === 'player_common' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('gymName') || '소속 체육관'}</label>
-                    <input
-                      type="text"
-                      value={formData.gym_name}
-                      onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
-                      placeholder={t('enterGymName')}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                    />
-                  </div>
-                </>
-              )}
-
-              {profile?.role === 'player_athlete' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('boxingStyle') || '복싱 스타일'}</label>
-                    <select
-                      value={formData.boxing_style}
-                      onChange={(e) => setFormData({...formData, boxing_style: e.target.value})}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
-                    >
-                      <option value="">{t('selectStyle') || '선택하세요'}</option>
-                      <option value="아웃복서">아웃복서</option>
-                      <option value="인파이터">인파이터</option>
-                      <option value="스워머">스워머</option>
-                      <option value="펀처">펀처</option>
-                      <option value="카운터 펀처">카운터 펀처</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('gymName') || '소속 체육관'}</label>
-                    <input
-                      type="text"
-                      value={formData.gym_name}
-                      onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
-                      placeholder={t('enterGymName')}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
-                    />
-                  </div>
-                </>
-              )}
-
-              {profile?.role === 'gym' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('gymName') || '체육관 이름'}</label>
-                    <input
-                      type="text"
-                      value={formData.gym_name}
-                      onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
-                      placeholder={t('enterGymName')}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('gymLocation') || '체육관 위치'}</label>
-                    <input
-                      type="text"
-                      value={formData.gym_location}
-                      onChange={(e) => setFormData({...formData, gym_location: e.target.value})}
-                      placeholder={t('enterGymLocation')}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">{t('representativePhone') || '대표 전화번호'}</label>
-                    <input
-                      type="tel"
-                      value={formData.representative_phone}
-                      onChange={(e) => setFormData({...formData, representative_phone: e.target.value})}
-                      placeholder={t('enterRepPhone')}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">{t('birthDate') || '생년월일'}</label>
-                  <input
-                    type="date"
-                    value={formData.birth_date}
-                    onChange={(e) => setFormData({...formData, birth_date: e.target.value})}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">{t('gender') || '성별'}</label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) => setFormData({...formData, gender: e.target.value})}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                  >
-                    <option value="">{t('select') || '선택'}</option>
-                    <option value="male">{t('male') || '남성'}</option>
-                    <option value="female">{t('female') || '여성'}</option>
-                  </select>
-                </div>
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">생년월일</label>
+              <input
+                type="date"
+                value={formData.birth_date}
+                onChange={(e) => setFormData({...formData, birth_date: e.target.value})}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">성별</label>
+              <select
+                value={formData.gender}
+                onChange={(e) => setFormData({...formData, gender: e.target.value})}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              >
+                <option value="">선택</option>
+                <option value="male">남성</option>
+                <option value="female">여성</option>
+              </select>
+            </div>
+          </div>
+        </div>
 
-            {error && (
-              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-                {error}
-              </div>
+        {error && (
+          <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            className="flex-1 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-500 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                저장 중...
+              </>
+            ) : (
+              '변경사항 저장'
             )}
-
-            <div className="flex gap-3 mt-6">
-              <button 
-                onClick={handleSave}
-                disabled={loading}
-                className="flex-1 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-500 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    {t('saving') || '저장 중...'}
-                  </>
-                ) : (
-                  t('saveChanges')
-                )}
-              </button>
-              <button 
-                onClick={() => setActiveTab('mypage')}
-                disabled={loading}
-                className="px-6 py-3 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors"
-              >
-                {t('cancel')}
-              </button>
-            </div>
-          </SpotlightCard>
+          </button>
+          <button
+            onClick={() => setActiveTab('mypage')}
+            disabled={loading}
+            className="px-6 py-3 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors"
+          >
+            취소
+          </button>
         </div>
-
-        <div>
-          <SpotlightCard className="p-6">
-            <h3 className="text-lg font-bold text-white mb-4">{t('profilePicture')}</h3>
-            <div className="flex flex-col items-center">
-              <div className="w-32 h-32 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center mb-4">
-                <Icon type="user" size={48} />
-              </div>
-              <button className="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white font-medium transition-colors">
-                {t('changePicture')}
-              </button>
-            </div>
-          </SpotlightCard>
-        </div>
-      </div>
+      </SpotlightCard>
     </div>
   );
 };
 
-// Privacy Settings 페이지
+// Privacy Settings 페이지 (비밀번호 변경 + 약관 포함)
 const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
-  const [settings, setSettings] = useState({
-    profileVisibility: 'public',
-    showEmail: false,
-    showActivity: true,
-    allowMessages: true,
-    showOnline: true
-  });
-
-  return (
-    <div className="animate-fade-in-up">
-      <PageHeader 
-        title={t('privacySettings')}
-        description="정보 공개 범위를 설정합니다"
-        onBack={() => setActiveTab('mypage')}
-      />
-
-      <div className="space-y-4">
-        <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-3">{TERMS_DOCUMENT_TITLE_KO}</h3>
-          <p className="text-xs text-gray-500 mb-4">
-            이용약관 전문은 개인정보 수집·이용 동의 본문과 동일합니다.{' '}
-            <Link href="/terms" className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer">
-              전체 페이지
-            </Link>
-          </p>
-          <div className="max-h-[min(50vh,22rem)] overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-4">
-            <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm leading-relaxed text-gray-300">
-              {TERMS_OF_SERVICE_FULL_TEXT}
-            </pre>
-          </div>
-        </SpotlightCard>
-
-        <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-6">프로필 공개 범위</h3>
-          
-          <div className="space-y-4">
-            {[
-              { value: 'public', label: '전체 공개', desc: '모든 사람이 프로필을 볼 수 있습니다' },
-              { value: 'friends', label: '친구 공개', desc: '친구만 프로필을 볼 수 있습니다' },
-              { value: 'private', label: '비공개', desc: '본인만 프로필을 볼 수 있습니다' }
-            ].map((option) => (
-              <label key={option.value} className="flex items-start gap-3 p-4 rounded-lg bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
-                <input
-                  type="radio"
-                  name="visibility"
-                  value={option.value}
-                  checked={settings.profileVisibility === option.value}
-                  onChange={(e) => setSettings({...settings, profileVisibility: e.target.value})}
-                  className="mt-1"
-                />
-                <div className="flex-1">
-                  <div className="text-white font-medium">{option.label}</div>
-                  <div className="text-sm text-gray-400">{option.desc}</div>
-                </div>
-              </label>
-            ))}
-          </div>
-        </SpotlightCard>
-
-        <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-6">Privacy Options</h3>
-          
-          <div className="space-y-4">
-            {[
-              { key: 'showEmail', label: 'Show Email', desc: 'Allow others to see your email address' },
-              { key: 'showActivity', label: 'Show Activity', desc: 'Display your recent activities on your profile' },
-              { key: 'allowMessages', label: 'Allow Messages', desc: 'Let other users send you messages' },
-              { key: 'showOnline', label: 'Show Online Status', desc: 'Display when you are online' }
-            ].map((option) => (
-              <div key={option.key} className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-                <div className="flex-1">
-                  <div className="text-white font-medium">{option.label}</div>
-                  <div className="text-sm text-gray-400">{option.desc}</div>
-                </div>
-                <button
-                  onClick={() => setSettings({...settings, [option.key]: !settings[option.key]})}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${
-                    settings[option.key] ? 'bg-blue-500' : 'bg-white/20'
-                  }`}
-                >
-                  <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    settings[option.key] ? 'translate-x-6' : ''
-                  }`} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </SpotlightCard>
-
-        <button 
-          onClick={() => alert('Privacy settings saved!')}
-          className="w-full py-3 bg-blue-500 hover:bg-blue-600 rounded-lg text-white font-medium transition-colors"
-        >
-          Save Privacy Settings
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// Notifications 페이지
-const NotificationsView = ({ setActiveTab, t = (key) => key }) => {
-  const [notifications, setNotifications] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    matchReminders: true,
-    skillUnlocks: true,
-    rankChanges: true,
-    friendRequests: true,
-    messages: true,
-    weeklyReport: false
-  });
-
-  return (
-    <div className="animate-fade-in-up">
-      <PageHeader 
-        title="Notification Settings" 
-        description="Manage how you receive notifications"
-        onBack={() => setActiveTab('mypage')}
-      />
-
-      <div className="space-y-4">
-        <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-6">Notification Channels</h3>
-          
-          <div className="space-y-4">
-            {[
-              { key: 'emailNotifications', label: 'Email Notifications', desc: 'Receive notifications via email', icon: 'bell' },
-              { key: 'pushNotifications', label: 'Push Notifications', desc: 'Receive push notifications on your device', icon: 'bell' }
-            ].map((option) => (
-              <div key={option.key} className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-                <div className="flex items-center gap-3 flex-1">
-                  <Icon type={option.icon} size={20} className="text-blue-400" />
-                  <div>
-                    <div className="text-white font-medium">{option.label}</div>
-                    <div className="text-sm text-gray-400">{option.desc}</div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setNotifications({...notifications, [option.key]: !notifications[option.key]})}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${
-                    notifications[option.key] ? 'bg-blue-500' : 'bg-white/20'
-                  }`}
-                >
-                  <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    notifications[option.key] ? 'translate-x-6' : ''
-                  }`} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </SpotlightCard>
-
-        <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-6">Notification Types</h3>
-          
-          <div className="space-y-4">
-            {[
-              { key: 'matchReminders', label: 'Match Reminders', desc: 'Get reminded about upcoming matches', icon: 'calendar' },
-              { key: 'skillUnlocks', label: 'Skill Unlocks', desc: 'Notifications when you unlock new skills', icon: 'star' },
-              { key: 'rankChanges', label: 'Rank Changes', desc: 'Alert when your rank changes', icon: 'trendingUp' },
-              { key: 'friendRequests', label: 'Friend Requests', desc: 'Notifications for friend requests', icon: 'users' },
-              { key: 'messages', label: 'Messages', desc: 'Get notified of new messages', icon: 'bell' },
-              { key: 'weeklyReport', label: 'Weekly Report', desc: 'Receive weekly performance summary', icon: 'chart' }
-            ].map((option) => (
-              <div key={option.key} className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-                <div className="flex items-center gap-3 flex-1">
-                  <Icon type={option.icon} size={20} className="text-blue-400" />
-                  <div>
-                    <div className="text-white font-medium">{option.label}</div>
-                    <div className="text-sm text-gray-400">{option.desc}</div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setNotifications({...notifications, [option.key]: !notifications[option.key]})}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${
-                    notifications[option.key] ? 'bg-blue-500' : 'bg-white/20'
-                  }`}
-                >
-                  <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    notifications[option.key] ? 'translate-x-6' : ''
-                  }`} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </SpotlightCard>
-
-        <button 
-          onClick={() => alert('Notification settings saved!')}
-          className="w-full py-3 bg-blue-500 hover:bg-blue-600 rounded-lg text-white font-medium transition-colors"
-        >
-          Save Notification Settings
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const MIN_PASSWORD_LEN = 8;
-
-// Account Security 페이지
-const AccountSecurityView = ({ setActiveTab, t = (key) => key }) => {
-  const [passwordData, setPasswordData] = useState({
-    current: '',
-    new: '',
-    confirm: ''
-  });
-
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [passwordData, setPasswordData] = useState({ current: '', new: '', confirm: '' });
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState({ type: null, text: '' });
+  const [termsOpen, setTermsOpen] = useState(false);
 
   const handleSubmitPassword = async (e) => {
     e.preventDefault();
     setPasswordMessage({ type: null, text: '' });
 
-    if (passwordData.new.length < MIN_PASSWORD_LEN) {
-      setPasswordMessage({ type: 'error', text: t('passwordTooShort') });
-      return;
-    }
     if (passwordData.new !== passwordData.confirm) {
       setPasswordMessage({ type: 'error', text: t('passwordMismatch') });
       return;
@@ -646,6 +387,10 @@ const AccountSecurityView = ({ setActiveTab, t = (key) => key }) => {
         passwordData.new
       );
       if (error) {
+        if (isAuthPasswordPolicyError(error)) {
+          setPasswordMessage({ type: 'error', text: t('passwordPolicySupabaseHint') });
+          return;
+        }
         const code = error?.code || error?.status;
         const msg = String(error.message || error).toLowerCase();
         const isInvalid =
@@ -662,25 +407,27 @@ const AccountSecurityView = ({ setActiveTab, t = (key) => key }) => {
       setPasswordMessage({ type: 'ok', text: t('passwordChangedSuccess') });
       setPasswordData({ current: '', new: '', confirm: '' });
     } catch (err) {
-      setPasswordMessage({ type: 'error', text: err?.message || t('passwordChangeFailed') });
+      setPasswordMessage({
+        type: 'error',
+        text: formatAuthPasswordErrorMessage(err, t),
+      });
     } finally {
       setPasswordSaving(false);
     }
   };
 
   return (
-    <div className="animate-fade-in-up">
-      <PageHeader 
-        title="Account Security" 
-        description={t('protectAccount')}
+    <div className="animate-fade-in-up w-full">
+      <PageHeader
+        title={t('privacySettings')}
         onBack={() => setActiveTab('mypage')}
       />
 
       <div className="space-y-4">
-        <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-6">{t('changePassword')}</h3>
-          
-          <form onSubmit={handleSubmitPassword} className="space-y-4">
+        {/* 비밀번호 변경 */}
+        <SpotlightCard className="p-5 sm:p-6">
+          <h3 className="text-lg font-bold text-white mb-5">{t('changePassword')}</h3>
+          <form onSubmit={handleSubmitPassword} className="space-y-3">
             {passwordMessage.text ? (
               <p
                 className={`text-sm rounded-lg px-3 py-2 ${
@@ -698,37 +445,31 @@ const AccountSecurityView = ({ setActiveTab, t = (key) => key }) => {
                 type="password"
                 autoComplete="current-password"
                 value={passwordData.current}
-                onChange={(e) => setPasswordData({...passwordData, current: e.target.value})}
+                onChange={(e) => setPasswordData({ ...passwordData, current: e.target.value })}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                placeholder={t('currentPassword')}
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">{t('newPassword')}</label>
               <input
                 type="password"
                 autoComplete="new-password"
                 value={passwordData.new}
-                onChange={(e) => setPasswordData({...passwordData, new: e.target.value})}
+                onChange={(e) => setPasswordData({ ...passwordData, new: e.target.value })}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                placeholder={t('newPassword')}
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">{t('confirmPassword')}</label>
               <input
                 type="password"
                 autoComplete="new-password"
                 value={passwordData.confirm}
-                onChange={(e) => setPasswordData({...passwordData, confirm: e.target.value})}
+                onChange={(e) => setPasswordData({ ...passwordData, confirm: e.target.value })}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                placeholder={t('confirmPassword')}
               />
             </div>
-
-            <button 
+            <button
               type="submit"
               disabled={passwordSaving}
               className="w-full py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:pointer-events-none rounded-lg text-white font-medium transition-colors"
@@ -738,87 +479,40 @@ const AccountSecurityView = ({ setActiveTab, t = (key) => key }) => {
           </form>
         </SpotlightCard>
 
-        <SpotlightCard className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-white mb-1">Two-Factor Authentication</h3>
-              <p className="text-sm text-gray-400">Add an extra layer of security to your account</p>
-            </div>
-            <button
-              onClick={() => setTwoFactorEnabled(!twoFactorEnabled)}
-              className={`relative w-12 h-6 rounded-full transition-colors ${
-                twoFactorEnabled ? 'bg-green-500' : 'bg-white/20'
-              }`}
-            >
-              <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                twoFactorEnabled ? 'translate-x-6' : ''
-              }`} />
-            </button>
-          </div>
+        {/* 이용약관 · 개인정보 수집·이용 동의 (접기/상세보기) */}
+        <SpotlightCard className="p-5 sm:p-6">
+          <button
+            type="button"
+            onClick={() => setTermsOpen((v) => !v)}
+            className="w-full flex items-center justify-between gap-3 text-left"
+          >
+            <h3 className="text-base sm:text-lg font-bold text-white">{TERMS_DOCUMENT_TITLE_KO}</h3>
+            <span className="flex-shrink-0 text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+              {termsOpen ? '접기' : '상세보기'}
+            </span>
+          </button>
 
-          {twoFactorEnabled && (
-            <div className="mt-4 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-              <div className="flex items-start gap-3">
-                <Icon type="shield" size={20} className="text-green-400 mt-0.5" />
-                <div>
-                  <div className="text-green-400 font-medium mb-1">Two-Factor Authentication Enabled</div>
-                  <div className="text-sm text-gray-400">Your account is protected with 2FA</div>
-                </div>
+          {termsOpen && (
+            <div className="mt-4">
+              <p className="text-xs text-gray-500 mb-3">
+                전체 페이지로 보기:{' '}
+                <Link href="/terms" className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer">
+                  새 창으로 열기
+                </Link>
+              </p>
+              <div className="max-h-[min(50vh,22rem)] overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-4">
+                <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm leading-relaxed text-gray-300">
+                  {TERMS_OF_SERVICE_FULL_TEXT}
+                </pre>
               </div>
             </div>
           )}
-        </SpotlightCard>
-
-        <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-2">이용약관 · 개인정보 동의 전문</h3>
-          <p className="text-sm text-gray-500 mb-4">
-            회원가입 시 동의한 내용과 동일합니다.{' '}
-            <button
-              type="button"
-              onClick={() => setActiveTab('mypage-terms')}
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              전체 보기
-            </button>
-            {' · '}
-            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-              새 창
-            </a>
-          </p>
-        </SpotlightCard>
-
-        <SpotlightCard className="p-6">
-          <h3 className="text-lg font-bold text-white mb-4">Active Sessions</h3>
-          
-          <div className="space-y-3">
-            {[
-              { device: 'Chrome on Windows', location: 'Seoul, Korea', current: true, time: 'Active now' },
-              { device: 'Safari on iPhone', location: 'Seoul, Korea', current: false, time: '2 hours ago' },
-              { device: 'Chrome on MacBook', location: 'Seoul, Korea', current: false, time: '1 day ago' }
-            ].map((session, i) => (
-              <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-                <div className="flex items-center gap-3">
-                  <Icon type="activity" size={20} className="text-blue-400" />
-                  <div>
-                    <div className="text-white font-medium">{session.device}</div>
-                    <div className="text-sm text-gray-400">{session.location} • {session.time}</div>
-                  </div>
-                </div>
-                {session.current ? (
-                  <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400">Current</span>
-                ) : (
-                  <button className="text-sm text-red-400 hover:text-red-300 transition-colors">
-                    Revoke
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
         </SpotlightCard>
       </div>
     </div>
   );
 };
+
 
 // Activity History 페이지
 const ActivityHistoryView = ({ setActiveTab, t = (key) => key }) => {
@@ -1460,7 +1154,11 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
               ) : (
                 <div className="space-y-2 max-h-80 overflow-y-auto">
                   {(showAllOpponentMatches ? opponentMatches : opponentMatches.slice(0, 5)).map((match) => (
-                    <div key={match.id} className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div key={match.id} className={`p-2 rounded-lg border-l-4 ${
+                      match.result === 'win' ? 'bg-blue-900/50 border-l-blue-400 border border-blue-500/40' :
+                      match.result === 'loss' ? 'bg-red-900/50 border-l-red-400 border border-red-500/40' :
+                      'bg-zinc-900/55 border-l-gray-500 border border-zinc-600/40'
+                    }`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-xs text-white font-bold truncate">
                           vs {match.opponent_name || match.opponent?.nickname || match.opponent?.name || '상대 미상'}
@@ -1472,10 +1170,10 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
                       <div className="flex items-center justify-between mt-1 text-[10px] text-gray-300">
                         <span>{match.score || '-'}</span>
                         <span>{(match.method || 'decision').toUpperCase()}</span>
-                        <span className={
-                          match.result === 'win' ? 'text-emerald-400' :
+                        <span className={`font-bold ${
+                          match.result === 'win' ? 'text-blue-400' :
                           match.result === 'loss' ? 'text-red-400' : 'text-gray-300'
-                        }>
+                        }`}>
                           {match.result === 'win' ? '승' : match.result === 'loss' ? '패' : '무'}
                         </span>
                       </div>
@@ -1491,4 +1189,4 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
   );
 };
 
-export { MyPageView, EditProfileView, PrivacySettingsView, NotificationsView, AccountSecurityView, ActivityHistoryView, OpponentProfileView };
+export { MyPageView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView };

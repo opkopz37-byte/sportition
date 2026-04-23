@@ -18,6 +18,7 @@ import {
   isValidCalendarDate,
 } from '@/lib/birthDate';
 import { checkEmailAvailable } from '@/lib/emailAvailability';
+import { formatAuthPasswordErrorMessage, isAuthPasswordPolicyError } from '@/lib/authPasswordErrors';
 
 /** 숫자만 입력해도 010-1234-5678 / 02-1234-5678 형태로 표시 */
 function formatKoreanPhone(raw) {
@@ -143,8 +144,6 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-3 py-2.5 xs:px-4 xs:py-3 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-            placeholder={t('password')}
-            required
             disabled={loading}
           />
         </div>
@@ -296,19 +295,6 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
   );
 };
 
-// 비밀번호 검증 함수
-const validatePassword = (password) => {
-  const checks = {
-    length: password.length >= 8,
-    uppercase: /[A-Z]/.test(password),
-    lowercase: /[a-z]/.test(password),
-    special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
-  };
-  
-  const strength = Object.values(checks).filter(Boolean).length;
-  return { checks, strength };
-};
-
 // 회원가입 페이지
 const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'player_common' }) => {
   const [step, setStep] = useState(1); // 1: 계정 생성, 2: 프로필 입력
@@ -338,18 +324,11 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [passwordStrength, setPasswordStrength] = useState({ checks: {}, strength: 0 });
   const [showPassword, setShowPassword] = useState(false);
   /** 이메일(아이디) 중복 확인: idle | checking | available | taken | error | unavailable */
   const [emailCheckStatus, setEmailCheckStatus] = useState('idle');
   /** null | 'full' 필수 약관 전문 | 'optional' 선택(마케팅) 동의 전문 */
   const [termsModalView, setTermsModalView] = useState(null);
-
-  // 비밀번호 변경 시 강도 체크
-  const handlePasswordChange = (value) => {
-    setFormData({...formData, password: value});
-    setPasswordStrength(validatePassword(value));
-  };
 
   // Step 1 검증
   const validateStep1 = () => {
@@ -362,19 +341,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       return false;
     }
 
-    if (!formData.password) {
-      setError('비밀번호를 입력해주세요.');
-      return false;
-    }
-
     if (formData.password !== formData.confirmPassword) {
       setError('비밀번호가 일치하지 않습니다.');
-      return false;
-    }
-
-    const { checks } = validatePassword(formData.password);
-    if (!checks.length || !checks.uppercase || !checks.lowercase || !checks.special) {
-      setError('비밀번호는 8자 이상, 대문자, 소문자, 특수문자를 포함해야 합니다.');
       return false;
     }
 
@@ -496,11 +464,15 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
 
       if (signUpError) {
         console.error('Signup error:', signUpError);
-        // 이미 가입된 이메일인 경우 → 로그인 유도
+        if (isAuthPasswordPolicyError(signUpError)) {
+          setError(formatAuthPasswordErrorMessage(signUpError, t));
+          return;
+        }
         if (
           signUpError.message?.toLowerCase().includes('user already registered') ||
           signUpError.code === 'user_already_exists' ||
-          signUpError.status === 422
+          (signUpError.status === 422 &&
+            /already|registered|exists|duplicate/i.test(String(signUpError.message || '')))
         ) {
           setError('이미 가입된 이메일입니다. 로그인 페이지에서 로그인해주세요.');
           setTimeout(() => {
@@ -684,9 +656,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
               <input
                 type={showPassword ? "text" : "password"}
                 value={formData.password}
-                onChange={(e) => handlePasswordChange(e.target.value)}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all pr-10"
-                placeholder="8자 이상, 대/소문자, 특수문자"
                 disabled={loading}
               />
               <button
@@ -697,42 +668,6 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                 <Icon type={showPassword ? "eyeOff" : "eye"} size={18} />
               </button>
             </div>
-            
-            {/* 비밀번호 강도 표시 */}
-            {formData.password && (
-              <div className="mt-2 space-y-1">
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4].map((level) => (
-                    <div
-                      key={level}
-                      className={`h-1 flex-1 rounded-full transition-all ${
-                        passwordStrength.strength >= level
-                          ? passwordStrength.strength === 4
-                            ? 'bg-green-500'
-                            : passwordStrength.strength === 3
-                            ? 'bg-yellow-500'
-                            : 'bg-red-500'
-                          : 'bg-white/10'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <span className={passwordStrength.checks.length ? 'text-green-400' : 'text-gray-500'}>
-                    ✓ 8자 이상
-                  </span>
-                  <span className={passwordStrength.checks.uppercase ? 'text-green-400' : 'text-gray-500'}>
-                    ✓ 대문자
-                  </span>
-                  <span className={passwordStrength.checks.lowercase ? 'text-green-400' : 'text-gray-500'}>
-                    ✓ 소문자
-                  </span>
-                  <span className={passwordStrength.checks.special ? 'text-green-400' : 'text-gray-500'}>
-                    ✓ 특수문자
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* 비밀번호 확인 */}
@@ -743,15 +678,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
               value={formData.confirmPassword}
               onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-              placeholder="비밀번호 재입력"
               disabled={loading}
             />
-            {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-              <p className="text-xs text-red-400 mt-1">비밀번호가 일치하지 않습니다</p>
-            )}
-            {formData.confirmPassword && formData.password === formData.confirmPassword && (
-              <p className="text-xs text-green-400 mt-1">비밀번호가 일치합니다</p>
-            )}
           </div>
 
           {/* 약관 동의 — 전문은 lib/legal/termsOfService.js 의 TERMS_OF_SERVICE_FULL_TEXT */}

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
+import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import DashboardAttendanceInline from '@/components/views/DashboardAttendanceInline';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
@@ -115,11 +116,10 @@ function buildLiveRankingNews(leaderboardTop) {
 }
 
 const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common', embeddedInMyPage = false }) => {
-  const { profile, user } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
   const [statistics, setStatistics] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [matchHistory, setMatchHistory] = useState([]);
-  const [showAllMatchHistory, setShowAllMatchHistory] = useState(false);
   const [rankingNews, setRankingNews] = useState([]);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -131,6 +131,27 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
   const [rawMatches, setRawMatches] = useState([]);
   const [skillProgressWithNodes, setSkillProgressWithNodes] = useState([]);
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const avatarFileRef = useRef(null);
+
+  const handleAvatarChange = useCallback(async (e) => {
+    const f = e.target?.files?.[0];
+    e.target.value = '';
+    if (!f || !user?.id) return;
+    setAvatarBusy(true);
+    try {
+      const { fileToResizedJpegBlob } = await import('@/lib/avatarClient');
+      const { uploadUserAvatarBlob } = await import('@/lib/supabase');
+      const blob = await fileToResizedJpegBlob(f);
+      const { error: upE } = await uploadUserAvatarBlob(user.id, blob);
+      if (upE) throw upE;
+      await refreshProfile();
+    } catch (err) {
+      alert(String(err?.message || err) || '업로드에 실패했습니다.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  }, [user?.id, refreshProfile]);
 
   const tierBoardUi = useMemo(() => {
     const fromRecord = profile?.match_points ?? profile?.tier_points;
@@ -500,7 +521,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                         <div className="text-gray-400 mt-1 flex flex-wrap gap-2 text-xs sm:text-sm">
                           <span
                             className={
-                              res === 'win' ? 'text-blue-400' : res === 'loss' ? 'text-red-400' : 'text-gray-400'
+                              res === 'win' ? 'text-blue-400' : res === 'loss' ? 'text-red-400' : 'text-white'
                             }
                           >
                             {res === 'win' ? t('win') : res === 'loss' ? t('loss') : t('draw')}
@@ -575,24 +596,55 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           </div>
         )}
 
-        <SpotlightCard className="p-4 xs:p-5 sm:p-6">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="w-14 h-14 xs:w-16 xs:h-16 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-2xl xs:text-3xl shadow-lg flex-shrink-0">
-              🏋️
+        <SpotlightCard className="p-3 xs:p-4 sm:p-6 bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f]">
+          <div className="flex items-center gap-2 xs:gap-3 sm:gap-4">
+            <div className="relative flex-shrink-0">
+              <input
+                ref={avatarFileRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={handleAvatarChange}
+                disabled={avatarBusy}
+              />
+              <ProfileAvatarImg
+                avatarUrl={profile?.avatar_url}
+                name={profile?.gym_name || profile?.name}
+                gymFallback="🏋️"
+                gradientClassName="bg-gradient-to-br from-purple-500 to-pink-500"
+                className="w-14 h-14 xs:w-16 xs:h-16 sm:w-20 sm:h-20 rounded-full shadow-lg border-2 border-purple-400/50 text-2xl xs:text-3xl sm:text-4xl"
+              />
+              <button
+                type="button"
+                onClick={() => avatarFileRef.current?.click()}
+                disabled={avatarBusy}
+                className="absolute bottom-0 right-0 w-6 h-6 xs:w-7 xs:h-7 rounded-full bg-purple-500 hover:bg-purple-400 border-2 border-[#0f0f0f] flex items-center justify-center transition-colors disabled:opacity-50"
+                title="프로필 사진 변경"
+              >
+                {avatarBusy
+                  ? <span className="text-white text-[9px] leading-none">…</span>
+                  : <Icon type="edit" size={11} className="text-white" />
+                }
+              </button>
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg xs:text-xl sm:text-2xl font-bold text-white truncate">
-                {profile?.gym_name || profile?.name || '—'}
-              </h3>
-              <div className="flex flex-col gap-0.5 mt-1">
+              <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3 mb-1 xs:mb-1.5 sm:mb-2 flex-wrap">
+                <h3 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-white truncate">
+                  {profile?.gym_name || profile?.name || '—'}
+                </h3>
+                <span className="px-2 py-0.5 xs:px-2.5 xs:py-1 sm:px-3 rounded-full text-[10px] xs:text-xs sm:text-sm font-bold shadow-lg whitespace-nowrap bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                  {t('gym')}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:gap-1 text-[10px] xs:text-xs sm:text-sm text-gray-400">
                 {profile?.gym_location && (
-                  <p className="text-xs xs:text-sm text-gray-400 truncate">📍 {profile.gym_location}</p>
+                  <p className="truncate">{profile.gym_location}</p>
                 )}
                 {profile?.representative_phone && (
-                  <p className="text-xs xs:text-sm text-gray-400">📞 {profile.representative_phone}</p>
+                  <p className="truncate">{profile.representative_phone}</p>
                 )}
                 {profile?.email && (
-                  <p className="text-xs xs:text-sm text-gray-400 truncate">✉️ {profile.email}</p>
+                  <p className="truncate">{profile.email}</p>
                 )}
               </div>
             </div>
@@ -605,31 +657,37 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
             <button
               type="button"
               onClick={() => setActiveTab('approval')}
-              className="p-3 xs:p-4 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/40 rounded-xl transition-all text-left group"
+              className="p-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center justify-between group"
             >
-              <div className="text-xl xs:text-2xl mb-1.5">✅</div>
-              <div className="text-xs xs:text-sm font-bold text-white">{t('approval')}</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">{t('homeSkillApproval')}</div>
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-semibold text-white truncate">{t('approval')}</div>
+                <div className="text-xs text-gray-500 mt-0.5 truncate">{t('homeSkillApproval')}</div>
+              </div>
+              <Icon type="chevronRight" size={18} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('players')}
-              className="p-3 xs:p-4 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 rounded-xl transition-all text-left group"
+              className="p-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center justify-between group"
             >
-              <div className="text-xl xs:text-2xl mb-1.5">👥</div>
-              <div className="text-xs xs:text-sm font-bold text-white">{t('members')}</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">{t('homeMemberList')}</div>
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-semibold text-white truncate">{t('members')}</div>
+                <div className="text-xs text-gray-500 mt-0.5 truncate">{t('homeMemberList')}</div>
+              </div>
+              <Icon type="chevronRight" size={18} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('match')}
-              className="p-3 xs:p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 rounded-xl transition-all text-left group"
+              className="p-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center justify-between group"
             >
-              <div className="text-xl xs:text-2xl mb-1.5">🥊</div>
-              <div className="text-xs xs:text-sm font-bold text-white">{t('matchRoom')}</div>
-              <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5">{t('homeSparring')}</div>
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-semibold text-white truncate">{t('matchRoom')}</div>
+                <div className="text-xs text-gray-500 mt-0.5 truncate">{t('homeSparring')}</div>
+              </div>
+              <Icon type="chevronRight" size={18} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
             </button>
           </div>
         </div>
@@ -729,8 +787,32 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           <SpotlightCard className="p-3 xs:p-4 sm:p-6 bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f]">
             {/* 선수 프로필 헤더 */}
             <div className="flex items-center gap-2 xs:gap-3 sm:gap-4 mb-4 xs:mb-5 sm:mb-6 pb-3 xs:pb-4 border-b border-white/5">
-              <div className="w-14 h-14 xs:w-16 xs:h-16 sm:w-20 sm:h-20 rounded-xl xs:rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-2xl xs:text-3xl shadow-lg border-2 border-blue-400/50 flex-shrink-0">
-                <span>{(profile?.nickname || profile?.name || 'U').charAt(0)}</span>
+              <div className="relative flex-shrink-0">
+                <input
+                  ref={avatarFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={handleAvatarChange}
+                  disabled={avatarBusy}
+                />
+                <ProfileAvatarImg
+                  avatarUrl={profile?.avatar_url}
+                  name={profile?.nickname || profile?.name}
+                  className="w-14 h-14 xs:w-16 xs:h-16 sm:w-20 sm:h-20 rounded-full shadow-lg border-2 border-blue-400/50 text-2xl xs:text-3xl sm:text-4xl"
+                />
+                <button
+                  type="button"
+                  onClick={() => avatarFileRef.current?.click()}
+                  disabled={avatarBusy}
+                  className="absolute bottom-0 right-0 w-6 h-6 xs:w-7 xs:h-7 rounded-full bg-blue-500 hover:bg-blue-400 border-2 border-[#0f0f0f] flex items-center justify-center transition-colors disabled:opacity-50"
+                  title="프로필 사진 변경"
+                >
+                  {avatarBusy
+                    ? <span className="text-white text-[9px] leading-none">…</span>
+                    : <Icon type="edit" size={11} className="text-white" />
+                  }
+                </button>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3 mb-1 xs:mb-1.5 sm:mb-2 flex-wrap">
@@ -777,178 +859,74 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
             </div>
 
             {/* 핵심 전적 - 4개의 주요 지표 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 xs:gap-2.5 sm:gap-3 mb-4 xs:mb-5 sm:mb-6">
-              <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-lg xs:rounded-xl p-2 xs:p-2.5 sm:p-3 border border-blue-500/20">
-                <div className="text-[9px] xs:text-[10px] sm:text-xs text-blue-300 mb-0.5 xs:mb-1 whitespace-nowrap truncate">{t('totalMatches')}</div>
-                <div className="text-lg xs:text-xl sm:text-2xl font-bold text-white">{statistics?.total_matches || 0}</div>
-              </div>
-              <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-lg xs:rounded-xl p-2 xs:p-2.5 sm:p-3 border border-emerald-500/20">
-                <div className="text-xs text-emerald-300 mb-1 whitespace-nowrap">{t('record')}</div>
-                <div className="text-lg font-bold text-white">
-                  {statistics?.wins || 0}{t('win')} {statistics?.draws || 0}{t('draw')} {statistics?.losses || 0}{t('loss')}
+            <div className="rounded-2xl border border-white/8 overflow-hidden bg-white/[0.03] mb-4 xs:mb-5 sm:mb-6">
+              <div className="flex divide-x divide-white/8">
+                <div className="flex-1 py-4 px-3 text-center min-w-0">
+                  <div className="text-base xs:text-lg sm:text-xl font-bold text-white tabular-nums leading-none">{statistics?.total_matches || 0}</div>
+                  <div className="text-[9px] xs:text-[10px] text-gray-600 mt-1.5 tracking-wide">{t('totalMatches')}</div>
                 </div>
-                <div className="text-xs text-emerald-400 mt-1">
-                  {t('winRate')} {statistics ? ((statistics.wins / (statistics.total_matches || 1)) * 100).toFixed(1) : 0}%
+                <div className="flex-1 py-4 px-3 text-center min-w-0">
+                  <div className="text-base xs:text-lg sm:text-xl font-bold text-white tabular-nums leading-none">
+                    <span className="text-blue-400">{statistics?.wins || 0}</span>
+                    <span className="text-gray-600 text-xs mx-0.5">/</span>
+                    <span className="text-gray-300">{statistics?.draws || 0}</span>
+                    <span className="text-gray-600 text-xs mx-0.5">/</span>
+                    <span className="text-red-400">{statistics?.losses || 0}</span>
+                  </div>
+                  <div className="text-[9px] xs:text-[10px] text-gray-600 mt-1.5 tracking-wide">{t('record')}</div>
                 </div>
-              </div>
-              <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 rounded-xl p-3 border border-red-500/20">
-                <div className="text-xs text-red-300 mb-1 whitespace-nowrap">{t('koWins')}</div>
-                <div className="text-2xl font-bold text-red-400">{statistics?.ko_wins || 0}</div>
-              </div>
-              <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 rounded-xl p-3 border border-purple-500/20">
-                <div className="text-xs text-purple-300 mb-1 whitespace-nowrap">{t('winStreak')}</div>
-                <div className="text-2xl font-bold text-purple-400">{statistics?.current_win_streak || 0}</div>
+                <div className="flex-1 py-4 px-3 text-center min-w-0">
+                  <div className="text-base xs:text-lg sm:text-xl font-bold text-red-400 tabular-nums leading-none">{statistics?.ko_wins || 0}</div>
+                  <div className="text-[9px] xs:text-[10px] text-gray-600 mt-1.5 tracking-wide">{t('koWins')}</div>
+                </div>
+                <div className="flex-1 py-4 px-3 text-center min-w-0">
+                  <div className="text-base xs:text-lg sm:text-xl font-bold text-purple-400 tabular-nums leading-none">{statistics?.current_win_streak || 0}</div>
+                  <div className="text-[9px] xs:text-[10px] text-gray-600 mt-1.5 tracking-wide">{t('winStreak')}</div>
+                </div>
               </div>
             </div>
 
-            {/* 복싱 스타일 (선수만) */}
-            {profile?.boxing_style && (
+            {/* 신체 정보 + 복싱 스타일 통합 */}
+            {(profile?.height || profile?.weight || profile?.gender || profile?.boxing_style) && (
               <div className="mb-6">
-                <h4 className="text-sm font-bold text-white mb-3">{t('boxingStyle')}</h4>
-                <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
-                      <span className="text-xl">🥊</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('mainStyle')}</div>
-                      <div className="text-sm font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{profile.boxing_style}</div>
-                    </div>
+                <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">{t('bodyInfo')}</p>
+                <div className="rounded-2xl border border-white/8 overflow-hidden bg-white/[0.03]">
+                  <div className="flex divide-x divide-white/8">
+                    {profile?.height && (
+                      <div className="flex-1 py-4 px-3 text-center min-w-0">
+                        <div className="text-base xs:text-lg sm:text-xl font-bold text-white tabular-nums leading-none">
+                          {profile.height}<span className="text-[10px] xs:text-xs font-normal text-gray-500 ml-0.5">cm</span>
+                        </div>
+                        <div className="text-[9px] xs:text-[10px] text-gray-600 mt-1.5 tracking-wide">{t('height') || '키'}</div>
+                      </div>
+                    )}
+                    {profile?.weight && (
+                      <div className="flex-1 py-4 px-3 text-center min-w-0">
+                        <div className="text-base xs:text-lg sm:text-xl font-bold text-white tabular-nums leading-none">
+                          {profile.weight}<span className="text-[10px] xs:text-xs font-normal text-gray-500 ml-0.5">kg</span>
+                        </div>
+                        <div className="text-[9px] xs:text-[10px] text-gray-600 mt-1.5 tracking-wide">{t('weight') || '체중'}</div>
+                      </div>
+                    )}
+                    {profile?.gender && (
+                      <div className="flex-1 py-4 px-3 text-center min-w-0">
+                        <div className="text-sm xs:text-base font-bold text-white leading-none">
+                          {profile.gender === 'male' ? (t('male') || '남') : (t('female') || '여')}
+                        </div>
+                        <div className="text-[9px] xs:text-[10px] text-gray-600 mt-1.5 tracking-wide">{t('gender') || '성별'}</div>
+                      </div>
+                    )}
+                    {profile?.boxing_style && (
+                      <div className="flex-1 py-4 px-3 text-center min-w-0">
+                        <div className="text-xs xs:text-sm font-bold text-orange-300 truncate leading-none">{profile.boxing_style}</div>
+                        <div className="text-[9px] xs:text-[10px] text-gray-600 mt-1.5 tracking-wide">{t('mainStyle') || '스타일'}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* 신체 정보 (일반회원, 선수 공통) */}
-            {(profile?.height || profile?.weight || profile?.gender) && (
-              <div className="mb-6">
-                <h4 className="text-sm font-bold text-white mb-3">{t('bodyInfo')}</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {/* 키 */}
-                  {profile?.height && (
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                          <span className="text-xl">📏</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('height') || '키'}</div>
-                          <div className="text-sm font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{profile.height}cm</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 몸무게 */}
-                  {profile?.weight && (
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                          <span className="text-xl">⚖️</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('weight') || '체중'}</div>
-                          <div className="text-sm font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{profile.weight}kg</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 성별 */}
-                  {profile?.gender && (
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center">
-                          <span className="text-xl">👤</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('gender') || '성별'}</div>
-                          <div className="text-sm font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">
-                            {profile.gender === 'male' ? (t('male') || '남성') : (t('female') || '여성')}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* 최근 경기 */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-bold text-white">최근 경기</h4>
-                {matchHistory.length > 3 && (
-                  <button 
-                    onClick={() => {
-                      setShowAllMatchHistory(true);
-                      const matchHistorySection = document.getElementById('match-history-section');
-                      if (matchHistorySection) {
-                        matchHistorySection.scrollIntoView({ behavior: 'smooth' });
-                      }
-                    }}
-                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                  >
-                    전체 보기 →
-                  </button>
-                )}
-              </div>
-              {matchHistory.length > 0 ? (
-                <div className="space-y-2">
-                  {matchHistory.slice(0, 3).map((match, i) => (
-                  <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/5 hover:border-white/10 transition-all">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
-                          match.result === 'win' ? 'bg-blue-500/20 text-blue-400' :
-                          match.result === 'loss' ? 'bg-red-500/20 text-red-400' :
-                          'bg-gray-500/20 text-gray-400'
-                        }`}>
-                          {match.result === 'win' ? 'W' : match.result === 'loss' ? 'L' : 'D'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (match.opponentId) setActiveTab(`opponent-profile-${match.opponentId}`);
-                              }}
-                              className="text-sm font-bold text-white hover:text-blue-400 transition-colors truncate"
-                            >
-                              vs. {match.opponent}
-                            </button>
-                            <span className="text-xs text-gray-500 whitespace-nowrap">{match.date}</span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-gray-400">{match.method}</span>
-                            <span className="text-xs text-gray-500">•</span>
-                            <span className={`text-xs font-bold ${
-                              match.result === 'win' ? 'text-blue-400' :
-                              match.result === 'loss' ? 'text-red-400' :
-                              'text-gray-400'
-                            }`}>
-                              {match.score}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                        {match.rounds}R
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                </div>
-              ) : (
-                <div className="bg-white/5 rounded-lg p-8 text-center border border-white/5">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
-                    <Icon type="trophy" size={32} className="text-gray-500" />
-                  </div>
-                  <p className="text-gray-400 text-sm mb-2">{t('noMatchRecords')}</p>
-                  <p className="text-gray-500 text-xs">{t('startFirstMatch')}</p>
-                </div>
-              )}
-            </div>
           </SpotlightCard>
         </div>
 
@@ -962,112 +940,57 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 xs:gap-4 sm:gap-6">
         {/* Tier Points */}
         <div>
-          <SpotlightCard 
-            className="p-3 xs:p-4 sm:p-6 bg-[#1a1a1a] cursor-pointer hover:bg-[#1e1e1e] transition-all"
+          <SpotlightCard
+            className="p-4 sm:p-6 bg-[#1a1a1a] cursor-pointer hover:bg-[#1e1e1e] transition-all overflow-hidden relative"
             onClick={() => setActiveTab && setActiveTab('ranking')}
           >
-            <div className="mb-3 xs:mb-4">
-              <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white mb-0.5 xs:mb-1">{t('tierPoints')}</h3>
-              <p className="text-[10px] xs:text-xs text-gray-500">{t('tierProgress')}</p>
-            </div>
 
-            <div className="flex items-center justify-center py-4 xs:py-6 sm:py-8 relative">
-              {/* 원형 프로그레스 */}
-              <svg className="w-24 h-24 xs:w-28 xs:h-28 sm:w-32 sm:h-32 transform -rotate-90">
-                <circle
-                  cx="48"
-                  cy="48"
-                  r="40"
-                  stroke="currentColor"
-                  strokeWidth="6"
-                  fill="none"
-                  className="text-white/10 xs:hidden"
-                />
-                <circle
-                  cx="56"
-                  cy="56"
-                  r="48"
-                  stroke="currentColor"
-                  strokeWidth="7"
-                  fill="none"
-                  className="text-white/10 hidden xs:block sm:hidden"
-                />
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  fill="none"
-                  className="text-white/10 hidden sm:block"
-                />
-                <circle
-                  cx="48"
-                  cy="48"
-                  r="40"
-                  strokeWidth="6"
-                  fill="none"
-                  strokeDasharray={`${2 * Math.PI * 40}`}
-                  strokeDashoffset={`${2 * Math.PI * 40 * (1 - tierBoardUi.ring)}`}
-                  stroke="url(#tierGradient)"
-                  strokeLinecap="round"
-                  className="xs:hidden"
-                />
-                <circle
-                  cx="56"
-                  cy="56"
-                  r="48"
-                  strokeWidth="7"
-                  fill="none"
-                  strokeDasharray={`${2 * Math.PI * 48}`}
-                  strokeDashoffset={`${2 * Math.PI * 48 * (1 - tierBoardUi.ring)}`}
-                  stroke="url(#tierGradient)"
-                  strokeLinecap="round"
-                  className="hidden xs:block sm:hidden"
-                />
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  strokeWidth="8"
-                  fill="none"
-                  strokeDasharray={`${2 * Math.PI * 56}`}
-                  strokeDashoffset={`${2 * Math.PI * 56 * (1 - tierBoardUi.ring)}`}
-                  stroke="url(#tierGradient)"
-                  strokeLinecap="round"
-                  className="hidden sm:block"
-                />
-                <defs>
-                  <linearGradient id="tierGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#3b82f6" />
-                    <stop offset="100%" stopColor="#06b6d4" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="absolute flex flex-col items-center">
-                <div className="text-[10px] xs:text-xs text-gray-400 whitespace-nowrap">{profile?.tier || 'Bronze III'}</div>
-                <div className="text-xl xs:text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+            <div className="relative flex flex-col gap-4">
+              {/* 상단: 타이틀 + 티어 뱃지 */}
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-blue-400/70">{t('tierPoints')}</p>
+                  <h3 className="text-xl font-black text-white mt-0.5 leading-tight">{profile?.tier || 'Bronze III'}</h3>
+                </div>
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500/30 to-cyan-500/20 border border-blue-400/30 flex items-center justify-center shrink-0">
+                  <Icon type="trophy" size={18} className="text-blue-300" />
+                </div>
+              </div>
+
+              {/* 포인트 숫자 */}
+              <div className="flex items-end gap-1.5">
+                <span className="text-5xl font-black tabular-nums leading-none text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-400">
                   {tierBoardUi.mp}
-                </div>
-                <div className="text-[10px] xs:text-xs text-gray-500 mt-0.5 xs:mt-1 text-center max-w-[10rem]">
-                  {tierBoardUi.next.nextLabel
-                    ? `${tierBoardUi.next.nextLabel} · +${tierBoardUi.next.pointsToNext}`
-                    : (t('maxTier') || '최고 티어')}
-                </div>
+                </span>
+                <span className="text-sm font-semibold text-gray-500 mb-1">pts</span>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2 xs:gap-3 mt-3 xs:mt-4">
-              <div className="p-2 xs:p-3 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-lg border border-blue-500/30 text-center">
-                <div className="text-[10px] xs:text-xs text-gray-400 mb-0.5 xs:mb-1 whitespace-nowrap">{t('nextTier')}</div>
-                <div className="text-xs xs:text-sm font-bold text-blue-400 whitespace-nowrap truncate">
-                  {tierBoardUi.next.nextLabel || t('maxTier')}
+              {/* 프로그레스 바 */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] text-gray-500">{profile?.tier || 'Bronze III'}</span>
+                  <span className="text-[10px] text-gray-500">{tierBoardUi.next.nextLabel || '최고 티어'}</span>
                 </div>
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-700"
+                    style={{ width: `${Math.max(4, Math.round(tierBoardUi.ring * 100))}%` }}
+                  />
+                </div>
+                <p className="text-right text-[10px] text-blue-400/70 mt-1">
+                  {Math.round(tierBoardUi.ring * 100)}%
+                </p>
               </div>
-              <div className="p-2 xs:p-3 bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-lg border border-emerald-500/30 text-center">
-                <div className="text-[10px] xs:text-xs text-gray-400 mb-0.5 xs:mb-1 whitespace-nowrap">{t('pointsNeeded')}</div>
-                <div className="text-base xs:text-lg font-bold text-emerald-400">
-                  {tierBoardUi.next.nextLabel ? `+${tierBoardUi.next.pointsToNext}` : '—'}
+
+              {/* 다음 티어 정보 */}
+              <div className="flex gap-2">
+                <div className="flex-1 p-3 rounded-2xl bg-white/[0.04] border border-white/8">
+                  <p className="text-[10px] text-gray-500 mb-0.5">{t('nextTier')}</p>
+                  <p className="text-sm font-bold text-blue-300 truncate">{tierBoardUi.next.nextLabel || '—'}</p>
+                </div>
+                <div className="flex-1 p-3 rounded-2xl bg-white/[0.04] border border-white/8">
+                  <p className="text-[10px] text-gray-500 mb-0.5">{t('pointsNeeded')}</p>
+                  <p className="text-sm font-bold text-emerald-400">{tierBoardUi.next.nextLabel ? `+${tierBoardUi.next.pointsToNext}` : '최고 티어'}</p>
                 </div>
               </div>
             </div>
@@ -1079,30 +1002,30 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           <SpotlightCard 
             className="p-3 xs:p-4 sm:p-6 bg-[#1a1a1a] transition-all"
           >
-            <div className="flex items-center justify-between mb-3 xs:mb-4 sm:mb-6 gap-2">
+            <div className="mb-3 xs:mb-4 sm:mb-6">
               <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white">{t('matchHistory')}</h3>
-              {matchHistory.length > 0 && (
-                <button
-                  onClick={() => setShowAllMatchHistory(prev => !prev)}
-                  className="px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg text-[10px] xs:text-xs sm:text-sm text-white font-bold transition-all hover:scale-105 flex items-center gap-1 xs:gap-2 whitespace-nowrap"
-                >
-                  {showAllMatchHistory ? '접기' : t('viewHistory')} <Icon type="arrowRight" size={12} className={`xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 transition-transform ${showAllMatchHistory ? 'rotate-90' : ''}`} />
-                </button>
-              )}
             </div>
 
             {matchHistory.length > 0 ? (
               <div className="space-y-2 xs:space-y-3">
-                {(showAllMatchHistory ? matchHistory : matchHistory.slice(0, 5)).map((match, i) => (
-                  <div key={i} className="bg-gradient-to-r from-white/5 to-white/[0.02] rounded-lg overflow-hidden hover:from-white/10 hover:to-white/5 transition-all border border-white/5 hover:border-white/20">
+                {matchHistory.map((match, i) => (
+                  <div key={i} className={`rounded-lg overflow-hidden transition-all border-l-4 ${
+                    match.result === 'win' ? 'bg-blue-900/50 border-l-blue-400 border border-blue-500/40 hover:bg-blue-900/60' :
+                    match.result === 'loss' ? 'bg-red-900/50 border-l-red-400 border border-red-500/40 hover:bg-red-900/60' :
+                    'bg-zinc-900/55 border-l-gray-500 border border-zinc-600/40 hover:bg-zinc-900/70'
+                  }`}>
                     <div className="flex items-center justify-between p-2 xs:p-3 sm:p-4 gap-2 xs:gap-3">
                       <div className="flex items-center gap-2 xs:gap-3 sm:gap-4 flex-1 min-w-0">
-                        <div className="w-8 h-8 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg xs:rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 flex items-center justify-center text-base xs:text-xl sm:text-2xl flex-shrink-0">
+                        <div className={`w-8 h-8 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg xs:rounded-xl flex items-center justify-center text-base xs:text-xl sm:text-2xl flex-shrink-0 ${
+                          match.result === 'win' ? 'bg-blue-500/20 border border-blue-500/30' :
+                          match.result === 'loss' ? 'bg-red-500/20 border border-red-500/30' :
+                          'bg-gray-500/20 border border-gray-500/35'
+                        }`}>
                           {match.icon}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 xs:gap-2 mb-0.5 xs:mb-1 flex-wrap">
-                            <button 
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (match.opponentId) setActiveTab(`opponent-profile-${match.opponentId}`);
@@ -1112,9 +1035,9 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                               vs. {match.opponent}
                             </button>
                             <span className={`px-1.5 xs:px-2 py-0.5 rounded-full text-[9px] xs:text-[10px] font-bold flex-shrink-0 ${
-                              match.result === 'win' ? 'bg-blue-500/20 text-blue-400' : 
-                              match.result === 'loss' ? 'bg-red-500/20 text-red-400' : 
-                              'bg-gray-500/20 text-gray-400'
+                              match.result === 'win' ? 'bg-blue-500/20 text-blue-400' :
+                              match.result === 'loss' ? 'bg-red-500/20 text-red-400' :
+                              'bg-gray-500/25 text-gray-300'
                             }`}>
                               {match.result === 'win' ? t('win') : match.result === 'loss' ? t('loss') : t('draw')}
                             </span>
@@ -1131,23 +1054,23 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                       <div className="flex items-center gap-2 xs:gap-3 sm:gap-4 flex-shrink-0">
                         <div className="text-center">
                           <div className={`text-base xs:text-xl sm:text-2xl font-bold ${
-                            match.result === 'win' ? 'text-blue-400' : 
-                            match.result === 'loss' ? 'text-red-400' : 
-                            'text-gray-400'
+                            match.result === 'win' ? 'text-blue-400' :
+                            match.result === 'loss' ? 'text-red-400' :
+                            'text-gray-300'
                           }`}>
                             {match.score}
                           </div>
                           <div className="text-[10px] text-gray-500 mt-1">{match.rounds}R</div>
                         </div>
                         <div className={`w-12 h-12 rounded-lg bg-gradient-to-br flex items-center justify-center border ${
-                          match.result === 'win' ? 'from-blue-500/20 to-cyan-500/10 border-blue-500/30' : 
-                          match.result === 'loss' ? 'from-red-500/20 to-orange-500/10 border-red-500/30' : 
-                          'from-white/5 to-white/10 border-white/10'
+                          match.result === 'win' ? 'from-blue-500/20 to-cyan-500/10 border-blue-500/30' :
+                          match.result === 'loss' ? 'from-red-500/20 to-orange-500/10 border-red-500/30' :
+                          'from-gray-500/20 to-slate-700/20 border-gray-500/40'
                         }`}>
                           <div className={`text-xl font-bold ${
-                            match.result === 'win' ? 'text-blue-400' : 
-                            match.result === 'loss' ? 'text-red-400' : 
-                            'text-gray-400'
+                            match.result === 'win' ? 'text-blue-400' :
+                            match.result === 'loss' ? 'text-red-400' :
+                            'text-gray-300'
                           }`}>
                             {match.result === 'win' ? '승' : match.result === 'loss' ? '패' : '무'}
                           </div>

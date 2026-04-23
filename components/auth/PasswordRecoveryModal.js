@@ -4,8 +4,7 @@ import { useState } from 'react';
 import { Icon, SpotlightCard } from '@/components/ui';
 import { setPasswordFromRecoverySession, signOut } from '@/lib/supabase';
 import { translations } from '@/lib/translations';
-
-const MIN_LEN = 8;
+import { formatAuthPasswordErrorMessage } from '@/lib/authPasswordErrors';
 
 export default function PasswordRecoveryModal({
   onCompleted,
@@ -21,10 +20,6 @@ export default function PasswordRecoveryModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (password.length < MIN_LEN) {
-      setError(t('passwordTooShort'));
-      return;
-    }
     if (password !== confirm) {
       setError(t('passwordMismatch'));
       return;
@@ -33,7 +28,7 @@ export default function PasswordRecoveryModal({
     try {
       const { error: err } = await setPasswordFromRecoverySession(password);
       if (err) {
-        setError(err.message || t('passwordChangeError'));
+        setError(formatAuthPasswordErrorMessage(err, t));
         return;
       }
       if (typeof window !== 'undefined') {
@@ -44,7 +39,7 @@ export default function PasswordRecoveryModal({
       }
       onCompleted?.();
     } catch (err) {
-      setError(err?.message || t('passwordChangeError'));
+      setError(formatAuthPasswordErrorMessage(err, t));
     } finally {
       setLoading(false);
     }
@@ -69,7 +64,9 @@ export default function PasswordRecoveryModal({
               <Icon type="zap" size={24} fill="currentColor" />
             </div>
             <h2 className="text-xl font-bold text-white mb-2">{t('recoveryModalTitle')}</h2>
-            <p className="text-sm text-gray-400">{t('recoveryModalDesc')}</p>
+            {t('recoveryModalDesc') ? (
+              <p className="text-sm text-gray-400">{t('recoveryModalDesc')}</p>
+            ) : null}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -85,10 +82,8 @@ export default function PasswordRecoveryModal({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                placeholder={t('newPassword')}
                 autoComplete="new-password"
                 disabled={loading}
-                required
               />
             </div>
             <div>
@@ -98,10 +93,8 @@ export default function PasswordRecoveryModal({
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                placeholder={t('confirmNewPassword')}
                 autoComplete="new-password"
                 disabled={loading}
-                required
               />
             </div>
             <button

@@ -198,6 +198,13 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
           <>
             <button
               type="button"
+              onClick={() => setActiveTab('mypage-attendance')}
+              className="w-full py-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold text-base sm:text-lg transition-colors"
+            >
+              {t('attendance')}
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab('mypage')}
               className="w-full py-4 rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] text-white font-bold text-base sm:text-lg transition-colors"
             >

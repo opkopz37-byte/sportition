@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Icon, THEME_ATHLETE, THEME_COACH, THEME_GYM, getMenuStructure } from '@/components/ui';
+import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { useAuth } from '@/lib/AuthContext';
 import { searchPublicPlayerProfiles } from '@/lib/supabase';
 
@@ -367,9 +368,19 @@ return (
               {profile?.tier || (role === 'gym' ? (language === 'ko' ? '체육관' : 'Gym') : 'Bronze III')}
             </div>
           </div>
-          <div className="rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border border-white/10 flex items-center justify-center font-bold text-white shrink-0 w-[clamp(1.5rem,4vw,1.75rem)] h-[clamp(1.5rem,4vw,1.75rem)] text-[clamp(0.5625rem,calc(0.35vw+0.45rem),0.75rem)]">
-            {(profile?.nickname || profile?.name || 'U').charAt(0)}
-          </div>
+          <ProfileAvatarImg
+            avatarUrl={profile?.avatar_url}
+            name={profile?.nickname || profile?.name}
+            gymFallback={role === 'gym' || role === 'admin' ? '🏋️' : null}
+            gymFallbackClassName="text-[clamp(0.5rem,1.6vw,0.7rem)] leading-none select-none"
+            gradientClassName={
+              role === 'gym' || role === 'admin'
+                ? 'bg-gradient-to-br from-purple-500 to-pink-500'
+                : 'bg-gradient-to-br from-blue-500 to-purple-500'
+            }
+            textClassName="text-white font-bold text-[clamp(0.5625rem,calc(0.35vw+0.45rem),0.75rem)]"
+            className="rounded-full border border-white/10 shrink-0 w-[clamp(1.5rem,4vw,1.75rem)] h-[clamp(1.5rem,4vw,1.75rem)]"
+          />
         </button>
 
         {showProfileMenu && (
@@ -405,17 +416,6 @@ return (
               <span>{t('editProfile') || '프로필 수정'}</span>
             </button>
             
-            <button
-              onClick={() => {
-                setActiveTab('mypage-security');
-                setShowProfileMenu(false);
-              }}
-              className="w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,calc(0.3vw+0.6rem),0.875rem)] text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
-            >
-              <Icon type="shield" className="w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0" />
-              <span>{t('accountSecurity') || '계정 보안'}</span>
-            </button>
-
             <div className="border-t border-white/10">
               <button
                 onClick={() => {
@@ -569,9 +569,19 @@ return (
             }}
             className="flex items-center gap-2 mb-2 w-full hover:bg-white/5 rounded-lg p-1.5 transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border border-white/10 flex items-center justify-center flex-shrink-0 text-white font-bold text-xs">
-              {(profile?.nickname || profile?.name || 'U').charAt(0)}
-            </div>
+            <ProfileAvatarImg
+              avatarUrl={profile?.avatar_url}
+              name={profile?.nickname || profile?.name}
+              gymFallback={role === 'gym' || role === 'admin' ? '🏋️' : null}
+              gymFallbackClassName="text-sm leading-none select-none"
+              gradientClassName={
+                role === 'gym' || role === 'admin'
+                  ? 'bg-gradient-to-br from-purple-500 to-pink-500'
+                  : 'bg-gradient-to-br from-blue-500 to-purple-500'
+              }
+              textClassName="text-white font-bold text-xs"
+              className="w-8 h-8 rounded-full border border-white/10 flex-shrink-0"
+            />
             <div className="min-w-0 flex-1 text-left">
               <div className="text-xs font-medium text-white whitespace-nowrap overflow-hidden text-ellipsis">
                 {profile?.nickname || profile?.name || '사용자'}

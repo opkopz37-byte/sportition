@@ -6,12 +6,13 @@ import { Navbar } from '@/components/navigation';
 import { LoginModal, SignupPage, LandingPage } from '@/components/views/landing';
 import { ActiveSkillsView } from '@/components/views/skills';
 import { TierBoardView } from '@/components/views/ranking';
-import { MyPageView, EditProfileView, PrivacySettingsView, NotificationsView, AccountSecurityView, ActivityHistoryView, OpponentProfileView } from '@/components/views/mypage';
+import { MyPageView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView } from '@/components/views/mypage';
 import TermsOfServiceInlineView from '@/components/legal/TermsOfServiceInlineView';
 import { PlayersManagementView, MatchRoomView, GymNewMemberRegisterView } from '@/components/views/coach';
 import { ApprovalView } from '@/components/views/approval';
 import { ComingSoonView } from '@/components/views/comingsoon';
 import AppHomeView from '@/components/views/AppHomeView';
+import DashboardAttendanceInline from '@/components/views/DashboardAttendanceInline';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -277,9 +278,25 @@ export default function SportitionApp() {
       case 'mypage-edit-profile': return <EditProfileView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-privacy': return <PrivacySettingsView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-terms': return <TermsOfServiceInlineView setActiveTab={setActiveTab} backTab="mypage" />;
-      case 'mypage-notifications': return <NotificationsView setActiveTab={setActiveTab} t={t} />;
-      case 'mypage-security': return <AccountSecurityView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-activity': return <ActivityHistoryView setActiveTab={setActiveTab} t={t} />;
+      case 'mypage-attendance': return (
+        <div className="animate-fade-in-up max-w-md mx-auto">
+          <div className="mb-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('home')}
+              className="w-8 h-8 flex-shrink-0 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            </button>
+            <div>
+              <h2 className="text-xl font-bold text-white">{t('attendance')}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{t('dailyCheckIn')}</p>
+            </div>
+          </div>
+          <DashboardAttendanceInline t={t} />
+        </div>
+      );
       default: return null;
     }
   };

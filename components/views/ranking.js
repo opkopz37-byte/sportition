@@ -185,13 +185,35 @@ const TierBoardView = ({
   let firstHighlightAssigned = false;
 
   return (
-    <div className="animate-fade-in-up">
-      <PageHeader
-        title={publicMode ? t('publicTierBoardTitle') : t('tierBoard')}
-        description={`${t('tierBoardSubtitleRule')} · ${(t('tierBoardTotalPlayers') || '').replace('{n}', players.length.toLocaleString())}`}
-      />
+    <div className="animate-fade-in-up w-full">
+      <div className="mb-5 sm:mb-7">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words">
+          {publicMode ? t('publicTierBoardTitle') : t('tierBoard')}
+        </h2>
+      </div>
 
-      <div className="mb-3 sm:mb-4 flex min-w-0 items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2">
+      {/* 검색 바 */}
+      <div className="mb-3 sm:mb-4 relative">
+        <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          id="tier-board-player-search"
+          type="search"
+          value={playerSearch}
+          onChange={(e) => {
+            setPlayerSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          placeholder={t('tierBoardSearchPlaceholder')}
+          autoComplete="off"
+          className="w-full pl-12 pr-4 py-3.5 bg-white/[0.04] border border-white/10 rounded-2xl text-white placeholder-gray-500 focus:outline-none focus:border-white/25 focus:bg-white/[0.06] transition-all text-base"
+        />
+      </div>
+
+      {/* 티어 필터 칩 */}
+      <div className="flex gap-2 mb-5 sm:mb-6 overflow-x-auto pb-1 -mx-1 px-1">
         {TIERS.map((tier) => (
           <button
             key={tier}
@@ -199,58 +221,15 @@ const TierBoardView = ({
               setSelectedTier(tier);
               setCurrentPage(1);
             }}
-            className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg font-bold text-[11px] sm:text-xs whitespace-nowrap transition-all flex-shrink-0 ${
+            className={`px-4 py-2.5 rounded-full font-semibold transition-all text-sm sm:text-base whitespace-nowrap flex-shrink-0 ${
               selectedTier === tier
-                ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
-                : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                ? 'bg-white text-black'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
           >
             {tier === 'All' ? '전체 티어' : tier}
           </button>
         ))}
-      </div>
-
-      <div className="mb-4 sm:mb-5 w-full min-w-0 max-w-none">
-        <label htmlFor="tier-board-player-search" className="sr-only">
-          {t('tierBoardSearchPlaceholder')}
-        </label>
-        <div className="flex w-full min-h-[3rem] sm:min-h-[3.25rem] items-center rounded-xl border border-white/10 bg-white/[0.06] pl-2 sm:pl-3 pr-1 py-1 shadow-inner focus-within:border-blue-500/40 focus-within:ring-2 focus-within:ring-blue-500/25">
-          <span className="flex shrink-0 items-center text-gray-500 pl-1" aria-hidden>
-            <Icon type="search" size={18} className="opacity-80" />
-          </span>
-          <input
-            id="tier-board-player-search"
-            type="search"
-            value={playerSearch}
-            onChange={(e) => {
-              setPlayerSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder={t('tierBoardSearchPlaceholder')}
-            autoComplete="off"
-            className="flex-1 min-w-0 bg-transparent border-0 py-2.5 sm:py-3 pl-2 pr-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-0"
-          />
-          {playerSearch ? (
-            <button
-              type="button"
-              onClick={() => {
-                setPlayerSearch('');
-                setCurrentPage(1);
-              }}
-              className="shrink-0 rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"
-              aria-label={t('tierBoardSearchClear')}
-            >
-              <Icon type="x" size={16} />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="shrink-0 rounded-lg m-0.5 px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium text-white bg-white/10 hover:bg-white/15 border border-white/10"
-            onClick={() => setCurrentPage(1)}
-          >
-            {t('search')}
-          </button>
-        </div>
       </div>
 
       {!publicMode && !isGymAccount && (
@@ -317,19 +296,21 @@ const TierBoardView = ({
         ) : (
           <div className="space-y-2 max-h-72 overflow-y-auto">
             {visibleRecentMatches.map((m) => (
-              <div key={m.id} className={`p-2.5 sm:p-3 rounded-lg border ${
-                m.result === 'win' ? 'bg-emerald-500/10 border-emerald-500/30' :
-                m.result === 'loss' ? 'bg-red-500/10 border-red-500/30' :
-                'bg-gray-500/10 border-gray-500/30'
+              <div key={m.id} className={`p-2.5 sm:p-3 rounded-lg border-l-4 ${
+                m.result === 'win' ? 'bg-blue-900/50 border-l-blue-400 border border-blue-500/40' :
+                m.result === 'loss' ? 'bg-red-900/50 border-l-red-400 border border-red-500/40' :
+                'bg-zinc-900/55 border-l-gray-500 border border-zinc-600/40'
               }`}>
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-xs sm:text-sm font-bold text-white truncate">vs {m.opponent}</div>
                   <div className="text-[10px] sm:text-xs text-gray-400">{m.playedAt}</div>
                 </div>
                 <div className="mt-1 flex items-center justify-between text-[11px] sm:text-xs">
-                  <span className="text-gray-300">점수 {m.score}</span>
+                  <span className={m.result === 'win' ? 'text-blue-400 font-bold' : m.result === 'loss' ? 'text-red-400 font-bold' : 'text-gray-300 font-bold'}>
+                    점수 {m.score}
+                  </span>
                   <span className="text-gray-300">{m.method}</span>
-                  <span className={m.result === 'win' ? 'text-emerald-400' : m.result === 'loss' ? 'text-red-400' : 'text-gray-300'}>
+                  <span className={m.result === 'win' ? 'text-blue-400' : m.result === 'loss' ? 'text-red-400' : 'text-gray-300'}>
                     {m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무'}
                   </span>
                 </div>
@@ -340,178 +321,125 @@ const TierBoardView = ({
       </SpotlightCard>
       )}
 
-      <SpotlightCard className="overflow-hidden">
-        <div className="hidden sm:block bg-white/5 px-2 sm:px-4 py-2 border-b border-white/10 overflow-x-auto">
-          <div className="grid grid-cols-12 gap-2 sm:gap-3 items-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase min-w-[500px]">
-            <div className="col-span-1">#</div>
-            <div className="col-span-3">선수명</div>
-            <div className="col-span-2">티어</div>
-            <div className="col-span-2">{t('victoryPoints')}</div>
-            <div className="col-span-3">스타일</div>
-            <div className="col-span-1 text-right">승률</div>
-          </div>
-        </div>
+      {/* 컬럼 헤더 */}
+      <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_5.5rem_7rem] sm:grid-cols-[2rem_minmax(0,1fr)_7rem_12rem] gap-2 sm:gap-4 px-2 sm:px-3 pb-2.5 sm:pb-3 mb-1 border-b border-white/10 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        <div>#</div>
+        <div>선수</div>
+        <div>티어</div>
+        <div className="text-center">승률</div>
+      </div>
 
-        <div className="divide-y divide-white/5">
-          {loading && (
-            <div className="px-4 py-10 text-center text-gray-500">랭킹을 불러오는 중입니다...</div>
-          )}
+      {/* 랭킹 리스트 */}
+      <div className="divide-y divide-white/5">
+        {loading && (
+          <div className="py-16 text-center text-gray-400 text-base">랭킹을 불러오는 중입니다...</div>
+        )}
 
-          {!loading && paginatedPlayers.length === 0 && (
-            <div className="px-4 py-10 text-center text-gray-500">표시할 선수가 없습니다.</div>
-          )}
+        {!loading && paginatedPlayers.length === 0 && (
+          <div className="py-16 text-center text-gray-400 text-base">표시할 선수가 없습니다.</div>
+        )}
 
-          {paginatedPlayers.map((player) => {
-            const tierColor = getTierColor(player.tier);
-            const rank = player.rank_label || player.match_rank || '-';
-            const isTopThree = Number.isInteger(player.match_rank) && player.match_rank <= 3;
-            const isHighlight = Boolean(searchQ && matchesNameQuery(player, searchQ));
-            const isFirstTarget = isHighlight && !firstHighlightAssigned;
-            if (isFirstTarget) firstHighlightAssigned = true;
+        {paginatedPlayers.map((player) => {
+          const rank = player.rank_label || player.match_rank || '-';
+          const isHighlight = Boolean(searchQ && matchesNameQuery(player, searchQ));
+          const isFirstTarget = isHighlight && !firstHighlightAssigned;
+          if (isFirstTarget) firstHighlightAssigned = true;
+          const wins = Number(player.wins) || 0;
+          const losses = Number(player.losses) || 0;
+          const total = wins + losses;
+          const winPct = total > 0 ? (wins / total) * 100 : 50;
+          const displayWinRate = Number(player.win_rate) || (total > 0 ? Math.round((wins / total) * 100) : 0);
 
-            return (
-              <div
-                key={player.id}
-                id={isFirstTarget ? 'tier-board-search-target' : undefined}
-                className={`px-2 xs:px-3 sm:px-4 py-2.5 xs:py-3 transition-all hover:bg-white/5 ${isTopThree ? 'bg-gradient-to-r from-white/5 to-transparent' : ''} ${isHighlight ? 'ring-2 ring-cyan-400/45 ring-inset rounded-lg' : ''}`}
-              >
-                <div className="sm:hidden">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg font-bold text-xs bg-white/10 text-white">
-                        {rank}
-                      </div>
-                      <button
-                        onClick={() => goPlayer(player.id)}
-                        className="flex items-center gap-2 hover:scale-105 transition-transform"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                          {(player.display_name || 'U').charAt(0)}
-                        </div>
-                        <div className="text-left">
-                          <div className="font-bold text-white text-sm hover:text-blue-400 transition-colors">
-                            {player.display_name}
-                          </div>
-                          <div className="text-[9px] text-gray-500">{player.boxing_style || '스타일 미등록'}</div>
-                        </div>
-                      </button>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-blue-400">{player.match_points || 0}</div>
-                      <div className="text-[9px] text-gray-500">{t('victoryPoints')}</div>
-                    </div>
+          return (
+            <button
+              key={player.id}
+              type="button"
+              id={isFirstTarget ? 'tier-board-search-target' : undefined}
+              onClick={() => goPlayer(player.id)}
+              className={`w-full py-3 sm:py-3.5 px-2 sm:px-3 hover:bg-white/[0.04] transition-all text-left group ${isHighlight ? 'ring-2 ring-cyan-400/45 rounded-lg' : ''}`}
+            >
+              <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_5.5rem_7rem] sm:grid-cols-[2rem_minmax(0,1fr)_7rem_12rem] gap-2 sm:gap-4 items-center">
+                {/* 순위 */}
+                <div className="text-sm sm:text-lg font-bold text-gray-500 tabular-nums">{rank}</div>
+
+                {/* 선수 */}
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br from-blue-500/80 to-purple-600/80 flex items-center justify-center text-white font-bold text-xs sm:text-base flex-shrink-0">
+                    {(player.display_name || 'U').charAt(0)}
                   </div>
-
-                  <div className="flex items-center justify-between gap-2 text-[10px]">
-                    <div className={`inline-flex px-2 py-1 rounded-lg bg-gradient-to-r ${tierColor.bg} border ${tierColor.border}`}>
-                      <span className={`font-bold ${tierColor.text} whitespace-nowrap`}>{player.tier || 'Unranked'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <span>승률 {player.win_rate || 0}%</span>
-                      <span>•</span>
-                      <span>{player.wins || 0}승 {player.losses || 0}패</span>
-                    </div>
-                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold text-white truncate leading-tight">
+                    {player.display_name}
+                  </h3>
                 </div>
 
-                <div className="hidden sm:grid grid-cols-12 gap-2 sm:gap-3 items-center">
-                  <div className="col-span-1">
-                    <div className="inline-flex items-center justify-center w-7 h-7 sm:w-9 sm:h-9 rounded-lg font-bold text-xs sm:text-sm bg-white/10 text-white">
-                      {rank}
-                    </div>
-                  </div>
+                {/* 티어 */}
+                <div className="text-sm sm:text-base font-semibold text-white truncate">
+                  {player.tier || 'Unranked'}
+                </div>
 
-                  <div className="col-span-3">
-                    <button
-                      onClick={() => goPlayer(player.id)}
-                      className="flex items-center gap-2 w-full hover:scale-105 transition-transform"
+                {/* 승률 바 + % */}
+                <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+                  <div className="relative flex h-5 sm:h-6 flex-1 min-w-0 rounded-md overflow-hidden bg-white/5">
+                    <div
+                      className="flex items-center justify-start pl-1 sm:pl-1.5 bg-blue-500/70 text-[9px] sm:text-[11px] font-bold text-white tabular-nums"
+                      style={{ width: `${winPct}%` }}
                     >
-                      <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs sm:text-sm flex-shrink-0">
-                        {(player.display_name || 'U').charAt(0)}
-                      </div>
-                      <div className="min-w-0 text-left">
-                        <div className="font-bold text-white text-xs sm:text-sm whitespace-nowrap overflow-hidden text-ellipsis hover:text-blue-400 transition-colors">
-                          {player.display_name}
-                        </div>
-                        <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">
-                          {player.role === 'player_athlete' ? '선수' : '일반회원'}
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-
-                  <div className="col-span-2">
-                    <div className={`inline-flex px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-gradient-to-r ${tierColor.bg} border ${tierColor.border}`}>
-                      <span className={`font-bold text-[10px] sm:text-xs ${tierColor.text} whitespace-nowrap`}>{player.tier || 'Unranked'}</span>
+                      {wins > 0 && <span className="whitespace-nowrap">{wins}승</span>}
+                    </div>
+                    <div
+                      className="flex items-center justify-end pr-1 sm:pr-1.5 bg-red-500/70 text-[9px] sm:text-[11px] font-bold text-white tabular-nums"
+                      style={{ width: `${100 - winPct}%` }}
+                    >
+                      {losses > 0 && <span className="whitespace-nowrap">{losses}패</span>}
                     </div>
                   </div>
-
-                  <div className="col-span-2">
-                    <div className="font-bold text-sm sm:text-base text-white whitespace-nowrap">{(player.match_points || 0).toLocaleString()}</div>
-                    <div className="text-[9px] sm:text-[10px] text-gray-500 whitespace-nowrap">{t('victoryPoints')}</div>
-                  </div>
-
-                  <div className="col-span-3">
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <div className="px-1.5 sm:px-2 py-0.5 rounded-md bg-white/10 text-[9px] sm:text-[10px] text-gray-300 whitespace-nowrap">
-                        {player.boxing_style || '스타일 미등록'}
-                      </div>
-                      {player.gym_name && (
-                        <div className="px-1.5 sm:px-2 py-0.5 rounded-md bg-white/10 text-[9px] sm:text-[10px] text-gray-300 whitespace-nowrap">
-                          {player.gym_name}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="col-span-1 text-right">
-                    <div className="font-bold text-sm sm:text-base text-blue-400">{player.win_rate || 0}%</div>
-                    <div className="text-xs text-gray-500">{player.wins || 0}승 {player.losses || 0}패</div>
-                  </div>
+                  <span className="text-[11px] sm:text-sm font-bold text-white tabular-nums flex-shrink-0 w-[2.25rem] sm:w-[2.75rem] text-right">
+                    {displayWinRate}%
+                  </span>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </button>
+          );
+        })}
+      </div>
 
-        {totalPages > 1 && (
-          <div className="px-6 py-4 bg-white/5 border-t border-white/10">
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all"
-              >
-                ←
-              </button>
+      {totalPages > 1 && (
+        <div className="mt-6 pt-5 border-t border-white/10">
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all"
+            >
+              ←
+            </button>
 
-              {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                const pageNum = i + 1;
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`w-10 h-10 rounded-lg font-bold transition-all ${currentPage === pageNum ? 'bg-blue-500 text-white' : 'bg-white/10 hover:bg-white/20 text-gray-400'}`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
+            {[...Array(Math.min(5, totalPages))].map((_, i) => {
+              const pageNum = i + 1;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`w-10 h-10 rounded-lg font-bold transition-all ${currentPage === pageNum ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10 text-gray-400'}`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
 
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all"
-              >
-                →
-              </button>
-            </div>
-            <div className="text-center mt-3 text-sm text-gray-500">
-              #{(currentPage - 1) * ITEMS_PER_PAGE + 1} ~ #{Math.min(currentPage * ITEMS_PER_PAGE, filteredPlayers.length)} / 총 {filteredPlayers.length}명
-            </div>
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all"
+            >
+              →
+            </button>
           </div>
-        )}
-      </SpotlightCard>
+          <div className="text-center mt-3 text-sm text-gray-500">
+            #{(currentPage - 1) * ITEMS_PER_PAGE + 1} ~ #{Math.min(currentPage * ITEMS_PER_PAGE, filteredPlayers.length)} / 총 {filteredPlayers.length}명
+          </div>
+        </div>
+      )}
     </div>
   );
 };

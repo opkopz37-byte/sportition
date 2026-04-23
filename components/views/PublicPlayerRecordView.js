@@ -151,7 +151,16 @@ export default function PublicPlayerRecordView({ playerId, onBack, language = 'k
               ) : (
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {(showAllOpponentMatches ? opponentMatches : opponentMatches.slice(0, 8)).map((match) => (
-                    <div key={match.id} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div
+                      key={match.id}
+                      className={`p-3 rounded-lg border-l-4 ${
+                        match.result === 'win'
+                          ? 'bg-blue-900/50 border-l-blue-400 border border-blue-500/40'
+                          : match.result === 'loss'
+                            ? 'bg-red-900/50 border-l-red-400 border border-red-500/40'
+                            : 'bg-zinc-900/55 border-l-gray-500 border border-zinc-600/40'
+                      }`}
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-sm text-white font-bold truncate">
                           vs {match.opponent_name || match.opponent?.nickname || match.opponent?.name || '—'}
@@ -161,12 +170,22 @@ export default function PublicPlayerRecordView({ playerId, onBack, language = 'k
                         </div>
                       </div>
                       <div className="flex items-center justify-between mt-2 text-xs text-gray-300">
-                        <span>{match.score || '-'}</span>
+                        <span
+                          className={
+                            match.result === 'win'
+                              ? 'text-blue-400 font-bold'
+                              : match.result === 'loss'
+                                ? 'text-red-400 font-bold'
+                                : 'text-gray-300 font-bold'
+                          }
+                        >
+                          {match.score || '-'}
+                        </span>
                         <span>{(match.method || 'decision').toUpperCase()}</span>
                         <span
                           className={
                             match.result === 'win'
-                              ? 'text-emerald-400'
+                              ? 'text-blue-400'
                               : match.result === 'loss'
                                 ? 'text-red-400'
                                 : 'text-gray-300'

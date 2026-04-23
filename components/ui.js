@@ -83,16 +83,6 @@ const PageHeader = ({ title, description, onBack, children }) => (
   <div className="mb-3 sm:mb-6">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="w-7 h-7 sm:w-9 sm:h-9 flex-shrink-0 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all group mt-0.5"
-            title="뒤로가기"
-          >
-            <Icon type="arrowLeft" size={14} className="sm:w-4 sm:h-4 text-gray-400 group-hover:text-white group-hover:-translate-x-1 transition-all" />
-          </button>
-        )}
         <div className="flex-1 min-w-0">
           <h2 className="text-base sm:text-xl lg:text-2xl font-bold text-white mb-0.5 break-words">{title}</h2>
           {description && (
