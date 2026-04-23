@@ -6,7 +6,7 @@ import { Navbar } from '@/components/navigation';
 import { LoginModal, SignupPage, LandingPage } from '@/components/views/landing';
 import { ActiveSkillsView } from '@/components/views/skills';
 import { TierBoardView } from '@/components/views/ranking';
-import { MyPageView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView } from '@/components/views/mypage';
+import { MyPageView, SettingsView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView, MatchHistoryView } from '@/components/views/mypage';
 import TermsOfServiceInlineView from '@/components/legal/TermsOfServiceInlineView';
 import { PlayersManagementView, MatchRoomView, GymNewMemberRegisterView } from '@/components/views/coach';
 import { ApprovalView } from '@/components/views/approval';
@@ -275,10 +275,12 @@ export default function SportitionApp() {
   const renderMyPageRoutes = () => {
     switch(activeTab) {
       case 'mypage': return <MyPageView setActiveTab={setActiveTab} t={t} />;
+      case 'settings': return <SettingsView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-edit-profile': return <EditProfileView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-privacy': return <PrivacySettingsView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-terms': return <TermsOfServiceInlineView setActiveTab={setActiveTab} backTab="mypage" />;
       case 'mypage-activity': return <ActivityHistoryView setActiveTab={setActiveTab} t={t} />;
+      case 'mypage-match-history': return <MatchHistoryView setActiveTab={setActiveTab} t={t} />;
       case 'mypage-attendance': return (
         <div className="animate-fade-in-up max-w-md mx-auto">
           <div className="mb-4 flex items-center gap-3">

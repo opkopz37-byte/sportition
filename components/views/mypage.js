@@ -34,20 +34,38 @@ const MyPageView = ({ setActiveTab, t }) => {
         embeddedInMyPage
       />
     ) : null}
+  </div>
+);
+};
 
-    <div className={`${embedDashboard ? 'mt-8' : ''}`}>
-      <SpotlightCard className="p-6">
-        <h3 className="text-lg font-bold text-white mb-4">{t('settings')}</h3>
+// 설정 페이지 (네비게이션 드롭다운에서 접근)
+const SettingsView = ({ setActiveTab, t = (key) => key }) => {
+  return (
+    <div className="animate-fade-in-up w-full">
+      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
+          {t('settings')}
+        </h2>
+        <button
+          type="button"
+          onClick={() => setActiveTab('home')}
+          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
+        >
+          ← 뒤로
+        </button>
+      </div>
+
+      <SpotlightCard className="p-5 sm:p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {[
             { id: 'edit-profile', label: t('editProfile') },
-            { id: 'terms', label: t('termsOfService') },
             { id: 'privacy', label: t('privacySettings') },
+            { id: 'terms', label: t('termsOfService') },
           ].map((setting) => (
             <button
               key={setting.id}
               onClick={() => setActiveTab(`mypage-${setting.id}`)}
-              className="w-full p-3 rounded-lg bg-white/5 hover:bg-white/10 text-left text-white text-sm transition-colors flex items-center justify-between group"
+              className="w-full p-3.5 rounded-lg bg-white/5 hover:bg-white/10 text-left text-white text-sm transition-colors flex items-center justify-between group"
             >
               <span>{setting.label}</span>
               <Icon type="chevronRight" size={16} className="text-gray-500 group-hover:text-white transition-colors" />
@@ -56,8 +74,7 @@ const MyPageView = ({ setActiveTab, t }) => {
         </div>
       </SpotlightCard>
     </div>
-  </div>
-);
+  );
 };
 
 // Edit Profile 페이지
@@ -369,6 +386,38 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState({ type: null, text: '' });
   const [termsOpen, setTermsOpen] = useState(false);
+  // 'idle' | 'checking' | 'match' | 'mismatch'
+  const [currentPwStatus, setCurrentPwStatus] = useState('idle');
+
+  // 현재 비밀번호 디바운스 검증
+  useEffect(() => {
+    const pw = passwordData.current;
+    if (!pw) {
+      setCurrentPwStatus('idle');
+      return;
+    }
+    setCurrentPwStatus('checking');
+    const timer = setTimeout(async () => {
+      try {
+        const { verifyCurrentPassword } = await import('@/lib/supabase');
+        const { ok } = await verifyCurrentPassword(pw);
+        // 사용자가 그 사이에 값을 바꿨을 수 있으므로 확인
+        setPasswordData((cur) => {
+          if (cur.current !== pw) return cur;
+          setCurrentPwStatus(ok ? 'match' : 'mismatch');
+          return cur;
+        });
+      } catch {
+        setCurrentPwStatus('mismatch');
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [passwordData.current]);
+
+  const newPwMatch =
+    passwordData.new && passwordData.confirm
+      ? passwordData.new === passwordData.confirm
+      : null;
 
   const handleSubmitPassword = async (e) => {
     e.preventDefault();
@@ -418,10 +467,18 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
 
   return (
     <div className="animate-fade-in-up w-full">
-      <PageHeader
-        title={t('privacySettings')}
-        onBack={() => setActiveTab('mypage')}
-      />
+      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
+          {t('privacySettings')}
+        </h2>
+        <button
+          type="button"
+          onClick={() => setActiveTab('mypage')}
+          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
+        >
+          ← 뒤로
+        </button>
+      </div>
 
       <div className="space-y-4">
         {/* 비밀번호 변경 */}
@@ -448,6 +505,15 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
                 onChange={(e) => setPasswordData({ ...passwordData, current: e.target.value })}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
               />
+              {passwordData.current && currentPwStatus === 'checking' && (
+                <p className="text-xs text-gray-400 mt-1.5">확인 중…</p>
+              )}
+              {currentPwStatus === 'match' && (
+                <p className="text-xs text-emerald-400 mt-1.5">현재 비밀번호가 일치합니다</p>
+              )}
+              {currentPwStatus === 'mismatch' && passwordData.current && (
+                <p className="text-xs text-red-400 mt-1.5">현재 비밀번호가 일치하지 않습니다</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">{t('newPassword')}</label>
@@ -468,6 +534,12 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
                 onChange={(e) => setPasswordData({ ...passwordData, confirm: e.target.value })}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
               />
+              {newPwMatch === true && (
+                <p className="text-xs text-emerald-400 mt-1.5">새 비밀번호가 일치합니다</p>
+              )}
+              {newPwMatch === false && (
+                <p className="text-xs text-red-400 mt-1.5">새 비밀번호가 일치하지 않습니다</p>
+              )}
             </div>
             <button
               type="submit"
@@ -1189,4 +1261,109 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
   );
 };
 
-export { MyPageView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView };
+// 전체 전적 목록 페이지
+const MatchHistoryView = ({ setActiveTab, t = (key) => key }) => {
+  const { user } = useAuth();
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getUserMatches } = await import('@/lib/supabase');
+        const { data } = await getUserMatches(user.id);
+        if (cancelled) return;
+        setMatches(data || []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  return (
+    <div className="animate-fade-in-up w-full">
+      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
+          {t('matchHistory') || '전적'}
+        </h2>
+        <button
+          type="button"
+          onClick={() => setActiveTab('mypage')}
+          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
+        >
+          ← 뒤로
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-16 text-center text-gray-400 text-sm">전적을 불러오는 중…</div>
+      ) : matches.length === 0 ? (
+        <div className="py-16 text-center text-gray-400 text-sm">아직 경기 기록이 없습니다.</div>
+      ) : (
+        <div className="space-y-2.5">
+          {matches.map((m) => {
+            const playedAt = m.played_at ? new Date(m.played_at) : null;
+            const dateLabel = playedAt && !Number.isNaN(playedAt.getTime())
+              ? playedAt.toISOString().split('T')[0]
+              : '-';
+            const result = m.result === 'win' || m.result === 'loss' || m.result === 'draw' ? m.result : 'draw';
+            const resultLabel = result === 'win' ? '승' : result === 'loss' ? '패' : '무';
+            const accent = result === 'win' ? 'text-blue-300' : result === 'loss' ? 'text-red-300' : 'text-gray-300';
+            const dotColor = result === 'win' ? 'bg-blue-400' : result === 'loss' ? 'bg-red-400' : 'bg-gray-500';
+            const bgClass = result === 'win'
+              ? 'bg-blue-500/15 hover:bg-blue-500/25 border-blue-400/30 hover:border-blue-400/50'
+              : result === 'loss'
+              ? 'bg-red-500/15 hover:bg-red-500/25 border-red-400/30 hover:border-red-400/50'
+              : 'bg-white/[0.04] hover:bg-white/[0.07] border-white/10 hover:border-white/20';
+            const opponent = m.opponent_name || m.opponent?.nickname || m.opponent?.name || '상대 미상';
+            const opponentId = m.opponent?.id || m.opponent_id;
+            const opponentAvatarUrl = m.opponent?.avatar_url || null;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  if (opponentId) setActiveTab(`opponent-profile-${opponentId}`);
+                }}
+                className={`w-full p-4 border rounded-2xl transition-all text-left flex items-center gap-4 group ${bgClass}`}
+              >
+                <div className="relative flex-shrink-0">
+                  <ProfileAvatarImg
+                    avatarUrl={opponentAvatarUrl}
+                    name={opponent}
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-white/15 text-lg"
+                  />
+                  <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-[#0a0a0a] ${dotColor}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500 whitespace-nowrap">vs</p>
+                    <h4 className="text-base sm:text-lg font-bold text-white truncate">{opponent}</h4>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span className="whitespace-nowrap">{dateLabel}</span>
+                    <span className="text-gray-700">·</span>
+                    <span className="whitespace-nowrap uppercase">{m.method || 'decision'}</span>
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className={`text-2xl sm:text-3xl font-black tabular-nums leading-none ${accent}`}>
+                    {resultLabel}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1 tabular-nums">
+                    {m.score || '-'} · {m.rounds || '-'}R
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export { MyPageView, SettingsView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView, MatchHistoryView };

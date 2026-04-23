@@ -407,13 +407,13 @@ return (
             
             <button
               onClick={() => {
-                setActiveTab('mypage-edit-profile');
+                setActiveTab('settings');
                 setShowProfileMenu(false);
               }}
               className="w-full px-[clamp(0.75rem,3vw,1rem)] py-[clamp(0.5rem,2vw,0.75rem)] text-left text-[clamp(0.75rem,calc(0.3vw+0.6rem),0.875rem)] text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
             >
-              <Icon type="edit" className="w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0" />
-              <span>{t('editProfile') || '프로필 수정'}</span>
+              <Icon type="settings" className="w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0" />
+              <span>{t('settings') || '설정'}</span>
             </button>
             
             <div className="border-t border-white/10">

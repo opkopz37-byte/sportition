@@ -5,7 +5,8 @@
       "Bash(node --input-type=module --experimental-vm-modules)",
       "Bash(npx next *)",
       "Bash(grep -E \"\\\\.sql$\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(awk 'NR>=1356 && /^      \\\\\\)\\\\}$/ {print NR; exit}' /Users/hojin814/Desktop/01_Web/01_Spotition/sportition-mvp3/components/views/coach.js)"
     ]
   }
 }

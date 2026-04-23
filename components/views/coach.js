@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { translations } from '@/lib/translations';
@@ -882,6 +883,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // all | active | inactive | athlete
   const [selectedMember, setSelectedMember] = useState(null); // 상세보기 모달용
+  const memberModalScrollRef = useRef(null);
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState(null);
@@ -900,6 +902,13 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
   const [actionMessage, setActionMessage] = useState(null);
 
   const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
+
+  // 모달 열릴 때마다 모달 내부 스크롤만 맨 위로 (페이지는 그대로)
+  useEffect(() => {
+    if (selectedMember && memberModalScrollRef.current) {
+      memberModalScrollRef.current.scrollTop = 0;
+    }
+  }, [selectedMember?.id, memberDetailMode]);
 
   const openMemberEditForm = (m) => {
     if (!m) return;
@@ -1344,8 +1353,8 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
         ))}
       </div>
 
-      {/* 회원 상세보기 모달 */}
-      {selectedMember && (
+      {/* 회원 상세보기 모달 — Portal로 렌더링하여 transform 컨테이너 영향 제거 */}
+      {selectedMember && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-stretch sm:items-center sm:justify-center sm:p-4 animate-fade-in"
           onClick={() => {
@@ -1454,7 +1463,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
             )}
 
             {/* 모달 내용 */}
-            <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0">
+            <div ref={memberModalScrollRef} className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0">
               {memberDetailMode === 'info' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
                   <SpotlightCard className="p-4 sm:p-5">
@@ -1840,7 +1849,8 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
