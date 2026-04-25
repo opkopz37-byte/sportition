@@ -5,6 +5,7 @@ import { Icon, THEME_ATHLETE, THEME_COACH, THEME_GYM, getMenuStructure } from '@
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { useAuth } from '@/lib/AuthContext';
 import { searchPublicPlayerProfiles } from '@/lib/supabase';
+import { getTierColor } from '@/lib/tierLadder';
 
 // 네비게이션 메뉴 아이템
 const navItemIsActive = (item, activeTab) => {
@@ -294,7 +295,12 @@ return (
                               </span>
                             </div>
                             <div className="flex items-center gap-2 text-xs text-gray-400">
-                              <span className="text-yellow-400 font-medium">{player.tier}</span>
+                              <span
+                                className={`font-medium ${getTierColor(player.tier).text}`}
+                                style={getTierColor(player.tier).shadow ? { textShadow: getTierColor(player.tier).shadow } : undefined}
+                              >
+                                {player.tier}
+                              </span>
                               <span>•</span>
                               <span>승률 {player.win_rate || 0}%</span>
                               <span>•</span>
@@ -527,7 +533,12 @@ return (
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
-                              <span className="text-yellow-400 font-medium">{player.tier}</span>
+                              <span
+                                className={`font-medium ${getTierColor(player.tier).text}`}
+                                style={getTierColor(player.tier).shadow ? { textShadow: getTierColor(player.tier).shadow } : undefined}
+                              >
+                                {player.tier}
+                              </span>
                               <span>•</span>
                               <span>{player.win_rate || 0}%</span>
                             </div>

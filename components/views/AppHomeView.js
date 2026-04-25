@@ -119,14 +119,21 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
                   }}
                 >
                   {leaderboardRows.slice(0, 12).map((row, i) => (
-                    <div
+                    <button
                       key={row.id || i}
-                      className="h-7 flex items-center justify-center gap-2 w-full"
+                      type="button"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (row.id) setActiveTab(`opponent-profile-${row.id}`);
+                      }}
+                      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                      className="h-7 flex items-center justify-center gap-2 w-full select-none active:bg-white/5 cursor-pointer"
                     >
                       <span className="text-amber-400/90 font-bold">#{row.rank_label || i + 1}</span>
                       <span className="text-gray-200 truncate">{row.display_name || row.name}</span>
                       <span className="text-gray-500">{row.tier}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>

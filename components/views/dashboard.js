@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
+import MatchHistorySection from '@/components/MatchHistorySection';
 import DashboardAttendanceInline from '@/components/views/DashboardAttendanceInline';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
-import { computeMatchPoints, getNextTierInfo, getTierRingProgress } from '@/lib/tierLadder';
+import { computeMatchPoints, getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
 
 const dashDevLog = (...args) => {
   if (process.env.NODE_ENV === 'development') console.log(...args);
@@ -121,6 +122,8 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
   const [attendance, setAttendance] = useState([]);
   const [matchHistory, setMatchHistory] = useState([]);
   const [rankingNews, setRankingNews] = useState([]);
+  const [matchResetTickets, setMatchResetTickets] = useState(0);
+  const [matchResetBusy, setMatchResetBusy] = useState(false);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -153,6 +156,45 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
     }
   }, [user?.id, refreshProfile]);
 
+  const handleResetMatchRecords = useCallback(async () => {
+    if (matchResetBusy) return;
+    if (matchResetTickets <= 0) {
+      alert('전적 초기화권이 없습니다.');
+      return;
+    }
+    const ok = window.confirm(
+      `전적 초기화권 1장을 사용해 모든 경기 기록과 통계·랭킹을 초기화합니다.\n현재 보유: ${matchResetTickets}장\n\n되돌릴 수 없습니다. 계속하시겠습니까?`
+    );
+    if (!ok) return;
+    setMatchResetBusy(true);
+    try {
+      const { resetMatchRecordsWithTicketRpc, getMatchResetTickets, getUserStatistics, getUserMatches } =
+        await import('@/lib/supabase');
+      const { error } = await resetMatchRecordsWithTicketRpc();
+      if (error) {
+        alert(error.message || '초기화에 실패했습니다.');
+        return;
+      }
+      // 화면 갱신: 잔여 티켓 + 통계 + 매치 리스트 다시 불러오기
+      const [tk, st, mt] = await Promise.all([
+        getMatchResetTickets(user.id),
+        getUserStatistics(user.id),
+        getUserMatches(user.id),
+      ]);
+      if (typeof tk?.data === 'number') setMatchResetTickets(tk.data);
+      if (st?.data) setStatistics(st.data);
+      if (mt?.data) {
+        setRawMatches(mt.data);
+        setMatchHistory([]);
+      }
+      alert('전적이 초기화되었습니다.');
+    } catch (err) {
+      alert(String(err?.message || err) || '초기화에 실패했습니다.');
+    } finally {
+      setMatchResetBusy(false);
+    }
+  }, [matchResetBusy, matchResetTickets, user?.id]);
+
   const tierBoardUi = useMemo(() => {
     const fromRecord = profile?.match_points ?? profile?.tier_points;
     const mp =
@@ -181,18 +223,24 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           getUserMatches,
           getMatchLeaderboard,
           getUserSkillNodeProgressWithNodes,
+          getMatchResetTickets,
         } = supabaseModule;
 
         const lookback = new Date();
         lookback.setDate(lookback.getDate() - 400);
 
-        const [statsResult, attendanceResult, lbResult, matchesResult, skillProgressResult] = await Promise.all([
+        const [statsResult, attendanceResult, lbResult, matchesResult, skillProgressResult, ticketsResult] = await Promise.all([
           getUserStatistics(user.id),
           getUserAttendance(user.id, lookback.toISOString()),
           getMatchLeaderboard(5),
-          getUserMatches(user.id, 200),
+          getUserMatches(user.id), // limit 없음 — 타일은 전체 전적 기반으로 계산
           getUserSkillNodeProgressWithNodes(user.id),
+          getMatchResetTickets(user.id),
         ]);
+
+        if (typeof ticketsResult?.data === 'number') {
+          setMatchResetTickets(ticketsResult.data);
+        }
 
         if (statsResult.data) {
           dashDevLog('[Dashboard] 통계 데이터 로드:', statsResult.data);
@@ -823,14 +871,22 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                   </span>
                 </div>
                 <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 text-[10px] xs:text-xs sm:text-sm text-gray-400 flex-wrap">
-                  {(profile?.role === 'player_common' || profile?.role === 'player_athlete') && profile?.tier && (
-                    <>
-                      <span className="font-bold text-yellow-400 whitespace-nowrap">{profile.tier}</span>
-                      <span className="hidden xs:inline">•</span>
-                      <span className="whitespace-nowrap text-[9px] xs:text-[10px] sm:text-xs">{tierBoardUi.mp} {t('victoryPoints')}</span>
-                      <span className="hidden xs:inline">•</span>
-                    </>
-                  )}
+                  {(profile?.role === 'player_common' || profile?.role === 'player_athlete') && profile?.tier && (() => {
+                    const tc = getTierColor(profile.tier);
+                    return (
+                      <>
+                        <span
+                          className={`font-bold whitespace-nowrap ${tc.text} ${tc.glowClass || ''}`}
+                          style={tc.shadow ? { textShadow: tc.shadow } : undefined}
+                        >
+                          {profile.tier}
+                        </span>
+                        <span className="hidden xs:inline">•</span>
+                        <span className="whitespace-nowrap text-[9px] xs:text-[10px] sm:text-xs">{tierBoardUi.mp} {t('victoryPoints')}</span>
+                        <span className="hidden xs:inline">•</span>
+                      </>
+                    );
+                  })()}
                   {profile?.boxing_style && (
                     <>
                       <span className="whitespace-nowrap text-[9px] xs:text-[10px] sm:text-xs">{profile.boxing_style}</span>
@@ -855,7 +911,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
             </div>
 
             {/* 핵심 전적 - 4개의 주요 지표 */}
-            <div className="rounded-2xl border border-white/8 overflow-hidden bg-white/[0.03] mb-4 xs:mb-5 sm:mb-6">
+            <div className="rounded-2xl border border-white/8 overflow-hidden bg-white/[0.03] mb-3 xs:mb-3.5 sm:mb-4">
               <div className="flex divide-x divide-white/8">
                 <div className="flex-1 py-2.5 px-2 text-center min-w-0">
                   <div className="text-sm sm:text-base font-bold text-white tabular-nums leading-none">{statistics?.total_matches || 0}</div>
@@ -880,6 +936,29 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                   <div className="text-[9px] sm:text-[10px] text-gray-500 mt-1 tracking-wide">{t('winStreak')}</div>
                 </div>
               </div>
+            </div>
+
+            {/* 전적 초기화권 사용 버튼 + 보유 개수 */}
+            <div className="mb-4 xs:mb-5 sm:mb-6 flex items-center justify-between gap-2 px-1">
+              <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-gray-400">
+                <span>전적 초기화권</span>
+                <span className="px-1.5 py-0.5 rounded-md bg-white/8 border border-white/10 text-amber-300 font-bold tabular-nums">
+                  {matchResetTickets}
+                </span>
+                <span className="text-gray-500">장</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleResetMatchRecords}
+                disabled={matchResetBusy || matchResetTickets <= 0}
+                className={`px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors ${
+                  matchResetBusy || matchResetTickets <= 0
+                    ? 'bg-white/5 text-gray-500 cursor-not-allowed'
+                    : 'bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25'
+                }`}
+              >
+                {matchResetBusy ? '초기화 중…' : '전적 초기화'}
+              </button>
             </div>
 
             {/* 신체 정보 + 복싱 스타일 통합 */}
@@ -941,21 +1020,34 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
             onClick={() => setActiveTab && setActiveTab('ranking')}
           >
 
+            {(() => {
+              const currentTier = profile?.tier || 'Bronze III';
+              const tc = getTierColor(currentTier);
+              const tcNext = getTierColor(tierBoardUi.next.nextLabel || currentTier);
+              return (
             <div className="relative flex flex-col gap-4">
-              {/* 상단: 타이틀 + 티어 뱃지 */}
+              {/* 상단: 타이틀 + 티어 뱃지 — '티어 점수' 단어 색은 유지 (사용자 지정) */}
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-blue-400/70">{t('tierPoints')}</p>
-                  <h3 className="text-xl font-black text-white mt-0.5 leading-tight">{profile?.tier || 'Bronze III'}</h3>
+                  <h3
+                    className={`text-xl font-black mt-0.5 leading-tight ${tc.text} ${tc.glowClass || ''}`}
+                    style={tc.shadow ? { textShadow: tc.shadow } : undefined}
+                  >
+                    {currentTier}
+                  </h3>
                 </div>
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500/30 to-cyan-500/20 border border-blue-400/30 flex items-center justify-center shrink-0">
-                  <Icon type="trophy" size={18} className="text-blue-300" />
+                <div
+                  className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${tc.bg} border ${tc.border} flex items-center justify-center shrink-0 ${tc.glowClass || ''}`}
+                  style={tc.shadow ? { boxShadow: tc.shadow } : undefined}
+                >
+                  <Icon type="trophy" size={18} className={tc.text} />
                 </div>
               </div>
 
               {/* 포인트 숫자 */}
               <div className="flex items-end gap-1.5">
-                <span className="text-5xl font-black tabular-nums leading-none text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-400">
+                <span className={`text-5xl font-black tabular-nums leading-none text-transparent bg-clip-text bg-gradient-to-r ${tc.bar}`}>
                   {tierBoardUi.mp}
                 </span>
                 <span className="text-sm font-semibold text-gray-500 mb-1">pts</span>
@@ -964,16 +1056,16 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
               {/* 프로그레스 바 */}
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] text-gray-500">{profile?.tier || 'Bronze III'}</span>
-                  <span className="text-[10px] text-gray-500">{tierBoardUi.next.nextLabel || '최고 티어'}</span>
+                  <span className={`text-[10px] font-semibold ${tc.text}`}>{currentTier}</span>
+                  <span className={`text-[10px] font-semibold ${tcNext.text}`}>{tierBoardUi.next.nextLabel || '최고 티어'}</span>
                 </div>
                 <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-700"
+                    className={`h-full rounded-full bg-gradient-to-r ${tc.bar} transition-all duration-700`}
                     style={{ width: `${Math.max(4, Math.round(tierBoardUi.ring * 100))}%` }}
                   />
                 </div>
-                <p className="text-right text-[10px] text-blue-400/70 mt-1">
+                <p className={`text-right text-[10px] mt-1 ${tc.text}`}>
                   {Math.round(tierBoardUi.ring * 100)}%
                 </p>
               </div>
@@ -982,14 +1074,21 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
               <div className="flex gap-2">
                 <div className="flex-1 p-3 rounded-2xl bg-white/[0.04] border border-white/8">
                   <p className="text-[10px] text-gray-500 mb-0.5">{t('nextTier')}</p>
-                  <p className="text-sm font-bold text-blue-300 truncate">{tierBoardUi.next.nextLabel || '—'}</p>
+                  <p
+                    className={`text-sm font-bold truncate ${tcNext.text} ${tcNext.glowClass || ''}`}
+                    style={tcNext.shadow ? { textShadow: tcNext.shadow } : undefined}
+                  >
+                    {tierBoardUi.next.nextLabel || '—'}
+                  </p>
                 </div>
                 <div className="flex-1 p-3 rounded-2xl bg-white/[0.04] border border-white/8">
                   <p className="text-[10px] text-gray-500 mb-0.5">{t('pointsNeeded')}</p>
-                  <p className="text-sm font-bold text-emerald-400">{tierBoardUi.next.nextLabel ? `+${tierBoardUi.next.pointsToNext}` : '최고 티어'}</p>
+                  <p className={`text-sm font-bold ${tc.text}`}>{tierBoardUi.next.nextLabel ? `+${tierBoardUi.next.pointsToNext}` : '최고 티어'}</p>
                 </div>
               </div>
             </div>
+              );
+            })()}
           </SpotlightCard>
         </div>
 
@@ -1000,72 +1099,26 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           >
             <div className="mb-3 xs:mb-4 sm:mb-6 flex items-center justify-between gap-2">
               <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white">{t('matchHistory')}</h3>
-              {matchHistory.length > 10 && (
+              {matchHistory.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('mypage-match-history')}
-                  className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm text-gray-300 hover:text-white font-semibold transition-colors"
+                  className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm text-gray-300 hover:text-white font-semibold transition-colors flex items-center gap-1.5"
                 >
-                  자세히
+                  <span>전체 보기</span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] sm:text-[11px] tabular-nums text-amber-200 font-bold">
+                    {matchHistory.length}
+                  </span>
                 </button>
               )}
             </div>
 
             {matchHistory.length > 0 ? (
-              <div className="space-y-2.5">
-                {matchHistory.slice(0, 10).map((match, i) => {
-                  const resultLabel = match.result === 'win' ? '승' : match.result === 'loss' ? '패' : '무';
-                  const accent = match.result === 'win' ? 'text-blue-300' : match.result === 'loss' ? 'text-red-300' : 'text-gray-300';
-                  const dotColor = match.result === 'win' ? 'bg-blue-400' : match.result === 'loss' ? 'bg-red-400' : 'bg-gray-500';
-                  const bgClass = match.result === 'win'
-                    ? 'bg-blue-500/15 hover:bg-blue-500/25 border-blue-400/30 hover:border-blue-400/50'
-                    : match.result === 'loss'
-                    ? 'bg-red-500/15 hover:bg-red-500/25 border-red-400/30 hover:border-red-400/50'
-                    : 'bg-white/[0.04] hover:bg-white/[0.07] border-white/10 hover:border-white/20';
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => {
-                        if (match.opponentId) setActiveTab(`opponent-profile-${match.opponentId}`);
-                      }}
-                      className={`w-full p-4 border rounded-2xl transition-all text-left flex items-center gap-4 group ${bgClass}`}
-                    >
-                      <div className="relative flex-shrink-0">
-                        <ProfileAvatarImg
-                          avatarUrl={match.opponentAvatarUrl}
-                          name={match.opponent}
-                          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-white/15 text-lg"
-                        />
-                        <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-[#1a1a1a] ${dotColor}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500 whitespace-nowrap">
-                            vs
-                          </p>
-                          <h4 className="text-base sm:text-lg font-bold text-white truncate">
-                            {match.opponent}
-                          </h4>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span className="whitespace-nowrap">{match.date}</span>
-                          <span className="text-gray-700">·</span>
-                          <span className="whitespace-nowrap uppercase">{match.method}</span>
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className={`text-2xl sm:text-3xl font-black tabular-nums leading-none ${accent}`}>
-                          {resultLabel}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1 tabular-nums">
-                          {match.score} · {match.rounds}R
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <MatchHistorySection
+                matches={matchHistory}
+                onOpenOpponent={(id) => setActiveTab(`opponent-profile-${id}`)}
+                limit={10}
+              />
             ) : (
               <div className="text-center py-8 xs:py-10 sm:py-12">
                 <div className="w-12 h-12 xs:w-16 xs:h-16 sm:w-20 sm:h-20 mx-auto mb-3 xs:mb-4 sm:mb-6 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">

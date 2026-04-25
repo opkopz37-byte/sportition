@@ -6,7 +6,11 @@
       "Bash(npx next *)",
       "Bash(grep -E \"\\\\.sql$\")",
       "Bash(node -e ' *)",
-      "Bash(awk 'NR>=1356 && /^      \\\\\\)\\\\}$/ {print NR; exit}' /Users/hojin814/Desktop/01_Web/01_Spotition/sportition-mvp3/components/views/coach.js)"
+      "Bash(awk 'NR>=1356 && /^      \\\\\\)\\\\}$/ {print NR; exit}' /Users/hojin814/Desktop/01_Web/01_Spotition/sportition-mvp3/components/views/coach.js)",
+      "Bash(awk -F: 'NR<=30 && $2>=687 {print}')",
+      "Bash(awk 'NR>=1300 && NR<=1340 && /return \\\\\\(|<SpotlightCard|<div.*ref=.skillViewportRef/' /Users/hojin814/Desktop/01_Web/01_Spotition/sportition-mvp3/components/views/skills.js)",
+      "Bash(awk 'NR>=1200 && NR<=1340 {print NR\": \"$0}' /Users/hojin814/Desktop/01_Web/01_Spotition/sportition-mvp3/components/views/skills.js)",
+      "Bash(node --check components/views/skills.js)"
     ]
   }
 }

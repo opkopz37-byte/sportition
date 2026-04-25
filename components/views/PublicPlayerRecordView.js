@@ -198,13 +198,16 @@ export default function PublicPlayerRecordView({ playerId, onBack, language = 'k
                   ))}
                 </div>
               )}
-              {opponentMatches.length > 8 && (
+              {opponentMatches.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setShowAllOpponentMatches((p) => !p)}
-                  className="mt-3 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+                  className="mt-3 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white inline-flex items-center gap-1.5"
                 >
-                  {showAllOpponentMatches ? t('collapse') : t('expand')}
+                  <span>{showAllOpponentMatches ? t('collapse') : '전체 보기'}</span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] tabular-nums text-amber-200 font-bold">
+                    {opponentMatches.length}
+                  </span>
                 </button>
               )}
             </div>

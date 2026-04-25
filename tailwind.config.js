@@ -4,6 +4,8 @@ module.exports = {
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
+    // TIER_COLORS 등 lib 안의 동적 className 도 JIT 가 인식하도록 포함
+    './lib/**/*.{js,ts}',
   ],
   theme: {
     extend: {

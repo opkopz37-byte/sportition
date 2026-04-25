@@ -4,24 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
-import { tierFamilyFromLabel, computeMatchPoints } from '@/lib/tierLadder';
+import { tierFamilyFromLabel, computeMatchPoints, getTierColor } from '@/lib/tierLadder';
 
 const ITEMS_PER_PAGE = 50;
 const RECENT_MATCHES_COLLAPSED = 1;
 const RECENT_MATCHES_EXPANDED = 5;
 /** 상위 티어 우선 (필터 탭 순서) */
 const TIERS = ['All', 'Challenger', 'Grandmaster', 'Master', 'Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze'];
-
-const getTierColor = (tier = '') => {
-  if (tier.includes('Challenger')) return { bg: 'from-red-600/25 to-orange-500/20', text: 'text-red-300', border: 'border-red-500/50' };
-  if (tier.includes('Grandmaster')) return { bg: 'from-amber-500/25 to-rose-500/20', text: 'text-amber-300', border: 'border-amber-400/50' };
-  if (tier.includes('Master')) return { bg: 'from-purple-500/20 to-pink-500/20', text: 'text-purple-400', border: 'border-purple-500/50' };
-  if (tier.includes('Diamond')) return { bg: 'from-blue-500/20 to-cyan-500/20', text: 'text-blue-400', border: 'border-blue-500/50' };
-  if (tier.includes('Platinum')) return { bg: 'from-emerald-500/20 to-green-500/20', text: 'text-emerald-400', border: 'border-emerald-500/50' };
-  if (tier.includes('Gold')) return { bg: 'from-yellow-500/20 to-amber-500/20', text: 'text-yellow-400', border: 'border-yellow-500/50' };
-  if (tier.includes('Silver')) return { bg: 'from-gray-400/20 to-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/50' };
-  return { bg: 'from-orange-600/20 to-orange-700/20', text: 'text-orange-400', border: 'border-orange-600/50' };
-};
 
 const getRoleBadgeClass = (role) => {
   if (role === 'player_common') return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
@@ -248,9 +237,17 @@ const TierBoardView = ({
                   {profile?.nickname || profile?.name || '사용자'}
                 </div>
               </div>
-              <div className="px-1.5 xs:px-2 sm:px-2.5 py-0.5 rounded-full bg-gradient-to-r from-blue-400 to-cyan-500 text-black text-[9px] xs:text-[10px] sm:text-xs font-bold inline-flex">
-                {profile?.tier || 'Bronze III'}
-              </div>
+              {(() => {
+                const tc = getTierColor(profile?.tier || 'Bronze III');
+                return (
+                  <div
+                    className={`px-1.5 xs:px-2 sm:px-2.5 py-0.5 rounded-full bg-gradient-to-r ${tc.bg} border ${tc.border} ${tc.text} text-[9px] xs:text-[10px] sm:text-xs font-bold inline-flex ${tc.glowClass || ''}`}
+                    style={tc.shadow ? { boxShadow: tc.shadow } : undefined}
+                  >
+                    {profile?.tier || 'Bronze III'}
+                  </div>
+                );
+              })()}
             </div>
           </div>
             <div className="text-right flex-shrink-0">
@@ -373,9 +370,17 @@ const TierBoardView = ({
                 </div>
 
                 {/* 티어 */}
-                <div className="text-sm sm:text-base font-semibold text-white truncate">
-                  {player.tier || 'Unranked'}
-                </div>
+                {(() => {
+                  const tc = getTierColor(player.tier || '');
+                  return (
+                    <div
+                      className={`inline-flex px-2 py-0.5 rounded-md bg-gradient-to-r ${tc.bg} border ${tc.border} text-sm sm:text-base font-bold truncate ${tc.text} ${tc.glowClass || ''}`}
+                      style={tc.shadow ? { boxShadow: tc.shadow } : undefined}
+                    >
+                      {player.tier || 'Unranked'}
+                    </div>
+                  );
+                })()}
 
                 {/* 승률 바 + % */}
                 <div className="flex items-center gap-1 sm:gap-2 min-w-0">
