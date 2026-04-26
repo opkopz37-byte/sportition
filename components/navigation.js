@@ -289,9 +289,12 @@ return (
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                            {(player.display_name || player.name || 'U').charAt(0)}
-                          </div>
+                          <ProfileAvatarImg
+                            avatarUrl={player.avatar_url}
+                            name={player.display_name || player.name}
+                            className="w-10 h-10 rounded-full text-sm"
+                            gradientClassName="bg-gradient-to-br from-blue-500 to-purple-500"
+                          />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-sm font-bold text-white truncate">{player.display_name || player.name}</span>
@@ -527,9 +530,13 @@ return (
                         className="w-full px-3 py-2.5 text-left transition-colors hover:bg-white/5 border-b border-white/5 last:border-0"
                       >
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                            {(player.display_name || player.name || 'U').charAt(0)}
-                          </div>
+                          <ProfileAvatarImg
+                            avatarUrl={player.avatar_url}
+                            name={player.display_name || player.name}
+                            className="w-8 h-8 rounded-full text-xs"
+                            gradientClassName="bg-gradient-to-br from-blue-500 to-purple-500"
+                          />
+
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 mb-0.5">
                               <span className="text-sm font-bold text-white truncate">{player.display_name || player.name}</span>

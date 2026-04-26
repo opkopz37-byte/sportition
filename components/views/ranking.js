@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
+import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { useAuth } from '@/lib/AuthContext';
 import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
 import { tierFamilyFromLabel, computeMatchPoints, getTierColor } from '@/lib/tierLadder';
@@ -225,9 +226,12 @@ const TierBoardView = ({
       <SpotlightCard className="p-3 xs:p-4 sm:p-5 mb-3 xs:mb-4 sm:mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-2 border-blue-500/30">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 xs:gap-3 sm:gap-4 flex-1 min-w-0">
-            <div className="w-10 h-10 xs:w-11 xs:h-11 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-base xs:text-lg sm:text-xl font-bold text-white flex-shrink-0">
-              {(profile?.nickname || profile?.name || 'U').charAt(0)}
-            </div>
+            <ProfileAvatarImg
+              avatarUrl={profile?.avatar_url}
+              name={profile?.nickname || profile?.name}
+              className="w-10 h-10 xs:w-11 xs:h-11 sm:w-12 sm:h-12 rounded-lg text-base xs:text-lg sm:text-xl"
+              gradientClassName="bg-gradient-to-br from-blue-500 to-purple-500"
+            />
             <div className="min-w-0">
               <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 mb-0.5 xs:mb-1">
                 <span className={`px-1.5 py-0.5 xs:px-2 rounded-full text-[8px] xs:text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${getRoleBadgeClass(profile?.role)}`}>
@@ -361,9 +365,12 @@ const TierBoardView = ({
 
                 {/* 선수 */}
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br from-blue-500/80 to-purple-600/80 flex items-center justify-center text-white font-bold text-xs sm:text-base flex-shrink-0">
-                    {(player.display_name || 'U').charAt(0)}
-                  </div>
+                  <ProfileAvatarImg
+                    avatarUrl={player.avatar_url}
+                    name={player.display_name}
+                    className="w-8 h-8 sm:w-11 sm:h-11 rounded-full text-xs sm:text-base"
+                    gradientClassName="bg-gradient-to-br from-blue-500/80 to-purple-600/80"
+                  />
                   <h3 className="text-lg sm:text-xl font-bold text-white truncate leading-tight">
                     {player.display_name}
                   </h3>

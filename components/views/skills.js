@@ -103,6 +103,12 @@ const ACCENT_THEME = {
 };
 
 const MAX_EXP = 5;
+const MAX_PROMOTION_FAILS = 5;
+/** 거절 횟수에 따른 동적 max EXP. 기본 5, 거절 1회당 +1, 최대 +5 (총 10). */
+function effectiveMaxExp(failCount) {
+  const f = Math.max(0, Math.min(MAX_PROMOTION_FAILS, Number(failCount || 0)));
+  return MAX_EXP + f;
+}
 
 /** EXP 단계별 그라디언트 — 채워질수록 차가운 → 뜨거운 색으로 */
 function getExpGradient(exp, themeBar) {
@@ -153,13 +159,20 @@ function computeDepths(nodes) {
   return depth;
 }
 
-function isUnlocked(node, expByNodeId, nodeByNumber) {
+/**
+ * 노드 잠금 해제 조건:
+ *   - 루트 노드 (부모 없음): 항상 열림
+ *   - 그 외: 부모 중 1개 이상이 "승단 승인" 됐을 때만 열림
+ *     → 단순히 부모가 5/5 마스터해도 부족. 체육관 승인이 떨어져야 다음 스킬 가능.
+ *     거절되면 거절된 스킬까지만 열려 있고, 자식은 잠금 상태.
+ */
+function isUnlocked(node, expByNodeId, nodeByNumber, promotionByNodeId) {
   const parents = getParentNumbers(node);
   if (!parents.length) return true;
   return parents.some((pNum) => {
     const p = nodeByNumber.get(pNum);
     if (!p) return false;
-    return (expByNodeId.get(p.id) || 0) >= 1;
+    return promotionByNodeId?.[p.id]?.status === 'approved';
   });
 }
 
@@ -465,9 +478,9 @@ const CARD_ZONE_LABEL = {
 };
 
 /** 노드 카드 — 트렌디 디자인 (그라디언트 보더 + 메시 배경 + 도트 텍스처) */
-const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked }) {
-  const mastered = exp >= MAX_EXP;
-  const inProgress = exp > 0 && exp < MAX_EXP;
+const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked, maxExp = MAX_EXP }) {
+  const mastered = exp >= maxExp;
+  const inProgress = exp > 0 && exp < maxExp;
   const isCommon = typeof node?.punch_type === 'string' && node.punch_type.startsWith('common');
   // 다른 스킬 진행 중 차단 — 마스터/진행중 본인은 예외
   const isSoftLocked = softLocked && !mastered && !inProgress;
@@ -540,7 +553,7 @@ const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selecte
       data-skill-interactive
       title={node?.name || ''}
       aria-label={node?.name || ''}
-      className={`group relative shrink-0 w-[82px] h-[64px] sm:w-[104px] sm:h-[74px] rounded-xl transition-all duration-200 ease-out ${ringClass} ${dimClass} ${lockedOpacity} ${softLockClass} ${punchClass} ${pickableGlowClass} ${
+      className={`group relative shrink-0 w-[94px] h-[64px] sm:w-[114px] sm:h-[74px] rounded-xl transition-all duration-200 ease-out ${ringClass} ${dimClass} ${lockedOpacity} ${softLockClass} ${punchClass} ${pickableGlowClass} ${
         clickable ? 'cursor-pointer hover:scale-[1.06] hover:-translate-y-0.5 active:scale-[1.02]' : 'cursor-not-allowed'
       }`}
       // 각 카드도 자체 GPU 레이어로 격리 — 한 카드의 burst/punch 애니메이션이
@@ -612,7 +625,7 @@ const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selecte
         <div className="absolute bottom-[1.5px] left-[1.5px] right-[1.5px] h-[2px] rounded-b-[10px] overflow-hidden bg-black/50">
           <div
             className="h-full transition-all duration-500"
-            style={{ width: `${(exp / MAX_EXP) * 100}%`, background: progressColor }}
+            style={{ width: `${Math.min(100, (exp / maxExp) * 100)}%`, background: progressColor }}
           />
         </div>
       ) : null}
@@ -648,15 +661,25 @@ const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selecte
         </span>
       ) : null}
 
-      {/* 이름 — 정중앙 */}
-      <div className="absolute inset-x-0 top-0 bottom-[14px] flex items-center justify-center px-2 pt-2 z-[2]">
-        <span
-          className="text-[11px] sm:text-[12.5px] font-bold leading-[1.12] text-center line-clamp-2 tracking-[-0.01em]"
-          style={{ color: textColor }}
-        >
-          {nodeDisplayTitle(node)}
-        </span>
-      </div>
+      {/* 이름 — 정중앙. 글자수에 따라 폰트 자동 축소: 13자↑ → 한 단계 작게, 17자↑ → 두 단계 작게 */}
+      {(() => {
+        const title = nodeDisplayTitle(node);
+        const len = (title || '').length;
+        const sizeClass =
+          len >= 17 ? 'text-[9px] sm:text-[10.5px] tracking-[-0.02em]'
+          : len >= 13 ? 'text-[10px] sm:text-[11.5px] tracking-[-0.015em]'
+          : 'text-[11px] sm:text-[12.5px] tracking-[-0.01em]';
+        return (
+          <div className="absolute inset-x-0 top-0 bottom-[14px] flex items-center justify-center px-2 pt-2 z-[2]">
+            <span
+              className={`font-bold leading-[1.12] text-center line-clamp-2 ${sizeClass}`}
+              style={{ color: textColor }}
+            >
+              {title}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* 숫자 — 우하단 게임 카운터 */}
       <div className="absolute bottom-[3px] right-2 flex items-baseline gap-[1px] leading-none z-[2]">
@@ -670,7 +693,7 @@ const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selecte
           className="text-[8px] sm:text-[9px] tabular-nums font-bold"
           style={{ color: mastered ? 'rgba(253,224,71,0.55)' : 'rgba(255,255,255,0.4)' }}
         >
-          /{MAX_EXP}
+          /{maxExp}
         </span>
       </div>
 
@@ -771,11 +794,22 @@ function UnlockCelebration({ tab, onDone }) {
       {/* 1) 배경 페이드 + 블러 빌드업 (검은색으로 부드럽게) */}
       <div className="unlock-bg-build absolute inset-0 pointer-events-none" aria-hidden />
 
-      {/* 2) 비네트 (가장자리 어둡게) */}
-      <div className="unlock-vignette absolute inset-0 pointer-events-none" aria-hidden />
+      {/* ⭐ 모달 등장 시점에 화면을 솔리드 어둡게 깔아서 뒤의 charging-core/입자 잔상 모두 가림 */}
+      {showModal ? (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}
+          aria-hidden
+        />
+      ) : null}
 
-      {/* 1.5) 분위기 부유 입자 — 화면 곳곳에서 천천히 떠오름 */}
-      {floats.map((f, i) => (
+      {/* 2) 비네트 (가장자리 어둡게) — 모달 표시 시엔 숨김 */}
+      {!showModal ? (
+        <div className="unlock-vignette absolute inset-0 pointer-events-none" aria-hidden />
+      ) : null}
+
+      {/* 1.5) 분위기 부유 입자 — 모달 표시 시엔 숨김 (잔상 차단) */}
+      {!showModal && floats.map((f, i) => (
         <span
           key={`float-${i}`}
           className="unlock-float-particle absolute rounded-full pointer-events-none"
@@ -795,8 +829,8 @@ function UnlockCelebration({ tab, onDone }) {
         />
       ))}
 
-      {/* 1.7) 반짝임 — 화면 곳곳에서 깜빡 */}
-      {sparkles.map((s, i) => (
+      {/* 1.7) 반짝임 — 모달 표시 시엔 숨김 */}
+      {!showModal && sparkles.map((s, i) => (
         <span
           key={`sparkle-${i}`}
           className="unlock-sparkle absolute rounded-full pointer-events-none"
@@ -814,6 +848,9 @@ function UnlockCelebration({ tab, onDone }) {
       ))}
 
       {/* 흔들림 wrapper — 모든 폭발 요소를 감싸 흔들림 적용 */}
+      {/* 흔들림 wrapper — 모든 폭발 요소 (charging-core/bang/광선/충격파/플래시/별가루)
+          모달 등장 시점부터는 통째로 unmount → 잔상 0 */}
+      {!showModal ? (
       <div className="unlock-shake absolute inset-0 pointer-events-none" aria-hidden>
         {/* 3) 빨려들어가는 입자 */}
         {particles.map((p, i) => (
@@ -893,6 +930,7 @@ function UnlockCelebration({ tab, onDone }) {
           />
         ))}
       </div>
+      ) : null}
 
       {/* 9) 글래스 모달 — 폭발 후 등장. 화면 정중앙, 사용자가 닫을 때까지 유지 */}
       {showModal ? (
@@ -975,12 +1013,14 @@ const PUNCH_GROUP_ORDER = [
 ];
 
 /** 스킬 요약 페이지 뷰 — 카테고리별 세로 리스트, 게임 카드 형태 */
-function SkillSummaryPage({ nodes, expByNodeId, onBack }) {
+function SkillSummaryPage({ nodes, expByNodeId, maxByNodeId, onBack }) {
   const safeNodes = Array.isArray(nodes) ? nodes : [];
   const safeExp = expByNodeId instanceof Map ? expByNodeId : new Map();
+  const safeMax = maxByNodeId instanceof Map ? maxByNodeId : new Map();
+  const maxFor = (id) => safeMax.get(id) ?? MAX_EXP;
   const sorted = [...safeNodes].sort((a, b) => (Number(a?.node_number) || 0) - (Number(b?.node_number) || 0));
   const totalExp = sorted.reduce((s, n) => s + (safeExp.get(n.id) || 0), 0);
-  const masteredCount = sorted.filter((n) => (safeExp.get(n.id) || 0) >= MAX_EXP).length;
+  const masteredCount = sorted.filter((n) => (safeExp.get(n.id) || 0) >= maxFor(n.id)).length;
   const startedCount = sorted.filter((n) => (safeExp.get(n.id) || 0) > 0).length;
 
   // 카테고리별로 묶기
@@ -1105,14 +1145,15 @@ function SkillSummaryPage({ nodes, expByNodeId, onBack }) {
         {groups.map((g) => (
           <div key={g.key}>
             <div className={`inline-flex items-center gap-2 mb-2 px-3 py-1 rounded-full border text-xs font-bold ${PUNCH_COLOR[g.key] || PUNCH_COLOR.common}`}>
-              {PUNCH_LABEL[g.key] || g.key} <span className="opacity-60">·</span> <span className="opacity-80 tabular-nums">{g.nodes.filter((n) => (safeExp.get(n.id) || 0) >= MAX_EXP).length}/{g.nodes.length}</span>
+              {PUNCH_LABEL[g.key] || g.key} <span className="opacity-60">·</span> <span className="opacity-80 tabular-nums">{g.nodes.filter((n) => (safeExp.get(n.id) || 0) >= maxFor(n.id)).length}/{g.nodes.length}</span>
             </div>
             <div className="space-y-2">
               {g.nodes.map((n) => {
                 const exp = safeExp.get(n.id) || 0;
-                const mastered = exp >= MAX_EXP;
+                const nodeMax = maxFor(n.id);
+                const mastered = exp >= nodeMax;
                 const started = exp > 0;
-                const fillPct = (exp / MAX_EXP) * 100;
+                const fillPct = Math.min(100, (exp / nodeMax) * 100);
                 return (
                   <div
                     key={n.id}
@@ -1152,7 +1193,7 @@ function SkillSummaryPage({ nodes, expByNodeId, onBack }) {
                         <span className={`text-base font-black tabular-nums ${
                           mastered ? 'text-amber-300' : started ? 'text-cyan-200' : 'text-slate-600'
                         }`}>
-                          {exp}<span className="text-xs text-white/30">/{MAX_EXP}</span>
+                          {exp}<span className="text-xs text-white/30">/{nodeMax}</span>
                         </span>
                         {mastered ? (
                           <p className="text-[9px] font-black tracking-wider text-amber-300 mt-0.5">MASTER</p>
@@ -1171,14 +1212,30 @@ function SkillSummaryPage({ nodes, expByNodeId, onBack }) {
 }
 
 /** 인라인 EXP 패널 — 선택한 카드 옆에 펼쳐짐 (위: 추가 버튼 / 아래: EXP) */
-function InlineExpPanel({ node, exp, sp, unlocked, busy, theme, onAddSkill, blockedByOther, blockedByName }) {
-  const mastered = exp >= MAX_EXP;
+function InlineExpPanel({
+  node, exp, sp, unlocked, busy, theme, onAddSkill,
+  blockedByOther, blockedByName,
+  promotionStatus = 'none', onSubmitPromotion,
+  maxExp = MAX_EXP, failCount = 0,
+  globallyLocked = false,        // 다른 스킬이 심사 대기 중 — 전체 잠금
+  globalLockName = '',           // 심사 대기 중인 스킬 이름
+}) {
+  const mastered = exp >= maxExp;
   const cost = Number(node?.point_cost ?? 1);
   const canAfford = sp >= cost;
-  const fillPct = (exp / MAX_EXP) * 100;
+  const fillPct = Math.min(100, (exp / maxExp) * 100);
   const expGradient = getExpGradient(exp, theme.expBar);
   // 활성(찍을 수 있는) 상태일 때만 펄스 — "찍어주세요" 신호
-  const canAdd = unlocked && !busy && !mastered && canAfford && !blockedByOther;
+  const canAdd = unlocked && !busy && !mastered && canAfford && !blockedByOther && !globallyLocked;
+
+  // 마스터 후 승단 심사 버튼 — 상태별 분기
+  const isPending = promotionStatus === 'pending' || promotionStatus === 'reviewing';
+  const isApproved = promotionStatus === 'approved';
+  const isRejected = promotionStatus === 'rejected';
+  // 거절 후 재마스터 안 한 상태 (exp < maxExp) → 재투자 필요. 아래 + 추가 버튼이 노출됨.
+  // ⛔ 전역 잠금(다른 스킬 심사 중) 일 때는 재신청도 불가
+  const canSubmitPromo = mastered && (promotionStatus === 'none' || isRejected) && !globallyLocked;
+  const hasFailed = Number(failCount || 0) > 0;
 
   return (
     <div
@@ -1187,38 +1244,76 @@ function InlineExpPanel({ node, exp, sp, unlocked, busy, theme, onAddSkill, bloc
     >
       <div className={`absolute -inset-1 bg-gradient-to-br ${theme.panelGlow} via-transparent to-transparent pointer-events-none`} aria-hidden />
 
-      {/* 위: 스킬 추가 버튼 — 활성이면 펄스 */}
-      <button
-        type="button"
-        onClick={onAddSkill}
-        disabled={!canAdd}
-        title={blockedByOther ? `'${blockedByName}' 을(를) 먼저 마스터하세요` : undefined}
-        className={`relative w-full px-1.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold transition-all ${
-          mastered
-            ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 cursor-not-allowed'
-            : !unlocked || !canAfford || blockedByOther
+      {/* 위: 마스터된 경우 → 승단 심사 버튼, 아니면 스킬 추가 버튼 */}
+      {mastered ? (
+        <button
+          type="button"
+          onClick={canSubmitPromo ? onSubmitPromotion : undefined}
+          disabled={!canSubmitPromo || busy}
+          title={globallyLocked && !isPending ? `'${globalLockName}' 의 승단 심사가 진행 중입니다` : undefined}
+          className={`relative w-full px-1.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold transition-all ${
+            isApproved
+              ? 'bg-amber-400/20 border border-amber-300/50 text-amber-200 cursor-default'
+              : isPending
+                ? 'bg-cyan-500/15 border border-cyan-400/40 text-cyan-200 cursor-not-allowed'
+                : globallyLocked
+                  ? 'bg-white/5 border border-white/10 text-gray-500 cursor-not-allowed'
+                  : isRejected
+                    ? 'bg-rose-500/15 border border-rose-400/40 text-rose-200 hover:bg-rose-500/25 active:scale-[0.98] skill-add-pulse'
+                    : 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black shadow active:scale-[0.98] skill-add-pulse'
+          }`}
+        >
+          {isApproved
+            ? '★ 승단 완료'
+            : isPending
+              ? '심사 대기 중…'
+              : globallyLocked
+                ? '심사 진행 중 — 잠금'
+                : isRejected
+                  ? (failCount > 0 ? `★ 재신청 (거절 ${failCount}회)` : '★ 재신청')
+                  : busy
+                    ? '신청 중...'
+                    : '★ 승단 심사 신청'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onAddSkill}
+          disabled={!canAdd}
+          title={
+            globallyLocked
+              ? `'${globalLockName}' 의 승단 심사가 진행 중입니다`
+              : blockedByOther
+                ? `'${blockedByName}' 을(를) 먼저 마스터하세요`
+                : undefined
+          }
+          className={`relative w-full px-1.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold transition-all ${
+            globallyLocked || !unlocked || !canAfford || blockedByOther
               ? 'bg-white/5 border border-white/10 text-gray-500 cursor-not-allowed'
               : `bg-gradient-to-r ${theme.button} text-white shadow active:scale-[0.98] ${canAdd ? 'skill-add-pulse' : ''}`
-        }`}
-      >
-        {mastered
-          ? '마스터'
-          : blockedByOther
-            ? `${blockedByName} 먼저`
-            : !unlocked
-              ? '선행 필요'
-              : !canAfford
-                ? `SP 부족`
-                : busy
-                  ? '추가 중...'
-                  : `+ 추가 · ${cost} SP`}
-      </button>
+          }`}
+        >
+          {globallyLocked
+            ? '심사 진행 중 — 잠금'
+            : blockedByOther
+              ? `${blockedByName} 먼저`
+              : !unlocked
+                ? '선행 필요'
+                : !canAfford
+                  ? `SP 부족`
+                  : busy
+                    ? '추가 중...'
+                    : hasFailed
+                      ? `+ 재마스터 · ${cost} SP`
+                      : `+ 추가 · ${cost} SP`}
+        </button>
+      )}
 
       {/* 아래: EXP 바 — 단계별 색 + 시머 효과 */}
       <div className="relative">
         <div className="flex items-baseline justify-between mb-0.5">
           <span className="text-[8px] font-bold uppercase tracking-wider text-white/40">EXP</span>
-          <span className={`text-[9px] sm:text-[10px] font-bold tabular-nums ${mastered ? 'text-amber-300' : theme.expLabel}`}>{exp}/{MAX_EXP}</span>
+          <span className={`text-[9px] sm:text-[10px] font-bold tabular-nums ${mastered ? 'text-amber-300' : theme.expLabel}`}>{exp}/{maxExp}</span>
         </div>
         <div className="h-2 sm:h-2.5 rounded-full bg-black/50 border border-white/10 overflow-hidden relative">
           {/* 채워진 부분 — 단계별 색 + 시머 오버레이 */}
@@ -1228,7 +1323,7 @@ function InlineExpPanel({ node, exp, sp, unlocked, busy, theme, onAddSkill, bloc
           />
           {/* 칸 구분선 */}
           <div className="absolute inset-0 flex pointer-events-none">
-            {Array.from({ length: MAX_EXP - 1 }).map((_, i) => (
+            {Array.from({ length: Math.max(0, maxExp - 1) }).map((_, i) => (
               <div key={i} className="flex-1 border-r border-black/40" />
             ))}
             <div className="flex-1" />
@@ -1247,7 +1342,12 @@ function SkillTree({
   onSelectNode, onAddSkill, sp, busy, hasSelection,
   nextTabCta,
   inProgressNodeId, inProgressNodeName,
+  promotionByNodeId, onSubmitPromotion,
+  maxByNodeId, failByNodeId,
+  pendingPromotionNodeId, pendingPromotionName,
 }) {
+  const maxFor = (id) => (maxByNodeId instanceof Map ? maxByNodeId.get(id) : undefined) ?? MAX_EXP;
+  const failFor = (id) => Number((failByNodeId instanceof Map ? failByNodeId.get(id) : 0) || 0);
   // 카드/간격 (모바일·데스크톱 분리)
   const [isWide, setIsWide] = useState(false);
   useEffect(() => {
@@ -1258,7 +1358,8 @@ function SkillTree({
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, []);
-  const cardW = isWide ? 104 : 82;
+  // 카드 가로폭 +10px (긴 이름 가독성 ↑) — 높이는 동일 유지
+  const cardW = isWide ? 114 : 94;
   const cardH = isWide ? 74 : 64;
   const colGap = isWide ? 22 : 16;
   const rowGap = isWide ? 26 : 20;
@@ -1401,7 +1502,7 @@ function SkillTree({
           if (!pos) return null;
           const exp = expByNodeId.get(node.id) || 0;
           const sibLocked = siblingLockSet.has(node.id);
-          const unlocked = !sibLocked && isUnlocked(node, expByNodeId, nodeByNumber);
+          const unlocked = !sibLocked && isUnlocked(node, expByNodeId, nodeByNumber, promotionByNodeId || {});
           const isSelected = node.id === selectedId;
           return (
             <div
@@ -1418,6 +1519,7 @@ function SkillTree({
               <SkillNodeCard
                 node={node}
                 exp={exp}
+                maxExp={maxFor(node.id)}
                 unlocked={unlocked}
                 selected={isSelected}
                 dimmed={hasSelection}
@@ -1425,34 +1527,96 @@ function SkillTree({
                 burstKey={burstKey}
                 onSelect={onSelectNode}
                 themeAccent={themeAccent}
-                softLocked={Boolean(inProgressNodeId) && inProgressNodeId !== node.id}
+                /* 다른 스킬 진행 중 OR 다른 스킬 심사 중 → 이 카드는 잠김 */
+                softLocked={
+                  (Boolean(inProgressNodeId) && inProgressNodeId !== node.id)
+                  || (Boolean(pendingPromotionNodeId) && pendingPromotionNodeId !== node.id)
+                }
               />
             </div>
           );
         })}
 
-        {/* 다음 탭 CTA — 메인 spine 끝 자리에 인라인 카드 형태 */}
-        {showCta ? (
-          <div
-            data-skill-interactive
-            className="absolute"
-            style={{
-              left: ctaCol * (cardW + colGap),
-              top: 0,
-              width: ctaW,
-              height: cardH,
-            }}
-          >
-            <button
-              type="button"
-              onClick={nextTabCta.onClick}
-              className={`group w-full h-full rounded-xl border-2 ${nextTabCta.borderClass} bg-gradient-to-r ${nextTabCta.bgClass} text-white font-bold text-xs sm:text-sm shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 px-2 skill-add-pulse`}
+        {/* 다음 탭 CTA — 스킬 노드와 동일한 디자인 (그라디언트 보더 + 메시 배경 + 도트 텍스처) */}
+        {showCta ? (() => {
+          // 다음 탭 액센트에 맞춰 SkillNodeCard 와 동일한 팔레트 사용
+          const nextPalette = CARD_TAB_PALETTE[nextTabCta.accent] || CARD_TAB_PALETTE.cyan;
+          const ctaBgGradient = `radial-gradient(ellipse at 25% 0%, rgba(${nextPalette.p},0.42) 0%, transparent 60%), radial-gradient(ellipse at 100% 100%, rgba(${nextPalette.s},0.22) 0%, transparent 65%), linear-gradient(135deg, rgba(15,23,42,0.6), rgba(2,6,23,0.85))`;
+          const ctaBorderGradient = `linear-gradient(135deg, rgba(${nextPalette.p},0.95) 0%, rgba(${nextPalette.s},0.55) 50%, rgba(${nextPalette.p},0.85) 100%)`;
+          const ctaShadow = `0 0 18px rgba(${nextPalette.p},0.32), 0 0 36px rgba(${nextPalette.p},0.12), inset 0 1px 0 rgba(255,255,255,0.10)`;
+          const ctaTextColor = `rgba(${nextPalette.p},1)`;
+          return (
+            <div
+              data-skill-interactive
+              className="absolute"
+              style={{
+                left: ctaCol * (cardW + colGap),
+                top: 0,
+                width: ctaW,
+                height: cardH,
+              }}
             >
-              <span className="leading-tight text-center">{nextTabCta.label}</span>
-              <span className="text-base group-hover:translate-x-1 transition-transform shrink-0">→</span>
-            </button>
-          </div>
-        ) : null}
+              <button
+                type="button"
+                onClick={nextTabCta.onClick}
+                className="group relative w-full h-full rounded-xl transition-all duration-200 ease-out cursor-pointer hover:scale-[1.04] hover:-translate-y-0.5 active:scale-[1.02] skill-add-pulse"
+                style={{
+                  boxShadow: ctaShadow,
+                  contain: 'layout paint',
+                  transform: 'translateZ(0)',
+                }}
+              >
+                {/* 그라디언트 보더 (1.5px) — SkillNodeCard 와 동일한 mask 트릭 */}
+                <div
+                  className="absolute inset-0 rounded-xl pointer-events-none"
+                  style={{
+                    background: ctaBorderGradient,
+                    padding: '1.5px',
+                    WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+                    WebkitMaskComposite: 'xor',
+                    maskComposite: 'exclude',
+                  }}
+                  aria-hidden
+                />
+
+                {/* 메시 그라디언트 배경 (보더 안쪽) */}
+                <div
+                  className="absolute inset-[1.5px] rounded-[10px] overflow-hidden"
+                  style={{ background: ctaBgGradient }}
+                  aria-hidden
+                >
+                  {/* 도트 텍스처 */}
+                  <div
+                    className="absolute inset-0 opacity-[0.16]"
+                    style={{
+                      backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.6) 0.5px, transparent 1px)',
+                      backgroundSize: '6px 6px',
+                    }}
+                  />
+                  {/* 상단 하이라이트 라인 */}
+                  <div className="absolute top-0 inset-x-2 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+                </div>
+
+                {/* 콘텐츠 — 라벨 + 화살표 */}
+                <div className="relative z-[2] w-full h-full flex items-center justify-center gap-2 px-2">
+                  <span
+                    className="text-[11px] sm:text-[12.5px] font-bold leading-[1.12] text-center tracking-[-0.01em]"
+                    style={{ color: ctaTextColor }}
+                  >
+                    {nextTabCta.label}
+                  </span>
+                  <span
+                    className="text-base sm:text-lg font-black shrink-0 group-hover:translate-x-1 transition-transform"
+                    style={{ color: ctaTextColor }}
+                    aria-hidden
+                  >
+                    →
+                  </span>
+                </div>
+              </button>
+            </div>
+          );
+        })() : null}
 
         {/* 선택 노드 옆 EXP 패널 */}
         {selectedId && positions.has(selectedId) ? (() => {
@@ -1461,7 +1625,7 @@ function SkillTree({
           if (!sel || !pos) return null;
           const exp = expByNodeId.get(sel.id) || 0;
           const sibLocked = siblingLockSet.has(sel.id);
-          const unlocked = !sibLocked && isUnlocked(sel, expByNodeId, nodeByNumber);
+          const unlocked = !sibLocked && isUnlocked(sel, expByNodeId, nodeByNumber, promotionByNodeId || {});
           return (
             <div
               className="absolute"
@@ -1475,13 +1639,25 @@ function SkillTree({
               <InlineExpPanel
                 node={sel}
                 exp={exp}
+                maxExp={maxFor(sel.id)}
+                failCount={failFor(sel.id)}
                 sp={sp}
                 unlocked={unlocked}
                 busy={busy}
                 theme={theme}
                 onAddSkill={() => onAddSkill(sel.id)}
-                blockedByOther={Boolean(inProgressNodeId) && inProgressNodeId !== sel.id}
+                /* 재마스터(exp>=MAX_EXP)는 항상 허용 — 다른 진행 노드와 무관 */
+                blockedByOther={
+                  Boolean(inProgressNodeId)
+                  && inProgressNodeId !== sel.id
+                  && exp < MAX_EXP
+                }
                 blockedByName={inProgressNodeName}
+                /* 다른 스킬이 심사 대기 중 — 본인 노드 제외 모두 잠금 */
+                globallyLocked={Boolean(pendingPromotionNodeId) && pendingPromotionNodeId !== sel.id}
+                globalLockName={pendingPromotionName}
+                promotionStatus={promotionByNodeId?.[sel.id]?.status || 'none'}
+                onSubmitPromotion={() => onSubmitPromotion?.(sel.id)}
               />
             </div>
           );
@@ -1500,6 +1676,12 @@ const ActiveSkillsView = () => {
   const [progressRows, setProgressRows] = useState([]);
   const [skillPoints, setSkillPoints] = useState(0);
   const [skillResetTickets, setSkillResetTickets] = useState(0);
+  // 본인 승단 심사 신청 — { node_id: { status, ... } } 맵
+  const [promotionByNodeId, setPromotionByNodeId] = useState({});
+  // 승단 신청 확인 모달 — 표시할 노드 (null = 닫힘)
+  const [promotionConfirmNode, setPromotionConfirmNode] = useState(null);
+  // 신청 완료 토스트 메시지 (3초 후 자동 사라짐)
+  const [promotionResultMessage, setPromotionResultMessage] = useState('');
   const [selectedTab, setSelectedTab] = useState('straight');
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -1545,13 +1727,18 @@ const ActiveSkillsView = () => {
     setDataLoading(true);
     setErrorMessage('');
     try {
-      const { getSkillTreeNodes, getUserSkillNodeProgress, getUserSkillWallet } = await import('@/lib/supabase');
-      // 3개 fetch 모두 병렬 — 노드/진행/지갑 사이 종속성 없음. 콜드 로드 latency ↓
-      // (getSkillTreeNodes 는 모듈 캐시 5분 적용 → 두 번째 진입부터는 즉시 반환)
-      const [nodesRes, progRes, walletRes] = await Promise.all([
+      const {
+        getSkillTreeNodes,
+        getUserSkillNodeProgress,
+        getUserSkillWallet,
+        getMyPromotionRequests,
+      } = await import('@/lib/supabase');
+      // 4개 fetch 병렬 — 노드/진행/지갑/승단 신청 (서로 독립)
+      const [nodesRes, progRes, walletRes, promoRes] = await Promise.all([
         getSkillTreeNodes(),
         getUserSkillNodeProgress(user.id),
         getUserSkillWallet(user.id),
+        getMyPromotionRequests(),
       ]);
       const { data: nodes, error: nodesError } = nodesRes;
       if (nodesError) throw nodesError;
@@ -1571,6 +1758,23 @@ const ActiveSkillsView = () => {
         setSkillPoints(Number(wallet.skill_points ?? 0));
         setSkillResetTickets(Number(wallet.skill_reset_tickets ?? 0));
       }
+      // 승단 신청 → node_id 별 최신 1건 (가장 최근 requested_at 우선) 으로 매핑
+      const promoRows = Array.isArray(promoRes?.data) ? promoRes.data : [];
+      const promoMap = {};
+      for (const r of promoRows) {
+        if (!r?.node_id) continue;
+        // RPC 가 requested_at desc 로 반환 → 첫 번째가 최신
+        if (!promoMap[r.node_id]) {
+          promoMap[r.node_id] = {
+            id: r.id,
+            status: r.status,
+            requestedAt: r.requested_at,
+            resolvedAt: r.resolved_at,
+            notes: r.notes,
+          };
+        }
+      }
+      setPromotionByNodeId(promoMap);
     } catch (e) {
       console.error('[ActiveSkillsView] load:', e);
       setErrorMessage(e?.message || '스킬 데이터를 불러오지 못했습니다.');
@@ -1581,6 +1785,19 @@ const ActiveSkillsView = () => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // 페이지가 다시 활성화되면 데이터 동기화 (체육관에서 거절·승인 처리한 결과 즉시 반영)
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onFocus = () => { loadData(); };
+    const onVis = () => { if (document.visibilityState === 'visible') loadData(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [loadData]);
+
   const expByNodeId = useMemo(() => {
     const m = new Map();
     for (const r of progressRows || []) {
@@ -1588,6 +1805,26 @@ const ActiveSkillsView = () => {
     }
     return m;
   }, [progressRows]);
+
+  // 노드별 거절 횟수 — 동적 max EXP 산출용
+  const failByNodeId = useMemo(() => {
+    const m = new Map();
+    for (const r of progressRows || []) {
+      m.set(r.node_id, Number(r.promotion_fail_count || 0));
+    }
+    return m;
+  }, [progressRows]);
+
+  // 노드별 동적 max EXP (5 + LEAST(fail_count, 5))
+  const maxByNodeId = useMemo(() => {
+    const m = new Map();
+    for (const r of progressRows || []) {
+      m.set(r.node_id, effectiveMaxExp(r.promotion_fail_count));
+    }
+    return m;
+  }, [progressRows]);
+
+  const getMaxFor = useCallback((nodeId) => maxByNodeId.get(nodeId) ?? MAX_EXP, [maxByNodeId]);
 
   const nodeByNumber = useMemo(() => {
     const m = new Map();
@@ -1661,30 +1898,61 @@ const ActiveSkillsView = () => {
 
   // (자동 다음 노드 포커스는 폐기 — 사용자가 직접 다음 노드를 클릭)
 
-  /** 진행 중(0<exp<5)인 노드 — 마스터 전까지 다른 스킬 추가 차단 */
+  /** 진행 중(0<exp<MAX_EXP)인 노드 — 마스터 전까지 다른 스킬 추가 차단.
+   *  ⚠️ 재마스터(거절 후 exp>=5, max>5) 는 별도 흐름이라 in-progress 로 보지 않음.
+   *      → 같은 노드 재마스터 가능, 다른 노드도 정상 진행 가능. */
   const inProgressNode = useMemo(() => {
     for (const n of treeNodes) {
       const e = expByNodeId.get(n.id) || 0;
-      if (e > 0 && e < MAX_EXP) return n;
+      // 0<exp<5 만 forward in-progress (재마스터는 exp>=5 → 제외)
+      if (e > 0 && e < MAX_EXP && e < getMaxFor(n.id)) return n;
     }
     return null;
-  }, [treeNodes, expByNodeId]);
+  }, [treeNodes, expByNodeId, getMaxFor]);
   const inProgressNodeId = inProgressNode?.id ?? null;
   const inProgressNodeName = inProgressNode ? nodeDisplayTitle(inProgressNode) : '';
+
+  /** 승단 심사 대기 중인 노드 — pending 또는 reviewing 상태.
+   *  심사 중에는 모든 스킬 투자(추가/재마스터 포함) 가 차단됨. */
+  const pendingPromotion = useMemo(() => {
+    for (const id of Object.keys(promotionByNodeId || {})) {
+      const r = promotionByNodeId[id];
+      if (r?.status === 'pending' || r?.status === 'reviewing') {
+        const node = treeNodes.find((n) => String(n.id) === String(id));
+        return { nodeId: Number(id), node, status: r.status };
+      }
+    }
+    return null;
+  }, [promotionByNodeId, treeNodes]);
+  const pendingPromotionName = pendingPromotion?.node ? nodeDisplayTitle(pendingPromotion.node) : '';
 
   const handleAddSkill = useCallback(async (nodeId) => {
     // ref 기반 동기 락 — React state 갱신 전 빠른 연타도 차단
     if (busyRef.current) return;
 
-    // 다른 진행 중 스킬이 있으면 차단 (마스터 전까지 다른 스킬 추가 불가)
-    const blocking = treeNodes.find((n) => {
-      if (n.id === nodeId) return false;
-      const e = expByNodeId.get(n.id) || 0;
-      return e > 0 && e < MAX_EXP;
-    });
-    if (blocking) {
-      alert(`'${nodeDisplayTitle(blocking)}' 을(를) 먼저 마스터해야 다른 스킬을 찍을 수 있습니다.`);
+    // ⛔ 승단 심사 대기/진행 중 — 모든 스킬 투자 차단 (재마스터 포함)
+    if (pendingPromotion) {
+      alert(
+        `'${pendingPromotionName}' 의 승단 심사가 진행 중입니다.\n심사 결과가 나올 때까지 다른 스킬을 찍을 수 없습니다.`
+      );
       return;
+    }
+
+    const targetExp = expByNodeId.get(nodeId) || 0;
+    const isRemaster = targetExp >= MAX_EXP; // 재마스터: 이미 기본 5 마스터한 노드를 +1
+
+    // 재마스터는 다른 진행 중 노드와 무관하게 항상 허용 (한 번 마스터한 스킬을 거절 후 보강하는 것)
+    if (!isRemaster) {
+      const blocking = treeNodes.find((n) => {
+        if (n.id === nodeId) return false;
+        const e = expByNodeId.get(n.id) || 0;
+        // 재마스터 노드는 다른 진행으로 간주하지 않음
+        return e > 0 && e < MAX_EXP && e < getMaxFor(n.id);
+      });
+      if (blocking) {
+        alert(`'${nodeDisplayTitle(blocking)}' 을(를) 먼저 마스터해야 다른 스킬을 찍을 수 있습니다.`);
+        return;
+      }
     }
 
     busyRef.current = true;
@@ -1693,15 +1961,35 @@ const ActiveSkillsView = () => {
       const { addSkillExpRpc } = await import('@/lib/supabase');
       const { data, error } = await addSkillExpRpc(nodeId);
       if (error) {
-        alert(error.message || '스킬 추가에 실패했습니다.');
+        const msg = error.message || '스킬 추가에 실패했습니다.';
+        // "이미 마스터한 스킬입니다" 등 — 클라이언트 캐시가 오래되었을 가능성 ↑
+        // 데이터를 새로 받아 와서 UI 를 DB 와 동기화 (체육관이 거절 후 fail_count 가 +1 된 상황 등)
+        const stale = /마스터|이미|already/.test(msg);
+        if (stale) {
+          await loadData();
+          alert(`${msg}\n\n최신 데이터로 새로고침했습니다. 다시 시도해 주세요.`);
+        } else {
+          alert(msg);
+        }
         return;
       }
       const newExp = Number(data?.out_exp_level ?? data?.exp_level ?? 0);
       const newSp = Number(data?.out_sp_remaining ?? data?.sp_remaining ?? skillPoints);
       setSkillPoints(newSp);
       setProgressRows((prev) => {
+        const existing = prev.find((r) => r.node_id === nodeId);
         const others = prev.filter((r) => r.node_id !== nodeId);
-        return [...others, { node_id: nodeId, exp_level: newExp, updated_at: new Date().toISOString() }];
+        return [
+          ...others,
+          {
+            ...(existing || {}),
+            node_id: nodeId,
+            exp_level: newExp,
+            // RPC 가 fail_count 를 반환하면 우선 사용 (서버 진실)
+            promotion_fail_count: Number(data?.fail_count ?? existing?.promotion_fail_count ?? 0),
+            updated_at: new Date().toISOString(),
+          },
+        ];
       });
       setBurstNodeId(nodeId);
       setBurstKey((k) => k + 1);
@@ -1716,7 +2004,66 @@ const ActiveSkillsView = () => {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [skillPoints, treeNodes, expByNodeId]);
+  }, [skillPoints, treeNodes, expByNodeId, getMaxFor, loadData, pendingPromotion, pendingPromotionName]);
+
+  // 마스터 스킬 → 승단 심사 신청 — 커스텀 모달로 확인 받음
+  // 모달 트리거: handleSubmitPromotion(nodeId) → setPromotionConfirmNode(node)
+  // 실제 제출: confirmSubmitPromotion()
+  const handleSubmitPromotion = useCallback((nodeId) => {
+    if (busyRef.current) return;
+    const node = treeNodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const exp = expByNodeId.get(nodeId) || 0;
+    const nodeMax = getMaxFor(nodeId);
+    if (exp < nodeMax) {
+      alert(`스킬을 마스터(${nodeMax}/${nodeMax}) 한 후에 승단 심사를 신청할 수 있습니다.`);
+      return;
+    }
+    setPromotionConfirmNode(node);
+  }, [treeNodes, expByNodeId, getMaxFor]);
+
+  const confirmSubmitPromotion = useCallback(async () => {
+    const node = promotionConfirmNode;
+    if (!node || busyRef.current) return;
+    setPromotionConfirmNode(null);
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const { submitMasterExamRequestRpc } = await import('@/lib/supabase');
+      const { error } = await submitMasterExamRequestRpc(node.id);
+      if (error) {
+        const msg = error.message || '승단 심사 신청에 실패했습니다.';
+        // "마스터되지 않음" 류는 체육관 거절로 max 가 +1 됐는데 클라이언트가 모르는 케이스
+        // 데이터 다시 받고 사용자에게 안내
+        const stale = /마스터/.test(msg);
+        if (stale) {
+          await loadData();
+          alert(`${msg}\n\n체육관 심사 결과로 SP 맥스가 변경되었을 수 있습니다.\n최신 상태로 새로고침했으니 다시 확인해 주세요.`);
+        } else {
+          alert(msg);
+        }
+        return;
+      }
+      // 신청 목록만 다시 불러와 즉시 반영
+      const { getMyPromotionRequests } = await import('@/lib/supabase');
+      const { data: promoRows } = await getMyPromotionRequests();
+      const map = {};
+      for (const r of promoRows || []) {
+        if (!r?.node_id) continue;
+        if (!map[r.node_id]) {
+          map[r.node_id] = { id: r.id, status: r.status, requestedAt: r.requested_at, resolvedAt: r.resolved_at, notes: r.notes };
+        }
+      }
+      setPromotionByNodeId(map);
+      setPromotionResultMessage(`'${nodeDisplayTitle(node)}' 승단 심사를 체육관에 신청했습니다.`);
+    } catch (e) {
+      console.error('[confirmSubmitPromotion]', e);
+      alert(e?.message || '승단 심사 신청 중 오류가 발생했습니다.');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [promotionConfirmNode, loadData]);
 
   const handleResetSkillTree = useCallback(async () => {
     if (busyRef.current) return;
@@ -1746,6 +2093,7 @@ const ActiveSkillsView = () => {
         window.localStorage.removeItem('skill_celebrated_tabs');
         window.localStorage.removeItem('skill_celebrated_tabs_v2');
         window.localStorage.removeItem('skill_celebrated_tabs_v3');
+        window.localStorage.removeItem('skill_celebrated_tabs_v4');
       } catch {
         /* ignore */
       }
@@ -1779,53 +2127,71 @@ const ActiveSkillsView = () => {
       n.punch_type === tab.common || (tab.key === 'straight' && n.punch_type === 'common')
     );
     if (commonNodes.length > 0) {
-      return commonNodes.every((n) => (expByNodeId.get(n.id) || 0) >= MAX_EXP);
+      return commonNodes.every((n) => (expByNodeId.get(n.id) || 0) >= getMaxFor(n.id));
     }
     // 2순위 폴백: specific
     const specificNodes = treeNodes.filter((n) => n.punch_type === tab.specific);
     if (specificNodes.length === 0) return false;
-    return specificNodes.every((n) => (expByNodeId.get(n.id) || 0) >= MAX_EXP);
-  }, [treeNodes, expByNodeId]);
+    return specificNodes.every((n) => (expByNodeId.get(n.id) || 0) >= getMaxFor(n.id));
+  }, [treeNodes, expByNodeId, getMaxFor]);
 
-  /** 해금된 탭을 처음 클릭할 때 축하 이펙트 트리거 (탭마다 1회) */
+  /** 탭 클릭 — 단순 전환만 (celebration 은 아래 useEffect 가 자동 처리) */
   const handleTabClick = useCallback((tab) => {
     setSelectedTab(tab.key);
     setSelectedNodeId(null);
+  }, []);
 
+  /**
+   * 해금된 탭에 처음 진입 시 축하 이펙트 자동 발사 (탭당 1회).
+   * - selectedTab 변화로 트리거 → 탭 클릭 / CTA 버튼 / 자동 탭 이동 모두 커버.
+   * - 선행 탭 마스터 + 미경험 + DB 데이터 로드 완료 조건 충족 시 fire.
+   * - localStorage v4 — 이전 버전 캐시 무시하고 새로 시작.
+   */
+  useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!tab.requires) return; // 첫 탭(스트레이트)은 해금 개념 없음
+    if (dataLoading) return;       // 데이터 로드 전엔 isTabAdvanced 가 잘못된 false 반환 가능
+    if (!selectedTab) return;
+    const tab = PUNCH_TABS.find((t) => t.key === selectedTab);
+    if (!tab || !tab.requires) return; // 첫 탭(스트레이트)은 해금 개념 없음
 
-    // localStorage 캐시 초기화
+    // localStorage 캐시 lazy 로드
     if (celebratedTabsRef.current === null) {
       try {
-        const raw = window.localStorage.getItem('skill_celebrated_tabs_v3');
+        const raw = window.localStorage.getItem('skill_celebrated_tabs_v4');
         celebratedTabsRef.current = raw ? new Set(JSON.parse(raw)) : new Set();
       } catch {
         celebratedTabsRef.current = new Set();
       }
     }
-    if (celebratedTabsRef.current.has(tab.key)) return; // 이미 본 탭
+    if (celebratedTabsRef.current.has(tab.key)) return; // 이미 축하 본 탭
 
-    // 선행 탭 진행 완료 검사
+    // 선행 탭 진행 완료(common 전체 마스터) 검사
     const reqKey = tab.requires === 'common_straight' ? 'straight'
       : tab.requires === 'common_hook' ? 'hook'
       : tab.requires === 'common_upper' ? 'upper'
       : tab.requires === 'common_advanced' ? 'advanced'
       : null;
-    if (!reqKey || !isTabAdvanced(reqKey)) return; // 아직 해금 안 됨
+    if (!reqKey || !isTabAdvanced(reqKey)) return; // 아직 해금 안 됨 → 축하 패스
 
-    // 처음 진입 — 이펙트 발사
+    // 첫 진입 — 이펙트 발사 + 영구 기록
     celebratedTabsRef.current.add(tab.key);
     try {
       window.localStorage.setItem(
-        'skill_celebrated_tabs_v3',
+        'skill_celebrated_tabs_v4',
         JSON.stringify(Array.from(celebratedTabsRef.current))
       );
     } catch {
       /* ignore */
     }
     setCelebrationTab(tab);
-  }, [isTabAdvanced]);
+  }, [selectedTab, isTabAdvanced, dataLoading]);
+
+  // 승단 신청 토스트 자동 닫힘 (3초) — 모든 hook 호출은 early return 이전에
+  useEffect(() => {
+    if (!promotionResultMessage) return undefined;
+    const timer = setTimeout(() => setPromotionResultMessage(''), 3000);
+    return () => clearTimeout(timer);
+  }, [promotionResultMessage]);
 
   // 요약 페이지 모드 — 트리 전체를 대체 (모든 hook 호출 이후)
   if (summaryOpen) {
@@ -1833,6 +2199,7 @@ const ActiveSkillsView = () => {
       <SkillSummaryPage
         nodes={treeNodes}
         expByNodeId={expByNodeId}
+        maxByNodeId={maxByNodeId}
         onBack={() => setSummaryOpen(false)}
       />
     );
@@ -1853,6 +2220,83 @@ const ActiveSkillsView = () => {
     <div className="animate-fade-in-up space-y-3 sm:space-y-4">
       {/* 탭 해금 축하 오버레이 */}
       <UnlockCelebration tab={celebrationTab} onDone={() => setCelebrationTab(null)} />
+
+      {/* ⭐ 승단 심사 신청 확인 모달 */}
+      {promotionConfirmNode ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(12,16,36,0.92)' }}
+          onClick={() => setPromotionConfirmNode(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border-2 border-amber-300/60 overflow-hidden shadow-[0_0_40px_rgba(251,191,36,0.35)]"
+            style={{
+              background: 'linear-gradient(135deg, rgba(251,191,36,0.18) 0%, rgba(15,23,42,0.95) 60%)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 text-center">
+              <p className="text-[10px] font-black tracking-[0.4em] uppercase text-amber-300 mb-2">Master Promotion</p>
+              <h3 className="text-2xl font-black text-white mb-1 leading-tight">승단 심사 신청</h3>
+              <div className="my-4 px-4 py-3 rounded-xl bg-black/30 border border-white/10">
+                <p className="text-[10px] tracking-[0.2em] uppercase text-amber-300/80 mb-1">Skill</p>
+                <p className="text-base sm:text-lg font-bold text-white">{nodeDisplayTitle(promotionConfirmNode)}</p>
+                <p className="text-[11px] text-emerald-300/80 mt-1">5/5 마스터 완료</p>
+              </div>
+              <p className="text-sm text-white/70 leading-relaxed">
+                이 스킬에 대한 승단 심사를<br />소속 체육관에 신청하시겠어요?
+              </p>
+              <p className="text-[11px] text-amber-200/60 mt-2">
+                심사가 진행되는 동안엔 다시 신청할 수 없습니다.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 p-3 bg-black/40">
+              <button
+                type="button"
+                onClick={() => setPromotionConfirmNode(null)}
+                className="py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white/80 font-semibold transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmSubmitPromotion}
+                className="py-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-extrabold transition-all active:scale-[0.98]"
+              >
+                신청하기
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 신청 완료 토스트 */}
+      {promotionResultMessage ? (
+        <div
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-[150] px-5 py-3 rounded-2xl border border-emerald-400/50 shadow-[0_0_30px_rgba(52,211,153,0.4)]"
+          style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.95), rgba(5,150,105,0.95))' }}
+        >
+          <p className="text-sm sm:text-base font-bold text-white text-center whitespace-nowrap">
+            ★ {promotionResultMessage}
+          </p>
+        </div>
+      ) : null}
+
+      {/* 승단 심사 대기 중 배너 — 모든 스킬 잠금 안내 */}
+      {pendingPromotion ? (
+        <div className="mx-3 sm:mx-4 px-3 py-2.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 flex items-center gap-2.5">
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-cyan-400/20 border border-cyan-300/50 text-cyan-200 text-sm flex-shrink-0">
+            ★
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-bold tracking-wider text-cyan-300/80 uppercase mb-0.5">승단 심사 진행 중</div>
+            <div className="text-sm text-white truncate">
+              <span className="font-extrabold text-cyan-100">{pendingPromotionName}</span>
+              <span className="text-white/70"> · 심사가 끝날 때까지 모든 스킬 투자 잠금</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* 페이지 타이틀 + 요약 버튼 */}
       <div className="px-3 sm:px-4 flex items-center justify-between gap-3">
@@ -1983,6 +2427,8 @@ const ActiveSkillsView = () => {
             <SkillTree
               nodes={sortedNodesForTab}
               expByNodeId={expByNodeId}
+              maxByNodeId={maxByNodeId}
+              failByNodeId={failByNodeId}
               nodeByNumber={nodeByNumber}
               selectedId={selectedNodeId}
               burstNodeId={burstNodeId}
@@ -1991,28 +2437,24 @@ const ActiveSkillsView = () => {
               themeAccent={currentTab.accent}
               onSelectNode={setSelectedNodeId}
               onAddSkill={handleAddSkill}
+              promotionByNodeId={promotionByNodeId}
+              onSubmitPromotion={handleSubmitPromotion}
               sp={skillPoints}
               busy={busy}
               hasSelection={selectedNodeId != null}
               inProgressNodeId={inProgressNodeId}
               inProgressNodeName={inProgressNodeName}
+              pendingPromotionNodeId={pendingPromotion?.nodeId ?? null}
+              pendingPromotionName={pendingPromotionName}
               nextTabCta={(() => {
                 if (!currentTabReady || !currentTab.next) return null;
                 const nextTabConfig = PUNCH_TABS.find((tab) => tab.key === currentTab.next);
                 if (!nextTabConfig) return null;
-                const nextTheme = ACCENT_THEME[nextTabConfig.accent];
-                const borderMap = {
-                  cyan: 'border-cyan-300/60',
-                  orange: 'border-orange-300/60',
-                  violet: 'border-violet-300/60',
-                  rose: 'border-rose-300/60',
-                };
                 return {
                   show: true,
                   label: currentTab.nextLabel,
                   onClick: () => handleTabClick(nextTabConfig),
-                  bgClass: nextTheme.button,
-                  borderClass: borderMap[nextTabConfig.accent] || 'border-white/30',
+                  accent: nextTabConfig.accent, // 'cyan' | 'orange' | 'violet' | 'rose'
                 };
               })()}
             />

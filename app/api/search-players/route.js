@@ -5,7 +5,7 @@ import { checkRateLimit, getClientIp } from '@/lib/apiRateLimit';
 export const dynamic = 'force-dynamic';
 
 const SEARCH_PLAYER_COLUMNS =
-  'id, name, nickname, display_name, role, tier, rank, boxing_style, gym_name, wins, losses, draws, total_matches, win_rate';
+  'id, name, nickname, display_name, role, tier, rank, boxing_style, gym_name, wins, losses, draws, total_matches, win_rate, avatar_url';
 
 /**
  * 비로그인 랜딩 검색용 — anon GRANT 없이도 동작하도록 서비스 롤로 public_player_profiles 조회.

@@ -506,6 +506,7 @@ function mapGymMemberRow(row) {
     tier: row.tier || '—',
     level: 0,
     rankLabel: '',
+    avatarUrl: row.avatar_url || null,
     attendance: totalAttendance,
     lastVisit: '—',
     phone: priv?.phone ? formatPhoneNumber(priv.phone) : '—',
@@ -1123,7 +1124,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
     setMembersLoading(true);
     setMembersError(null);
     try {
-      const { getGymMembersForGym } = await import('@/lib/supabase');
+      const { getGymMembersForGym, getRecentAttendanceForUsers } = await import('@/lib/supabase');
       const { data, error } = await getGymMembersForGym({
         gymUserId: profile?.id,
         gymName,
@@ -1131,9 +1132,17 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
       if (error) {
         setMembersError(error.message || '회원 목록을 불러오지 못했습니다.');
         setMembers([]);
-      } else {
-        setMembers((data || []).map(mapGymMemberRow));
+        return;
       }
+      const mapped = (data || []).map(mapGymMemberRow);
+      // 회원들의 최근 출석 활동 일괄 fetch (한 쿼리)
+      const ids = mapped.map((m) => m.id).filter(Boolean);
+      const { data: attendanceMap } = await getRecentAttendanceForUsers(ids, 3);
+      const merged = mapped.map((m) => ({
+        ...m,
+        recentAttendance: attendanceMap?.[m.id] || [],
+      }));
+      setMembers(merged);
     } catch (e) {
       setMembersError(e.message || '회원 목록을 불러오지 못했습니다.');
       setMembers([]);
@@ -1321,37 +1330,91 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
             이 체육관(<span className="text-white font-medium">{gymName}</span>)에 소속으로 등록된 회원이 없습니다.
           </div>
         )}
-        {!membersLoading && !membersError && gymName && filteredMembers.map((member) => (
-          <button
-            key={member.id}
-            type="button"
-            onClick={() => {
-              setMemberDetailMode('info');
-              setDeleteStep(0);
-              setActionMessage(null);
-              setSelectedMember(member);
-            }}
-            className="w-full p-4 sm:p-5 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center gap-4 group"
-          >
-            <div className="relative flex-shrink-0">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-blue-500/80 to-purple-600/80 flex items-center justify-center text-white font-bold text-lg">
-                {member.name.charAt(0)}
+        {!membersLoading && !membersError && gymName && filteredMembers.map((member) => {
+          // 최근 출석 활동 — 가장 최근 1건은 메인 정보 줄에, 추가 2건은 작은 점들로 시각화
+          const recent = member.recentAttendance || [];
+          const lastAttendance = recent[0];
+          const lastAttendanceLabel = (() => {
+            if (!lastAttendance) return null;
+            const t = lastAttendance.check_in_time
+              ? new Date(lastAttendance.check_in_time)
+              : (lastAttendance.attendance_date ? new Date(lastAttendance.attendance_date + 'T00:00:00') : null);
+            if (!t || Number.isNaN(t.getTime())) return null;
+            // 며칠 전인지 상대 표기 (오늘 / 어제 / N일 전 / 30일+)
+            const now = new Date();
+            const diffMs = now.getTime() - t.getTime();
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            if (diffDays <= 0) return '오늘 출석';
+            if (diffDays === 1) return '어제 출석';
+            if (diffDays < 30) return `${diffDays}일 전 출석`;
+            return '30일+ 전';
+          })();
+          return (
+            <button
+              key={member.id}
+              type="button"
+              onClick={() => {
+                setMemberDetailMode('info');
+                setDeleteStep(0);
+                setActionMessage(null);
+                setSelectedMember(member);
+              }}
+              className="w-full p-4 sm:p-5 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center gap-4 group"
+            >
+              <div className="relative flex-shrink-0">
+                <ProfileAvatarImg
+                  avatarUrl={member.avatarUrl}
+                  name={member.name}
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full text-lg"
+                  gradientClassName="bg-gradient-to-br from-blue-500/80 to-purple-600/80"
+                />
+                <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-[#0A0A0A] ${
+                  member.status === 'active' ? 'bg-emerald-400' : 'bg-red-500'
+                }`} />
               </div>
-              <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-[#0A0A0A] ${
-                member.status === 'active' ? 'bg-emerald-400' : 'bg-red-500'
-              }`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base sm:text-lg font-semibold text-white truncate mb-1">{member.name}</h3>
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                <span className="truncate">{member.phone || '연락처 없음'}</span>
-                <span className="text-gray-600">·</span>
-                <span className="whitespace-nowrap tabular-nums">{member.attendance}일</span>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-white truncate mb-1">{member.name}</h3>
+                <div className="flex items-center gap-2 text-sm text-gray-400 flex-wrap">
+                  <span className="truncate">{member.phone || '연락처 없음'}</span>
+                  {lastAttendanceLabel ? (
+                    <>
+                      <span className="text-gray-600">·</span>
+                      <span className={`whitespace-nowrap font-medium ${
+                        lastAttendanceLabel === '오늘 출석' ? 'text-emerald-400'
+                        : lastAttendanceLabel === '어제 출석' ? 'text-emerald-300/80'
+                        : 'text-gray-400'
+                      }`}>
+                        {lastAttendanceLabel}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-gray-600">·</span>
+                      <span className="whitespace-nowrap text-gray-500">최근 출석 없음</span>
+                    </>
+                  )}
+                </div>
+                {/* 최근 3건 점 표시 — 활동 빈도 시각화 */}
+                {recent.length > 0 ? (
+                  <div className="flex items-center gap-1 mt-1.5">
+                    {recent.slice(0, 3).map((r, idx) => (
+                      <span
+                        key={`${r.attendance_date}-${idx}`}
+                        className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400/70"
+                        title={r.attendance_date}
+                        aria-hidden
+                      />
+                    ))}
+                    <span className="ml-1 text-[10px] text-gray-500 tabular-nums">
+                      최근 30일 {recent.length}회
+                    </span>
+                  </div>
+                ) : null}
               </div>
-            </div>
-            <Icon type="chevronRight" size={20} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-          </button>
-        ))}
+              <Icon type="chevronRight" size={20} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+            </button>
+          );
+        })}
       </div>
 
       {/* 회원 상세보기 모달 — Portal로 렌더링하여 transform 컨테이너 영향 제거 */}
@@ -1631,7 +1694,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                       <table className="min-w-full text-left text-xs sm:text-sm">
                         <thead>
                           <tr className="border-b border-white/10 bg-white/5">
-                            <th className="px-3 py-2 font-bold text-gray-300">출석일</th>
                             <th className="px-3 py-2 font-bold text-gray-300">체크인 시각</th>
                             <th className="px-3 py-2 font-bold text-gray-300">위치/메모</th>
                           </tr>
@@ -1639,25 +1701,23 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                         <tbody>
                           {attendanceRows.length === 0 ? (
                             <tr>
-                              <td colSpan={3} className="px-3 py-6 text-center text-gray-500">
+                              <td colSpan={2} className="px-3 py-6 text-center text-gray-500">
                                 출석 기록이 없습니다.
                               </td>
                             </tr>
                           ) : (
                             attendanceRows.map((row) => (
                               <tr key={row.id} className="border-b border-white/5">
-                                <td className="px-3 py-2 text-white tabular-nums">
-                                  {row.attendance_date || '—'}
-                                </td>
                                 <td className="px-3 py-2 text-gray-300">
                                   {row.check_in_time
                                     ? new Date(row.check_in_time).toLocaleString('ko-KR', {
+                                        year: 'numeric',
                                         month: '2-digit',
                                         day: '2-digit',
                                         hour: '2-digit',
                                         minute: '2-digit',
                                       })
-                                    : '—'}
+                                    : (row.attendance_date || '—')}
                                 </td>
                                 <td className="px-3 py-2 text-gray-400">{row.location || '—'}</td>
                               </tr>
@@ -1921,6 +1981,43 @@ function resolveDecisionWinnerCorner(scores, totalRounds) {
   return 'draw';
 }
 
+// ============================================================
+// 매치 영속화 — 페이지 떠나도/화면 꺼도 시간이 흘러간 만큼 복원
+// ============================================================
+const MATCH_STORAGE_KEY = 'sportition_active_match_v1';
+const ROUND_DURATION_SEC = 180;
+const REST_DURATION_SEC = 60;
+
+function loadActiveMatchSnapshot() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(MATCH_STORAGE_KEY);
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    // 24시간 이상된 스냅샷은 폐기 (무한 잔류 방지)
+    if (snap?.savedAt && Date.now() - snap.savedAt > 24 * 60 * 60 * 1000) return null;
+    return snap;
+  } catch {
+    return null;
+  }
+}
+function saveActiveMatchSnapshot(snap) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify({ ...snap, savedAt: Date.now() }));
+  } catch {
+    /* ignore */
+  }
+}
+function clearActiveMatchSnapshot() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(MATCH_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 // 매칭 룸 페이지 (코치)
 const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const { profile } = useAuth();
@@ -1931,9 +2028,12 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentRound, setCurrentRound] = useState(1);
   const [totalRounds, setTotalRounds] = useState(3);
-  const [roundTime, setRoundTime] = useState(180); // 3:00
-  const [restTime, setRestTime] = useState(60); // 1:00
+  const [roundTime, setRoundTime] = useState(ROUND_DURATION_SEC);
+  const [restTime, setRestTime] = useState(REST_DURATION_SEC);
   const [scores, setScores] = useState(() => matchEmptyScoresMap(3));
+  // ⭐ phase 가 fighting/rest 로 바뀌는 순간의 timestamp — 페이지 떠나도 시간 계산 가능
+  const phaseStartedAtRef = useRef(null);
+  const restoreCompletedRef = useRef(false); // 복원 1회만
   const currentRoundRef = useRef(1);
   const totalRoundsRef = useRef(3);
   currentRoundRef.current = currentRound;
@@ -1987,7 +2087,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
       let query = supabase
         .from('users')
-        .select('id, name, nickname, weight, statistics ( total_matches, wins, losses, draws )')
+        .select('id, name, nickname, weight, height, gender, boxing_style, tier, avatar_url, statistics ( total_matches, wins, losses, draws )')
         .in('role', ['player_common', 'player_athlete']);
 
       if (gymUserId && gymName) {
@@ -2012,8 +2112,12 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
         return {
           id: user.id,
           name: user.nickname || user.name || '이름 미등록',
-          avatarUrl: null,
+          avatarUrl: user.avatar_url || null,
           weight: Number.isFinite(Number(user.weight)) ? Number(user.weight) : null,
+          height: Number.isFinite(Number(user.height)) ? Number(user.height) : null,
+          gender: user.gender || null,
+          boxingStyle: user.boxing_style || null,
+          tier: user.tier || null,
           record: formatMemberRecord(wins, losses, draws, totalMatches),
           winRate,
           wins,
@@ -2049,6 +2153,131 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     loadMatchRoomData({ showLoading: true });
   }, [loadMatchRoomData]);
 
+  // ─────────────────────────────────────────────────────────────
+  // ⭐ 매치 영속화 — localStorage 자동 저장 + 마운트 시 복원
+  // ─────────────────────────────────────────────────────────────
+
+  // (1) 마운트 시 1회 — 진행 중이던 매치 스냅샷이 있으면 복원
+  useEffect(() => {
+    if (restoreCompletedRef.current) return;
+    restoreCompletedRef.current = true;
+    const snap = loadActiveMatchSnapshot();
+    if (!snap) return;
+    if (snap.phase === 'lobby' || snap.phase === 'finish' || !snap.blueCorner || !snap.redCorner) {
+      clearActiveMatchSnapshot();
+      return;
+    }
+
+    // 기본 메타 복원 (즉시)
+    setBlueCorner(snap.blueCorner);
+    setRedCorner(snap.redCorner);
+    setCurrentRound(snap.currentRound || 1);
+    setTotalRounds(snap.totalRounds || 3);
+    setScores(snap.scores || matchEmptyScoresMap(snap.totalRounds || 3));
+    if (snap.finishMethod) setFinishMethod(snap.finishMethod);
+    if (snap.rscWinner) setRscWinner(snap.rscWinner);
+    if (snap.resultMethod) setResultMethod(snap.resultMethod);
+
+    // ⭐ 일시정지였다면 시간 그대로 — 페이지 떠나있는 동안 절대 시간 흐르지 않음
+    //   재생 중이었다면 phaseStartedAt 부터 지난 시간 계산
+    if (snap.isPlaying === false) {
+      // 일시정지 상태 복원: 저장된 roundTime/restTime 그대로 사용
+      phaseStartedAtRef.current = snap.phaseStartedAt || null;
+      if (snap.phase === 'fighting') {
+        setPhase('fighting');
+        setRoundTime(typeof snap.roundTime === 'number' ? snap.roundTime : ROUND_DURATION_SEC);
+        setIsPlaying(false);
+      } else if (snap.phase === 'rest') {
+        setPhase('rest');
+        setRestTime(typeof snap.restTime === 'number' ? snap.restTime : REST_DURATION_SEC);
+        setIsPlaying(false);
+      } else if (snap.phase === 'matching') {
+        setPhase('matching');
+      }
+      return;
+    }
+
+    // 재생 중이었음 → 떠나있던 시간만큼 자동 진행
+    const phaseStart = snap.phaseStartedAt || snap.savedAt || Date.now();
+    phaseStartedAtRef.current = phaseStart;
+    const elapsedSec = Math.floor((Date.now() - phaseStart) / 1000);
+
+    if (snap.phase === 'fighting') {
+      const remaining = ROUND_DURATION_SEC - elapsedSec;
+      if (remaining > 0) {
+        // 아직 라운드 진행 중 → 그대로 재생
+        setPhase('fighting');
+        setRoundTime(remaining);
+        setIsPlaying(true);
+      } else {
+        // 라운드 종료 — 휴식 phase 로 전이. 휴식 시간도 일부 흘렀을 수 있음.
+        const overflowSec = -remaining;
+        const restRemaining = REST_DURATION_SEC - overflowSec;
+        const cr = snap.currentRound || 1;
+        const tr = snap.totalRounds || 3;
+        if (cr >= tr) {
+          setPhase('rest');
+          setRoundTime(0);
+          setRestTime(0);
+          setIsPlaying(false);
+        } else if (restRemaining > 0) {
+          setPhase('rest');
+          setRoundTime(0);
+          setRestTime(restRemaining);
+          setIsPlaying(true);
+          phaseStartedAtRef.current = Date.now() - (REST_DURATION_SEC - restRemaining) * 1000;
+        } else {
+          setPhase('rest');
+          setRoundTime(0);
+          setRestTime(0);
+          setIsPlaying(false);
+        }
+      }
+    } else if (snap.phase === 'rest') {
+      const remaining = REST_DURATION_SEC - elapsedSec;
+      if (remaining > 0) {
+        setPhase('rest');
+        setRestTime(remaining);
+        setIsPlaying(true);
+      } else {
+        setPhase('rest');
+        setRestTime(0);
+        setIsPlaying(false);
+      }
+    } else if (snap.phase === 'matching') {
+      setPhase('matching');
+    }
+  }, []);
+
+  // (2) 상태 변화 시 자동 저장 — fighting/rest/matching 일 때만
+  useEffect(() => {
+    if (!restoreCompletedRef.current) return; // 복원 끝나기 전 저장 안 함
+    if (phase === 'lobby' || phase === 'finish') {
+      clearActiveMatchSnapshot();
+      return;
+    }
+    if (!blueCorner || !redCorner) return;
+    saveActiveMatchSnapshot({
+      phase,
+      blueCorner,
+      redCorner,
+      currentRound,
+      totalRounds,
+      roundTime,
+      restTime,
+      isPlaying,
+      scores,
+      finishMethod,
+      rscWinner,
+      resultMethod,
+      phaseStartedAt: phaseStartedAtRef.current,
+    });
+  }, [
+    phase, blueCorner, redCorner, currentRound, totalRounds,
+    roundTime, restTime, isPlaying, scores,
+    finishMethod, rscWinner, resultMethod,
+  ]);
+
   // 타이머 로직 (마지막 라운드 종료 후에는 라운드 간 쉬는 시간 없음 → 바로 채점)
   useEffect(() => {
     if (!isPlaying) return;
@@ -2059,10 +2288,11 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
           if (prev <= 1) {
             setIsPlaying(false);
             setPhase('rest');
+            phaseStartedAtRef.current = Date.now(); // ⭐ rest phase 시작 시각 기록
             const cr = currentRoundRef.current;
             const tr = totalRoundsRef.current;
-            setRestTime(cr < tr ? 60 : 0);
-            return 180;
+            setRestTime(cr < tr ? REST_DURATION_SEC : 0);
+            return ROUND_DURATION_SEC;
           }
           return prev - 1;
         });
@@ -2076,9 +2306,10 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
           if (prev <= 1) {
             setCurrentRound((c) => c + 1);
             setPhase('fighting');
-            setRoundTime(180);
+            phaseStartedAtRef.current = Date.now(); // ⭐ 새 라운드 fighting 시작 시각
+            setRoundTime(ROUND_DURATION_SEC);
             setIsPlaying(true);
-            return 60;
+            return REST_DURATION_SEC;
           }
           return prev - 1;
         });
@@ -2109,9 +2340,10 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     if (!blueCorner || !redCorner) return;
     setScores(matchEmptyScoresMap(totalRounds));
     setPhase('fighting');
+    phaseStartedAtRef.current = Date.now(); // ⭐ 1라운드 fighting 시작 시각
     setCurrentRound(1);
-    setRoundTime(180);
-    setRestTime(60);
+    setRoundTime(ROUND_DURATION_SEC);
+    setRestTime(REST_DURATION_SEC);
     setIsPlaying(true);
   };
 
@@ -2202,6 +2434,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
         });
         if (error) throw error;
         setResultSaved(true);
+        clearActiveMatchSnapshot(); // ⭐ 결과 DB 저장 완료 → localStorage 정리
         loadMatchRoomData({ showLoading: false });
       } catch (error) {
         console.error('[MatchRoomView] 경기 결과 저장 실패:', error);
@@ -2215,12 +2448,14 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
   }, [phase, finishMethod, forcedResult, rscWinner, blueCorner, redCorner, currentRound, resultSaved, scores, resultMethod, loadMatchRoomData, totalRounds]);
 
   const resetMatch = () => {
+    clearActiveMatchSnapshot(); // ⭐ 매치 종료 → localStorage 정리
+    phaseStartedAtRef.current = null;
     setPhase('lobby');
     setBlueCorner(null);
     setRedCorner(null);
     setCurrentRound(1);
-    setRoundTime(180);
-    setRestTime(60);
+    setRoundTime(ROUND_DURATION_SEC);
+    setRestTime(REST_DURATION_SEC);
     setScores(matchEmptyScoresMap(totalRounds));
     setIsPlaying(false);
     setRscWinner(null);
@@ -2277,108 +2512,141 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             </div>
           </div>
 
-          {/* 코너 선택 영역 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-5">
+          {/* 코너 선택 영역 — 그라디언트 / 보더 / 메타 정보 강화 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 sm:mb-5">
             {/* 청코너 */}
-            <SpotlightCard className={`p-3 sm:p-5 border-2 transition-all ${
-              !blueCorner
-                ? 'border-blue-500 shadow-lg shadow-blue-500/30 animate-pulse'
-                : 'border-blue-500/50'
-            }`}>
-              <div className="text-center mb-2 sm:mb-3">
-                <div className="text-2xl sm:text-3xl mb-1">🟦</div>
-                <h3 className="text-sm sm:text-base font-bold text-blue-400 whitespace-nowrap">{t('blueCorner')}</h3>
+            <div
+              className={`relative rounded-2xl p-4 sm:p-5 border transition-all overflow-hidden ${
+                !blueCorner
+                  ? 'border-blue-400/60 shadow-[0_0_24px_rgba(59,130,246,0.25)] animate-pulse'
+                  : 'border-blue-400/40'
+              }`}
+              style={{
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.18) 0%, rgba(37,99,235,0.05) 60%, rgba(15,23,42,0.85) 100%)',
+              }}
+            >
+              {/* 코너 라벨 */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.9)]" aria-hidden />
+                <h3 className="text-xs sm:text-sm font-black tracking-[0.2em] uppercase text-blue-300">{t('blueCorner')}</h3>
               </div>
               {blueCorner ? (
-                <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg text-center">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <ProfileAvatarImg
                     avatarUrl={blueCorner.avatarUrl}
                     name={blueCorner.name}
-                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-blue-400/60 mx-auto mb-1 text-xl"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-400/70 shadow-[0_0_20px_rgba(96,165,250,0.35)] text-2xl shrink-0"
+                    gradientClassName="bg-gradient-to-br from-blue-500 to-blue-700"
                   />
-                  <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{blueCorner.name}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'} • {blueCorner.record}</div>
-                  <div className="flex gap-1.5 sm:gap-2 mt-2">
-                    <button 
-                      onClick={() => setSelectingCorner('blue')}
-                      className="flex-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg text-[10px] sm:text-xs transition-all whitespace-nowrap"
-                    >
-                      {t('change')}
-                    </button>
-                    <button 
-                      onClick={() => setBlueCorner(null)}
-                      className="flex-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] sm:text-xs transition-all whitespace-nowrap"
-                    >
-                      {t('deselect')}
-                    </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base sm:text-lg font-extrabold text-white truncate">{blueCorner.name}</p>
+                    <p className="text-xs text-blue-200/80 mt-0.5 tabular-nums">
+                      {blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'}
+                      {blueCorner.tier ? <span className="text-blue-300/70"> · {blueCorner.tier}</span> : null}
+                    </p>
+                    <p className="text-xs text-gray-300 mt-0.5 truncate">
+                      {blueCorner.record}{blueCorner.totalMatches > 0 ? ` · 승률 ${blueCorner.winRate}%` : ''}
+                    </p>
+                    <div className="flex gap-1.5 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectingCorner('blue')}
+                        className="flex-1 px-2 py-1 bg-blue-500/25 hover:bg-blue-500/35 border border-blue-400/30 rounded-md text-[10px] sm:text-xs font-semibold text-blue-100 transition-colors"
+                      >
+                        {t('change')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBlueCorner(null)}
+                        className="flex-1 px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-md text-[10px] sm:text-xs font-semibold text-gray-300 transition-colors"
+                      >
+                        {t('deselect')}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
-                <button 
+                <button
+                  type="button"
                   onClick={() => setSelectingCorner('blue')}
-                  className="w-full p-4 sm:p-6 border-2 border-dashed border-blue-400/30 hover:border-blue-400/60 rounded-lg sm:rounded-xl text-center transition-all hover:bg-blue-500/5 group"
+                  className="w-full py-7 sm:py-9 border-2 border-dashed border-blue-400/30 hover:border-blue-400/60 rounded-xl text-center transition-all hover:bg-blue-500/5 group"
                 >
-                  <div className="text-2xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition-transform">➕</div>
-                  <div className="text-blue-400 font-bold text-xs sm:text-sm whitespace-nowrap">{t('selectFighter')}</div>
+                  <div className="text-blue-300 font-bold text-sm sm:text-base mb-0.5">{t('selectFighter')}</div>
                   {!blueCorner && !redCorner && (
-                    <div className="mt-1 text-[10px] sm:text-xs text-gray-400">{t('selectBlueFirst')}</div>
+                    <div className="text-[10px] sm:text-xs text-blue-200/60">{t('selectBlueFirst')}</div>
                   )}
                 </button>
               )}
-            </SpotlightCard>
+            </div>
 
             {/* 홍코너 */}
-            <SpotlightCard className={`p-3 sm:p-5 border-2 transition-all ${
-              blueCorner && !redCorner 
-                ? 'border-red-500 shadow-lg shadow-red-500/30 animate-pulse' 
-                : 'border-red-500/50'
-            }`}>
-              <div className="text-center mb-2 sm:mb-3">
-                <div className="text-2xl sm:text-3xl mb-1">🟥</div>
-                <h3 className="text-sm sm:text-base font-bold text-red-400 whitespace-nowrap">{t('redCorner')}</h3>
+            <div
+              className={`relative rounded-2xl p-4 sm:p-5 border transition-all overflow-hidden ${
+                blueCorner && !redCorner
+                  ? 'border-red-400/60 shadow-[0_0_24px_rgba(239,68,68,0.25)] animate-pulse'
+                  : 'border-red-400/40'
+              }`}
+              style={{
+                background: 'linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(220,38,38,0.05) 60%, rgba(15,23,42,0.85) 100%)',
+              }}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.9)]" aria-hidden />
+                <h3 className="text-xs sm:text-sm font-black tracking-[0.2em] uppercase text-red-300">{t('redCorner')}</h3>
               </div>
               {redCorner ? (
-                <div className="p-2 sm:p-3 bg-red-500/20 rounded-lg text-center">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <ProfileAvatarImg
                     avatarUrl={redCorner.avatarUrl}
                     name={redCorner.name}
-                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-red-400/60 mx-auto mb-1 text-xl"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-red-400/70 shadow-[0_0_20px_rgba(248,113,113,0.35)] text-2xl shrink-0"
+                    gradientClassName="bg-gradient-to-br from-red-500 to-red-700"
                   />
-                  <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{redCorner.name}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'} • {redCorner.record}</div>
-                  <div className="flex gap-1.5 sm:gap-2 mt-2">
-                    <button 
-                      onClick={() => setSelectingCorner('red')}
-                      className="flex-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-[10px] sm:text-xs transition-all whitespace-nowrap"
-                    >
-                      {t('change')}
-                    </button>
-                    <button 
-                      onClick={() => setRedCorner(null)}
-                      className="flex-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] sm:text-xs transition-all whitespace-nowrap"
-                    >
-                      {t('deselect')}
-                    </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base sm:text-lg font-extrabold text-white truncate">{redCorner.name}</p>
+                    <p className="text-xs text-red-200/80 mt-0.5 tabular-nums">
+                      {redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'}
+                      {redCorner.tier ? <span className="text-red-300/70"> · {redCorner.tier}</span> : null}
+                    </p>
+                    <p className="text-xs text-gray-300 mt-0.5 truncate">
+                      {redCorner.record}{redCorner.totalMatches > 0 ? ` · 승률 ${redCorner.winRate}%` : ''}
+                    </p>
+                    <div className="flex gap-1.5 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectingCorner('red')}
+                        className="flex-1 px-2 py-1 bg-red-500/25 hover:bg-red-500/35 border border-red-400/30 rounded-md text-[10px] sm:text-xs font-semibold text-red-100 transition-colors"
+                      >
+                        {t('change')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRedCorner(null)}
+                        className="flex-1 px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-md text-[10px] sm:text-xs font-semibold text-gray-300 transition-colors"
+                      >
+                        {t('deselect')}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
-                <button 
+                <button
+                  type="button"
                   onClick={() => setSelectingCorner('red')}
                   disabled={!blueCorner}
-                  className={`w-full p-4 sm:p-6 border-2 border-dashed rounded-lg sm:rounded-xl text-center transition-all group ${
-                    blueCorner 
-                      ? 'border-red-400/30 hover:border-red-400/60 hover:bg-red-500/5' 
+                  className={`w-full py-7 sm:py-9 border-2 border-dashed rounded-xl text-center transition-all group ${
+                    blueCorner
+                      ? 'border-red-400/30 hover:border-red-400/60 hover:bg-red-500/5'
                       : 'border-gray-500/20 opacity-50 cursor-not-allowed'
                   }`}
                 >
-                  <div className="text-2xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition-transform">➕</div>
-                  <div className={`font-bold text-xs sm:text-sm whitespace-nowrap ${blueCorner ? 'text-red-400' : 'text-gray-500'}`}>{t('selectFighter')}</div>
+                  <div className={`font-bold text-sm sm:text-base mb-0.5 ${blueCorner ? 'text-red-300' : 'text-gray-500'}`}>{t('selectFighter')}</div>
                   {!blueCorner && (
-                    <div className="mt-1 text-[10px] sm:text-xs text-gray-500">{t('selectBlueFirst')}</div>
+                    <div className="text-[10px] sm:text-xs text-gray-500">{t('selectBlueFirst')}</div>
                   )}
                 </button>
               )}
-            </SpotlightCard>
+            </div>
           </div>
 
           {/* 진행 라운드 수 (시작 전) */}
@@ -2411,7 +2679,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
               onClick={startMatch}
               className="w-full py-4 sm:py-6 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white text-lg sm:text-2xl font-bold rounded-xl transition-all hover:scale-105 shadow-2xl shadow-emerald-500/50 animate-pulse"
             >
-              🔔 {t('matchStart')}
+              {t('matchStart')}
             </button>
           )}
 
@@ -2433,7 +2701,12 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                 }`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="text-3xl sm:text-4xl flex-shrink-0">{selectingCorner === 'blue' ? '🟦' : '🟥'}</div>
+                      <span
+                        className={`inline-block w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-[0_0_10px_rgba(96,165,250,0.6)] ${
+                          selectingCorner === 'blue' ? 'bg-blue-400' : 'bg-red-400'
+                        }`}
+                        aria-hidden
+                      />
                       <div className="min-w-0">
                         <h3 className={`text-lg sm:text-2xl font-bold truncate ${selectingCorner === 'blue' ? 'text-blue-400' : 'text-red-400'}`}>
                           {selectingCorner === 'blue' ? '청코너' : '홍코너'} 선수 선택
@@ -2493,15 +2766,30 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                                   avatarUrl={member.avatarUrl}
                                   name={member.name}
                                   className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-white/20 flex-shrink-0 text-lg sm:text-xl"
+                                  gradientClassName="bg-gradient-to-br from-blue-500/80 to-purple-600/80"
                                 />
                                 <div className="min-w-0 flex-1">
-                                  <div className="font-bold text-white text-base sm:text-xl mb-0.5 sm:mb-1 truncate">{member.name}</div>
-                                  <div className="text-xs sm:text-sm text-gray-400 truncate">{member.weight ? `${member.weight}kg` : '체중 미등록'} • {member.record}</div>
+                                  <div className="flex items-center gap-2 mb-0.5 sm:mb-1 flex-wrap">
+                                    <span className="font-bold text-white text-base sm:text-xl truncate">{member.name}</span>
+                                    {member.tier ? (
+                                      <span className="px-1.5 py-0.5 rounded-md bg-white/10 border border-white/15 text-[9px] sm:text-[10px] font-bold text-white/85 whitespace-nowrap">{member.tier}</span>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-xs sm:text-sm text-gray-400 truncate">
+                                    {member.weight ? `${member.weight}kg` : '체중 미등록'}
+                                    {member.height ? ` · ${member.height}cm` : ''}
+                                    {member.gender ? ` · ${member.gender === 'female' ? '여성' : '남성'}` : ''}
+                                  </div>
+                                  <div className="text-[11px] sm:text-xs text-gray-500 truncate mt-0.5">
+                                    {member.record}{member.boxingStyle ? ` · ${member.boxingStyle}` : ''}
+                                  </div>
                                 </div>
                               </div>
                               <div className="text-right flex-shrink-0">
                                 <div className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">승률</div>
-                                <div className="text-lg sm:text-2xl font-bold text-emerald-400 tabular-nums">{member.winRate}%</div>
+                                <div className="text-lg sm:text-2xl font-bold text-emerald-400 tabular-nums">
+                                  {member.totalMatches > 0 ? `${member.winRate}%` : '—'}
+                                </div>
                               </div>
                             </div>
                             {isDisabled && (
@@ -2533,51 +2821,162 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
       {/* Phase 2: Fighting - 경기 진행 */}
       {phase === 'fighting' && (
-        <div className="space-y-6">
-          {/* 대진표 */}
-          <SpotlightCard className="p-8 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-red-500/10">
-            <div className="text-center mb-6">
-              <div className="text-4xl font-bold text-white mb-2">ROUND {currentRound}</div>
-              <div className="text-6xl font-bold text-white mb-4">{formatTime(roundTime)}</div>
-              {roundTime <= 10 && (
-                <div className="text-yellow-400 text-xl font-bold animate-pulse">⚠️ 10초 전!</div>
-              )}
+        <div className="space-y-4">
+          {/* ⭐ 메인 카운트다운 카드 — 풀폭 그라디언트 + 큰 모노 타이머 + 라운드 도트 */}
+          <div
+            className="relative overflow-hidden rounded-2xl border border-white/10 p-5 sm:p-7"
+            style={{
+              background: 'linear-gradient(135deg, rgba(59,130,246,0.18) 0%, rgba(15,23,42,0.85) 50%, rgba(239,68,68,0.18) 100%)',
+            }}
+          >
+            {/* 배경 격자 텍스처 */}
+            <div
+              className="absolute inset-0 opacity-[0.07] pointer-events-none"
+              style={{
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+                backgroundSize: '32px 32px',
+              }}
+              aria-hidden
+            />
+
+            {/* 상단: 라운드 인디케이터 */}
+            <div className="relative flex items-center justify-between mb-4 sm:mb-5">
+              <div>
+                <p className="text-[10px] sm:text-xs font-black tracking-[0.3em] uppercase text-white/50">Live Round</p>
+                <p className="text-2xl sm:text-3xl font-black text-white tabular-nums mt-0.5">
+                  {currentRound}<span className="text-white/40 text-lg sm:text-xl"> / {totalRounds}</span>
+                </p>
+              </div>
+              {/* 라운드 진행 도트 */}
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: totalRounds }, (_, i) => {
+                  const r = i + 1;
+                  const done = scores[`round${r}`] != null;
+                  const isCurrent = r === currentRound;
+                  return (
+                    <span
+                      key={r}
+                      className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all ${
+                        done
+                          ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]'
+                          : isCurrent
+                          ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)] scale-125 animate-pulse'
+                          : 'bg-white/15'
+                      }`}
+                      aria-label={`Round ${r}`}
+                    />
+                  );
+                })}
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-4 items-center">
-              <div className="text-center p-6 bg-blue-500/20 rounded-xl">
+
+            {/* 중앙: 거대 타이머 */}
+            <div className="relative text-center mb-4 sm:mb-5">
+              <div
+                className={`font-black tabular-nums leading-none transition-colors ${
+                  roundTime <= 10
+                    ? 'text-rose-300 animate-pulse'
+                    : roundTime <= 30
+                    ? 'text-amber-300'
+                    : 'text-white'
+                }`}
+                style={{
+                  fontSize: 'clamp(4.5rem, 15vw, 8rem)',
+                  textShadow: roundTime <= 10
+                    ? '0 0 40px rgba(244,63,94,0.6), 0 0 80px rgba(244,63,94,0.3)'
+                    : '0 0 30px rgba(255,255,255,0.15)',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {formatTime(roundTime)}
+              </div>
+              <p className="text-[10px] sm:text-xs font-bold tracking-[0.35em] uppercase text-white/40 mt-2">
+                {roundTime <= 10 ? 'Final Seconds' : 'Round In Progress'}
+              </p>
+              {/* 진행 바 (라운드 시간 대비) */}
+              <div className="mt-3 sm:mt-4 mx-auto max-w-md h-1 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-1000 ease-linear ${
+                    roundTime <= 10 ? 'bg-rose-400' : roundTime <= 30 ? 'bg-amber-400' : 'bg-white/70'
+                  }`}
+                  style={{ width: `${Math.max(0, (roundTime / ROUND_DURATION_SEC) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 하단: 두 코너 — 좌(청) ◐ 가운데 VS ◑ 우(홍) */}
+            <div className="relative grid grid-cols-[1fr_auto_1fr] gap-3 sm:gap-4 items-center">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-end sm:justify-end">
+                <div className="text-right min-w-0">
+                  <p className="text-[9px] sm:text-[10px] font-black tracking-[0.2em] uppercase text-blue-300/80">청코너</p>
+                  <p className="text-sm sm:text-base font-extrabold text-white truncate">{blueCorner.name}</p>
+                  {blueCorner.weight ? (
+                    <p className="text-[10px] sm:text-xs text-blue-200/70 tabular-nums">{blueCorner.weight}kg</p>
+                  ) : null}
+                </div>
                 <ProfileAvatarImg
                   avatarUrl={blueCorner.avatarUrl}
                   name={blueCorner.name}
-                  className="w-16 h-16 rounded-full border-2 border-blue-400/60 mx-auto mb-2 text-2xl"
+                  className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-blue-400/70 shadow-[0_0_18px_rgba(59,130,246,0.45)] text-xl flex-shrink-0"
+                  gradientClassName="bg-gradient-to-br from-blue-500 to-blue-700"
                 />
-                <div className="text-xl font-bold text-blue-400">{blueCorner.name}</div>
-                <div className="text-sm text-gray-400">{blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'}</div>
               </div>
-              <div className="text-center">
-                <div className="text-4xl font-bold text-white">VS</div>
+
+              <div className="text-center px-1 sm:px-3">
+                <span className="block text-2xl sm:text-3xl font-black text-white/40 tracking-tight">VS</span>
               </div>
-              <div className="text-center p-6 bg-red-500/20 rounded-xl">
+
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <ProfileAvatarImg
                   avatarUrl={redCorner.avatarUrl}
                   name={redCorner.name}
-                  className="w-16 h-16 rounded-full border-2 border-red-400/60 mx-auto mb-2 text-2xl"
+                  className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-red-400/70 shadow-[0_0_18px_rgba(239,68,68,0.45)] text-xl flex-shrink-0"
+                  gradientClassName="bg-gradient-to-br from-red-500 to-red-700"
                 />
-                <div className="text-xl font-bold text-red-400">{redCorner.name}</div>
-                <div className="text-sm text-gray-400">{redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'}</div>
+                <div className="text-left min-w-0">
+                  <p className="text-[9px] sm:text-[10px] font-black tracking-[0.2em] uppercase text-red-300/80">홍코너</p>
+                  <p className="text-sm sm:text-base font-extrabold text-white truncate">{redCorner.name}</p>
+                  {redCorner.weight ? (
+                    <p className="text-[10px] sm:text-xs text-red-200/70 tabular-nums">{redCorner.weight}kg</p>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </SpotlightCard>
+          </div>
 
-          {/* 컨트롤 버튼 */}
+          {/* 컨트롤 — 일시정지 / 재개 */}
           <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className={`w-full py-16 rounded-xl text-white text-6xl font-bold transition-all hover:scale-105 shadow-2xl ${
-              isPlaying 
-                ? 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600'
-                : 'bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 animate-pulse'
+            type="button"
+            onClick={() => {
+              // ⭐ 일시정지 ↔ 재개 토글 — 재개 시 phaseStartedAtRef 를 "현재 남은 시간"
+              //    기준으로 재설정해야 다음 페이지 이탈 시 시간 계산이 정확함.
+              setIsPlaying((prev) => {
+                const next = !prev;
+                if (next) {
+                  // 재개 — 재기동 시점 - (이미 흐른 시간) 으로 phase 시작 시각 재설정
+                  if (phase === 'fighting') {
+                    const elapsedNow = ROUND_DURATION_SEC - roundTime;
+                    phaseStartedAtRef.current = Date.now() - elapsedNow * 1000;
+                  } else if (phase === 'rest') {
+                    const elapsedNow = REST_DURATION_SEC - restTime;
+                    phaseStartedAtRef.current = Date.now() - elapsedNow * 1000;
+                  }
+                }
+                return next;
+              });
+            }}
+            className={`w-full py-7 sm:py-9 rounded-2xl border text-white font-black tracking-wider transition-all hover:scale-[1.01] active:scale-[0.99] ${
+              isPlaying
+                ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-400/40 hover:from-amber-500/30 hover:to-orange-500/30'
+                : 'bg-gradient-to-r from-emerald-500/25 to-green-500/25 border-emerald-400/50 hover:from-emerald-500/40 hover:to-green-500/40 animate-pulse shadow-[0_0_24px_rgba(52,211,153,0.35)]'
             }`}
           >
-            {isPlaying ? '⏸️ 일시정지' : '▶️ 시작 / 재개'}
+            <div className="text-[10px] sm:text-xs font-black tracking-[0.3em] uppercase opacity-70 mb-1.5">
+              {isPlaying ? 'Pause Match' : 'Start / Resume'}
+            </div>
+            <div className="text-2xl sm:text-3xl">
+              {isPlaying ? '일시정지' : '시작 / 재개'}
+            </div>
           </button>
 
           <button
@@ -2587,34 +2986,36 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             }}
             className="w-full py-4 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-bold rounded-xl transition-all hover:scale-105"
           >
-            ⛔ 경기 강제 종료
+            경기 강제 종료
           </button>
 
           {/* RSC 버튼 */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <button
+              type="button"
               onClick={() => {
                 if (confirm(`청코너 ${blueCorner.name} 선수를 RSC 승리로 처리하시겠습니까?`)) {
                   handleRSC('blue');
                 }
               }}
-              className="py-8 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-xl text-white font-bold transition-all hover:scale-105 shadow-lg"
+              className="py-6 sm:py-8 rounded-xl border border-blue-400/40 bg-gradient-to-br from-blue-500/30 via-blue-600/20 to-blue-900/30 hover:from-blue-500/40 hover:to-blue-900/40 text-white font-bold transition-all hover:scale-[1.02] shadow-[0_0_18px_rgba(59,130,246,0.25)]"
             >
-              <div className="text-4xl mb-2">🔵</div>
-              <div className="text-xl">청코너 RSC</div>
-              <div className="text-sm opacity-80 mt-1">{blueCorner.name}</div>
+              <div className="text-[10px] font-black tracking-[0.2em] text-blue-300 uppercase">청코너</div>
+              <div className="text-lg sm:text-xl mt-1">RSC 승리</div>
+              <div className="text-xs sm:text-sm text-blue-100/80 mt-1 truncate px-2">{blueCorner.name}</div>
             </button>
             <button
+              type="button"
               onClick={() => {
                 if (confirm(`홍코너 ${redCorner.name} 선수를 RSC 승리로 처리하시겠습니까?`)) {
                   handleRSC('red');
                 }
               }}
-              className="py-8 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-xl text-white font-bold transition-all hover:scale-105 shadow-lg"
+              className="py-6 sm:py-8 rounded-xl border border-red-400/40 bg-gradient-to-br from-red-500/30 via-red-600/20 to-red-900/30 hover:from-red-500/40 hover:to-red-900/40 text-white font-bold transition-all hover:scale-[1.02] shadow-[0_0_18px_rgba(239,68,68,0.25)]"
             >
-              <div className="text-4xl mb-2">🔴</div>
-              <div className="text-xl">홍코너 RSC</div>
-              <div className="text-sm opacity-80 mt-1">{redCorner.name}</div>
+              <div className="text-[10px] font-black tracking-[0.2em] text-red-300 uppercase">홍코너</div>
+              <div className="text-lg sm:text-xl mt-1">RSC 승리</div>
+              <div className="text-xs sm:text-sm text-red-100/80 mt-1 truncate px-2">{redCorner.name}</div>
             </button>
           </div>
 
@@ -2673,18 +3074,85 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
       {/* Phase 3: Rest - 휴식 및 채점 */}
       {phase === 'rest' && (
-        <div className="space-y-6">
-          {/* 휴식 시간 */}
-          <SpotlightCard className="p-8 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-400 mb-2">ROUND {currentRound} 종료</div>
+        <div className="space-y-4">
+          {/* ⭐ 휴식 카드 — fighting 카드와 같은 시각 톤 */}
+          <div
+            className="relative overflow-hidden rounded-2xl border border-white/10 p-5 sm:p-7"
+            style={{
+              background: 'linear-gradient(135deg, rgba(168,85,247,0.18) 0%, rgba(15,23,42,0.85) 50%, rgba(236,72,153,0.18) 100%)',
+            }}
+          >
+            <div
+              className="absolute inset-0 opacity-[0.07] pointer-events-none"
+              style={{
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+                backgroundSize: '32px 32px',
+              }}
+              aria-hidden
+            />
+
+            {/* 라운드 인디케이터 */}
+            <div className="relative flex items-center justify-between mb-4 sm:mb-5">
+              <div>
+                <p className="text-[10px] sm:text-xs font-black tracking-[0.3em] uppercase text-purple-300/80">Round Ended</p>
+                <p className="text-2xl sm:text-3xl font-black text-white tabular-nums mt-0.5">
+                  {currentRound}<span className="text-white/40 text-lg sm:text-xl"> / {totalRounds}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: totalRounds }, (_, i) => {
+                  const r = i + 1;
+                  const done = scores[`round${r}`] != null;
+                  const isCurrent = r === currentRound;
+                  return (
+                    <span
+                      key={r}
+                      className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${
+                        done
+                          ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]'
+                          : isCurrent
+                          ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)]'
+                          : 'bg-white/15'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 휴식 타이머 또는 마지막 라운드 안내 */}
+            <div className="relative text-center">
               {currentRound < totalRounds ? (
-                <div className="text-4xl font-bold text-white mb-4">휴식 {formatTime(restTime)}</div>
+                <>
+                  <div
+                    className="font-black tabular-nums leading-none text-purple-200"
+                    style={{
+                      fontSize: 'clamp(3.5rem, 12vw, 6rem)',
+                      textShadow: '0 0 30px rgba(216,180,254,0.4)',
+                      letterSpacing: '-0.02em',
+                    }}
+                  >
+                    {formatTime(restTime)}
+                  </div>
+                  <p className="text-[10px] sm:text-xs font-bold tracking-[0.35em] uppercase text-purple-200/60 mt-2">
+                    Rest Period
+                  </p>
+                  {/* 휴식 진행 바 */}
+                  <div className="mt-3 sm:mt-4 mx-auto max-w-md h-1 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full bg-purple-300/80 transition-all duration-1000 ease-linear"
+                      style={{ width: `${Math.max(0, (restTime / REST_DURATION_SEC) * 100)}%` }}
+                    />
+                  </div>
+                </>
               ) : (
-                <div className="text-base sm:text-lg font-bold text-amber-300 mb-2">라운드 간 휴식 없음 — 바로 채점해 주세요</div>
+                <div className="py-2">
+                  <p className="text-base sm:text-xl font-black tracking-tight text-amber-300">최종 라운드 종료</p>
+                  <p className="text-xs sm:text-sm text-amber-200/70 mt-2 font-medium">아래에서 라운드 점수를 입력해주세요</p>
+                </div>
               )}
             </div>
-          </SpotlightCard>
+          </div>
 
           <button
             onClick={() => {
@@ -2693,21 +3161,21 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             }}
             className="w-full py-4 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-bold rounded-xl transition-all hover:scale-105"
           >
-            ⛔ 경기 강제 종료
+            경기 강제 종료
           </button>
 
           {/* 채점 */}
           {!scores[`round${currentRound}`] && (
             <SpotlightCard className="p-6">
-              <h3 className="text-xl font-bold text-white mb-6 text-center">📝 ROUND {currentRound} 채점</h3>
-              
+              <h3 className="text-xl font-bold text-white mb-6 text-center">ROUND {currentRound} 채점</h3>
+
               {/* 점수 입력 그리드 */}
               <div className="grid grid-cols-2 gap-6 mb-6">
                 {/* 청코너 */}
                 <div>
-                  <div className="text-center mb-3">
-                    <div className="text-2xl mb-1">🔵</div>
-                    <h4 className="text-lg font-bold text-blue-400">{blueCorner.name}</h4>
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-400" aria-hidden />
+                    <h4 className="text-lg font-bold text-blue-400 truncate">{blueCorner.name}</h4>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {[10, 9, 8, 7].map(score => (
@@ -2728,9 +3196,9 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
 
                 {/* 홍코너 */}
                 <div>
-                  <div className="text-center mb-3">
-                    <div className="text-2xl mb-1">🔴</div>
-                    <h4 className="text-lg font-bold text-red-400">{redCorner.name}</h4>
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400" aria-hidden />
+                    <h4 className="text-lg font-bold text-red-400 truncate">{redCorner.name}</h4>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {[10, 9, 8, 7].map(score => (
@@ -2762,8 +3230,10 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                         : 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/50'
                     }`}
                   >
-                    <div className="text-2xl mb-1">🔵</div>
-                    <div>청코너 우세</div>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-blue-400" aria-hidden />
+                      <span>청코너 우세</span>
+                    </div>
                   </button>
                   <button
                     onClick={() => setCurrentScoreInput(prev => ({ ...prev, dominant: 'red' }))}
@@ -2773,8 +3243,10 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                         : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'
                     }`}
                   >
-                    <div className="text-2xl mb-1">🔴</div>
-                    <div>홍코너 우세</div>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-red-400" aria-hidden />
+                      <span>홍코너 우세</span>
+                    </div>
                   </button>
                 </div>
               </div>
@@ -2818,7 +3290,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                     : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {canSubmitScore() ? '✅ 점수 제출' : '점수와 우세를 선택하세요'}
+                {canSubmitScore() ? '점수 제출' : '점수와 우세를 선택하세요'}
               </button>
             </SpotlightCard>
           )}
@@ -2827,7 +3299,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
           {scores[`round${currentRound}`] && (
             <SpotlightCard className="p-6 bg-emerald-500/10 border border-emerald-500/50">
               <div className="text-center">
-                <div className="text-2xl mb-2">✅</div>
+                <div className="text-[10px] font-black tracking-[0.3em] uppercase text-emerald-300/80 mb-2">Round Scored</div>
                 <div className="text-lg font-bold text-white mb-2">
                   ROUND {currentRound} 점수: {scores[`round${currentRound}`].blue} - {scores[`round${currentRound}`].red}
                 </div>
@@ -2882,7 +3354,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             className="w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[90vh] bg-[#0A0A0A] sm:border sm:border-white/20 sm:rounded-2xl p-5 sm:p-6 overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-xl font-bold text-white mb-2">⛔ 경기 강제 종료</h3>
+            <h3 className="text-xl font-bold text-white mb-2">경기 강제 종료</h3>
             <p className="text-sm text-gray-400 mb-5">승자와 최종 점수를 입력하면 즉시 경기를 종료하고 전적에 반영합니다.</p>
 
             <div className="grid grid-cols-3 gap-2 mb-4">
@@ -2982,38 +3454,178 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
       )}
 
       {/* Phase 4: Finish - 판정 */}
-      {phase === 'finish' && (
+      {phase === 'finish' && (() => {
+        // 우승자 / 코너 / 무승부 결정
+        const decisionCorner = finishMethod === 'decision'
+          ? resolveDecisionWinnerCorner(scores, totalRounds)
+          : null;
+        const winnerCorner = finishMethod === 'rsc'
+          ? rscWinner
+          : finishMethod === 'forced'
+            ? forcedResult.winner
+            : decisionCorner;
+        const isDraw = winnerCorner === 'draw' || winnerCorner == null;
+        const winnerPlayer = winnerCorner === 'blue' ? blueCorner : winnerCorner === 'red' ? redCorner : null;
+        const loserPlayer = winnerCorner === 'blue' ? redCorner : winnerCorner === 'red' ? blueCorner : null;
+        const winnerColorKey = winnerCorner === 'blue' ? '청' : winnerCorner === 'red' ? '홍' : null;
+
+        // 종료 방식 라벨
+        const methodLabel =
+          resultMethod === 'ko' ? 'KO 승'
+          : resultMethod === 'tko' ? 'TKO 승'
+          : finishMethod === 'rsc' ? 'RSC (TKO) 승'
+          : finishMethod === 'forced' ? '강제 종료'
+          : isDraw ? '판정 무승부'
+          : '판정 승';
+
+        // 점수차 (점수가 의미 있을 때만)
+        const finalScore = getFinalScore();
+        const margin = Math.abs((finalScore.blue || 0) - (finalScore.red || 0));
+
+        return (
         <div className="space-y-6">
-          <SpotlightCard className="p-8 bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-orange-500/10">
-            <div className="text-center mb-8">
-              <div className="text-6xl mb-4">🏆</div>
-              <div className="text-3xl font-bold text-yellow-400 mb-2">
-                {resultMethod === 'ko'
-                  ? 'KO 승리!'
-                  : resultMethod === 'tko'
-                    ? 'TKO 승리!'
-                    : finishMethod === 'forced'
-                      ? '강제 종료 판정'
-                      : finishMethod === 'decision' && resolveDecisionWinnerCorner(scores, totalRounds) === 'draw'
-                        ? '판정 무승부!'
-                        : '판정 승리!'}
-              </div>
-              <div className="text-5xl font-bold text-white mb-4">{calculateWinner()?.name || '무승부'}</div>
-              {finishMethod === 'rsc' ? (
-                <div className="text-xl text-gray-400">
-                  ROUND {currentRound} - Referee Stops Contest
+          {/* ⭐ 우승 hero — 누가 이겼는지 시각적으로 명확하게 */}
+          <div
+            className="relative overflow-hidden rounded-2xl border p-6 sm:p-8"
+            style={{
+              borderColor: isDraw
+                ? 'rgba(255,255,255,0.15)'
+                : winnerCorner === 'blue'
+                  ? 'rgba(96,165,250,0.5)'
+                  : 'rgba(248,113,113,0.5)',
+              background: isDraw
+                ? 'linear-gradient(135deg, rgba(148,163,184,0.18) 0%, rgba(15,23,42,0.85) 60%)'
+                : winnerCorner === 'blue'
+                  ? 'linear-gradient(135deg, rgba(59,130,246,0.32) 0%, rgba(30,58,138,0.20) 50%, rgba(15,23,42,0.90) 100%)'
+                  : 'linear-gradient(135deg, rgba(239,68,68,0.32) 0%, rgba(127,29,29,0.20) 50%, rgba(15,23,42,0.90) 100%)',
+              boxShadow: isDraw
+                ? 'none'
+                : winnerCorner === 'blue'
+                  ? '0 0 40px rgba(59,130,246,0.25)'
+                  : '0 0 40px rgba(239,68,68,0.25)',
+            }}
+          >
+            {/* 격자 텍스처 */}
+            <div
+              className="absolute inset-0 opacity-[0.06] pointer-events-none"
+              style={{
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+                backgroundSize: '32px 32px',
+              }}
+              aria-hidden
+            />
+
+            <div className="relative text-center">
+              {/* WINNER / DRAW 배지 */}
+              {isDraw ? (
+                <div className="inline-block px-4 py-1 rounded-full bg-white/10 border border-white/20 mb-4">
+                  <span className="text-[10px] sm:text-xs font-black tracking-[0.4em] uppercase text-white/80">Draw</span>
                 </div>
               ) : (
-                <div className="text-xl text-gray-400">
-                  {blueCorner.name} {getFinalScore().blue} - {getFinalScore().red} {redCorner.name}
+                <div
+                  className="inline-block px-4 py-1.5 rounded-full mb-4"
+                  style={{
+                    background: winnerCorner === 'blue' ? 'rgba(59,130,246,0.25)' : 'rgba(239,68,68,0.25)',
+                    border: winnerCorner === 'blue' ? '1px solid rgba(96,165,250,0.5)' : '1px solid rgba(248,113,113,0.5)',
+                  }}
+                >
+                  <span
+                    className="text-[10px] sm:text-xs font-black tracking-[0.4em] uppercase"
+                    style={{ color: winnerCorner === 'blue' ? '#bfdbfe' : '#fecaca' }}
+                  >
+                    Winner · {winnerColorKey}코너
+                  </span>
+                </div>
+              )}
+
+              {/* 우승자 아바타 + 이름 */}
+              {isDraw ? (
+                <div className="flex items-center justify-center gap-6 sm:gap-8 my-5">
+                  <div className="text-center">
+                    <ProfileAvatarImg
+                      avatarUrl={blueCorner.avatarUrl}
+                      name={blueCorner.name}
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-blue-400/50 mx-auto mb-2 text-2xl"
+                      gradientClassName="bg-gradient-to-br from-blue-500 to-blue-700"
+                    />
+                    <p className="text-sm sm:text-base font-bold text-blue-200">{blueCorner.name}</p>
+                  </div>
+                  <span className="text-3xl sm:text-4xl font-black text-white/40">VS</span>
+                  <div className="text-center">
+                    <ProfileAvatarImg
+                      avatarUrl={redCorner.avatarUrl}
+                      name={redCorner.name}
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-red-400/50 mx-auto mb-2 text-2xl"
+                      gradientClassName="bg-gradient-to-br from-red-500 to-red-700"
+                    />
+                    <p className="text-sm sm:text-base font-bold text-red-200">{redCorner.name}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="my-5">
+                  <ProfileAvatarImg
+                    avatarUrl={winnerPlayer?.avatarUrl}
+                    name={winnerPlayer?.name}
+                    className={`w-28 h-28 sm:w-36 sm:h-36 rounded-full border-4 mx-auto mb-4 text-4xl ${
+                      winnerCorner === 'blue' ? 'border-blue-400/80' : 'border-red-400/80'
+                    }`}
+                    gradientClassName={winnerCorner === 'blue'
+                      ? 'bg-gradient-to-br from-blue-500 to-blue-700'
+                      : 'bg-gradient-to-br from-red-500 to-red-700'}
+                  />
+                  <h2
+                    className="text-4xl sm:text-5xl font-black text-white mb-2 leading-none"
+                    style={{ textShadow: '0 0 30px rgba(255,255,255,0.25)' }}
+                  >
+                    {winnerPlayer?.name || '—'}
+                  </h2>
+                  <p
+                    className="text-lg sm:text-xl font-bold tracking-tight"
+                    style={{ color: winnerCorner === 'blue' ? '#93c5fd' : '#fca5a5' }}
+                  >
+                    {methodLabel}
+                  </p>
+                </div>
+              )}
+
+              {/* 무승부 라벨 별도 */}
+              {isDraw ? (
+                <h2
+                  className="text-3xl sm:text-4xl font-black text-white/90 mb-2 leading-none"
+                  style={{ textShadow: '0 0 30px rgba(255,255,255,0.2)' }}
+                >
+                  {methodLabel}
+                </h2>
+              ) : null}
+
+              {/* 점수 / 점수차 / 진행 라운드 */}
+              {finishMethod === 'rsc' ? (
+                <p className="text-sm sm:text-base text-white/70 mt-2">
+                  ROUND <span className="font-bold text-white">{currentRound}</span> · 레퍼리 스톱
+                </p>
+              ) : (
+                <div className="mt-3 inline-flex items-center gap-2 sm:gap-3 px-4 py-2 rounded-xl bg-black/30 border border-white/10">
+                  <span className={`text-xl sm:text-2xl font-black tabular-nums ${winnerCorner === 'blue' ? 'text-blue-300' : 'text-white/80'}`}>
+                    {finalScore.blue}
+                  </span>
+                  <span className="text-white/40">:</span>
+                  <span className={`text-xl sm:text-2xl font-black tabular-nums ${winnerCorner === 'red' ? 'text-red-300' : 'text-white/80'}`}>
+                    {finalScore.red}
+                  </span>
+                  {!isDraw && margin > 0 ? (
+                    <span className="ml-2 text-[10px] sm:text-xs text-white/50 font-semibold">
+                      {margin}점 차
+                    </span>
+                  ) : null}
                 </div>
               )}
             </div>
+          </div>
 
             {/* 최종 로그 (판정인 경우만) */}
             {finishMethod === 'decision' && (
               <div className="mb-6">
-                <h4 className="text-lg font-bold text-white mb-4 text-center">📊 경기 기록</h4>
+                <h4 className="text-lg font-bold text-white mb-4 text-center">경기 기록</h4>
                 
                 {/* 라운드별 상세 기록 */}
                 <div className="space-y-3 mb-4">
@@ -3129,9 +3741,9 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
             >
               다음 매치 잡기
             </button>
-          </SpotlightCard>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
