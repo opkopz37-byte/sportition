@@ -6,15 +6,22 @@ import { useAuth } from '@/lib/AuthContext';
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 
+// 로컬 타임존 기준 YYYY-MM-DD (KST 등) — toISOString() 의 UTC 변환 버그 회피
+function localYmd(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function getWeekDates() {
   const today = new Date();
-  // Monday = 0 index
-  const dow = today.getDay(); // 0=Sun,1=Mon,...,6=Sat
+  const dow = today.getDay();
   const mondayOffset = dow === 0 ? -6 : 1 - dow;
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() + mondayOffset + i);
-    return d.toISOString().split('T')[0];
+    return localYmd(d);
   });
 }
 
@@ -30,7 +37,7 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
   });
 
   const weekDates = getWeekDates();
-  const todayYmd = new Date().toISOString().split('T')[0];
+  const todayYmd = localYmd();
   const todayDowIndex = (() => {
     const dow = new Date().getDay();
     return dow === 0 ? 6 : dow - 1;
@@ -41,7 +48,8 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
     try {
       const { default: supabase } = await import('@/lib/supabase');
       const now = new Date();
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      // 로컬(KST) 기준 — UTC 변환 시 한국 새벽 시간이 어제 달로 잘못 들어가는 문제 방지
+      const firstOfMonth = localYmd(new Date(now.getFullYear(), now.getMonth(), 1));
       const weekStart = weekDates[0];
       const weekEnd = weekDates[6];
 
@@ -77,7 +85,7 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
   const handleCheckAttendance = async () => {
     if (todayChecked || isChecking || !user?.id) return;
     setIsChecking(true);
-    // 낙관적 UI 업데이트 — 버튼 누른 즉시 상태 반영 (서버 응답 대기 없이)
+    // 낙관적 UI 업데이트 — 버튼 누른 즉시 상태 반영
     setTodayChecked(true);
     setWeekAttended((prev) => new Set([...prev, todayYmd]));
     setStats((prev) => ({
@@ -89,7 +97,7 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
 
     try {
       const { checkAttendance } = await import('@/lib/supabase');
-      const result = await checkAttendance(user.id);
+      const result = await checkAttendance();
       if (result.error) {
         // 롤백
         setTodayChecked(false);
@@ -104,12 +112,18 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
           thisMonth: Math.max(0, prev.thisMonth - 1),
           skillPointsEarned: Math.max(0, prev.skillPointsEarned - 1),
         }));
-        alert(`${t('checkInFailed')}: ${result.message}`);
-      } else {
-        // 백그라운드에서 실제 수치 재동기화 (대기 안 함)
-        refreshProfile();
-        loadAttendanceData();
+        alert(`${t('checkInFailed')}: ${result.error.message || result.message || ''}`);
+        return;
       }
+      // RPC 응답으로 정확한 수치 즉시 동기화 (재호출 불필요 → 트래픽 ↓)
+      if (typeof result.totalSkillPoints === 'number') {
+        setStats((prev) => ({ ...prev, skillPointsEarned: result.totalSkillPoints }));
+      }
+      if (typeof result.currentStreak === 'number') {
+        setStats((prev) => ({ ...prev, currentStreak: result.currentStreak }));
+      }
+      // 프로필의 skill_points 도 갱신
+      refreshProfile();
     } catch (e) {
       console.error(e);
       setTodayChecked(false);
@@ -120,7 +134,7 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
   };
 
   return (
-    <SpotlightCard className="p-4 sm:p-5 bg-[#1a1a1a] h-full overflow-hidden relative">
+    <SpotlightCard className="p-4 sm:p-5 bg-[#1a2138] h-full overflow-hidden relative">
       <div className="relative flex flex-col gap-3">
         {/* 상단: 타이틀 + 아이콘 */}
         <div className="flex items-start justify-between">

@@ -18,6 +18,7 @@ import {
   isValidCalendarDate,
 } from '@/lib/birthDate';
 import { checkEmailAvailable } from '@/lib/emailAvailability';
+import { checkNicknameAvailable } from '@/lib/nicknameAvailability';
 import { formatAuthPasswordErrorMessage, isAuthPasswordPolicyError } from '@/lib/authPasswordErrors';
 
 /** 숫자만 입력해도 010-1234-5678 / 02-1234-5678 형태로 표시 */
@@ -327,6 +328,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   const [showPassword, setShowPassword] = useState(false);
   /** 이메일(아이디) 중복 확인: idle | checking | available | taken | error | unavailable */
   const [emailCheckStatus, setEmailCheckStatus] = useState('idle');
+  /** 닉네임 중복 확인: idle | checking | available | taken | error */
+  const [nicknameCheckStatus, setNicknameCheckStatus] = useState('idle');
   /** null | 'full' 필수 약관 전문 | 'optional' 선택(마케팅) 동의 전문 */
   const [termsModalView, setTermsModalView] = useState(null);
 
@@ -360,7 +363,11 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       setError('닉네임을 입력해주세요.');
       return false;
     }
-    
+    if (nicknameCheckStatus !== 'available') {
+      setError('닉네임 중복 확인을 완료해주세요.');
+      return false;
+    }
+
     if (!formData.phone) {
       setError('핸드폰 번호를 입력해주세요.');
       return false;
@@ -430,6 +437,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       
       const userData = {
         name: formData.nickname,
+        nickname: formData.nickname,
         phone: formData.phone,
         birth_date: birthDateIso,
         role: formData.role,
@@ -820,17 +828,53 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       {/* Step 2: 프로필 정보 */}
       {step === 2 && (
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 공통 필드 */}
+          {/* 공통 필드 — 닉네임 + 중복 확인 */}
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">닉네임 *</label>
-            <input
-              type="text"
-              value={formData.nickname}
-              onChange={(e) => setFormData({...formData, nickname: e.target.value})}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-              placeholder="닉네임"
-              disabled={loading}
-            />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={formData.nickname}
+                onChange={(e) => {
+                  setFormData({ ...formData, nickname: e.target.value });
+                  setNicknameCheckStatus('idle');
+                }}
+                className="flex-1 min-w-0 px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                placeholder="닉네임"
+                disabled={loading}
+                maxLength={30}
+              />
+              <button
+                type="button"
+                disabled={loading || !formData.nickname.trim() || nicknameCheckStatus === 'checking'}
+                onClick={async () => {
+                  setError('');
+                  setNicknameCheckStatus('checking');
+                  const r = await checkNicknameAvailable(formData.nickname);
+                  if (!r.ok) {
+                    setNicknameCheckStatus('error');
+                    setError('닉네임 확인 중 오류가 발생했습니다.');
+                    return;
+                  }
+                  if (r.available) {
+                    setNicknameCheckStatus('available');
+                    setError('');
+                  } else {
+                    setNicknameCheckStatus('taken');
+                    setError('이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해 주세요.');
+                  }
+                }}
+                className="shrink-0 px-4 py-3 rounded-lg border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {nicknameCheckStatus === 'checking' ? '확인 중…' : '중복 확인'}
+              </button>
+            </div>
+            {nicknameCheckStatus === 'available' && (
+              <p className="text-xs text-emerald-400 mt-1.5">사용 가능한 닉네임입니다.</p>
+            )}
+            {nicknameCheckStatus === 'taken' && (
+              <p className="text-xs text-red-400 mt-1.5">이미 사용 중인 닉네임입니다.</p>
+            )}
           </div>
 
           <div>
@@ -1145,11 +1189,12 @@ const LandingPage = ({ onLoginClick, onSignupClick, language, setLanguage }) => 
       </div>
 
       <div className="w-full max-w-6xl flex flex-col items-center px-0">
+        {/* 로고 워드마크 — 흰색 굵은 SPORTITION (이미지 동일 스타일) */}
         <h1
-          className="text-4xl sm:text-5xl md:text-6xl font-bold mb-8 sm:mb-10 tracking-tight bg-gradient-to-r from-blue-400 via-violet-400 to-purple-500 bg-clip-text text-transparent"
-          style={{ fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}
+          className="text-4xl sm:text-5xl md:text-6xl font-extrabold mb-8 sm:mb-10 tracking-tight text-white"
+          style={{ fontFamily: 'ui-sans-serif, system-ui, sans-serif', letterSpacing: '0.04em' }}
         >
-          Sportition
+          SPORTITION
         </h1>
 
         <div className="w-full relative">

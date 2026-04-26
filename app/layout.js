@@ -12,6 +12,9 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // iOS 노치/홈인디케이터 영역까지 배경 연장 (env(safe-area-inset-*) 사용 가능)
+  viewportFit: 'cover',
+  themeColor: '#0c1024',  // body 배경과 일치 — 모바일 브라우저 status bar 자연스러움
 }
 
 export default function RootLayout({ children }) {

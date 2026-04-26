@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -313,7 +313,7 @@ function computeSiblingLockSet(nodes, expByNodeId, childrenByNum) {
 }
 
 /** SVG 연결선 한 줄 — 부모→자식 1쌍 */
-function ConnectorPath({
+const ConnectorPath = memo(function ConnectorPath({
   parentPos, childPos,
   cardW, cardH, colGap, rowGap,
   state, // 'chain' | 'pulse' | 'alive' | 'locked' | 'dormant'
@@ -395,10 +395,10 @@ function ConnectorPath({
       <path d={arrowPath} fill={arrowFill} stroke="none" />
     </g>
   );
-}
+});
 
 /** 16방향 스파크 버스트 — 스킬 찍었을 때 카드 위에 오버레이 (크고 화려) */
-function SkillBurst({ mastered }) {
+const SkillBurst = memo(function SkillBurst({ mastered }) {
   // 16방향 스파크 — 가까운 8개 + 먼 8개
   const sparks = [];
   const inner = 60;
@@ -446,7 +446,7 @@ function SkillBurst({ mastered }) {
       </span>
     </div>
   );
-}
+});
 
 /** 카드 색 팔레트 — 모듈 레벨 (재생성 방지) */
 const CARD_TAB_PALETTE = {
@@ -465,7 +465,7 @@ const CARD_ZONE_LABEL = {
 };
 
 /** 노드 카드 — 트렌디 디자인 (그라디언트 보더 + 메시 배경 + 도트 텍스처) */
-function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked }) {
+const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked }) {
   const mastered = exp >= MAX_EXP;
   const inProgress = exp > 0 && exp < MAX_EXP;
   const isCommon = typeof node?.punch_type === 'string' && node.punch_type.startsWith('common');
@@ -543,7 +543,13 @@ function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey,
       className={`group relative shrink-0 w-[82px] h-[64px] sm:w-[104px] sm:h-[74px] rounded-xl transition-all duration-200 ease-out ${ringClass} ${dimClass} ${lockedOpacity} ${softLockClass} ${punchClass} ${pickableGlowClass} ${
         clickable ? 'cursor-pointer hover:scale-[1.06] hover:-translate-y-0.5 active:scale-[1.02]' : 'cursor-not-allowed'
       }`}
-      style={{ boxShadow: outerShadow }}
+      // 각 카드도 자체 GPU 레이어로 격리 — 한 카드의 burst/punch 애니메이션이
+      // 인접 카드 paint 를 트리거하지 않게 (스킬 찍은 후 깜빡임의 핵심)
+      style={{
+        boxShadow: outerShadow,
+        contain: 'layout paint',
+        transform: 'translateZ(0)',
+      }}
     >
       {/* 그라디언트 보더 (1.5px) — 또는 점선 (common) */}
       {isDashedBorder ? (
@@ -681,7 +687,7 @@ function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey,
       {burst ? <SkillBurst key={burstKey} mastered={mastered} /> : null}
     </button>
   );
-}
+});
 
 /** 탭 해금 시네마틱 — 긴장 빌드업 → 흔들림 → BANG → 글래스 모달 */
 function UnlockCelebration({ tab, onDone }) {
@@ -982,6 +988,45 @@ function SkillSummaryPage({ nodes, expByNodeId, onBack }) {
     .map((key) => ({ key, nodes: sorted.filter((n) => (n?.punch_type || 'common') === key) }))
     .filter((g) => g.nodes.length > 0);
 
+  // ── 성향 분석 — 찍은 스킬들의 EXP 가중 합으로 펀치 타입/존 비율 산출 ──
+  // EXP 1~5 그대로 가중치로 사용 → 같은 노드라도 더 많이 찍을수록 비중 ↑
+  const punchWeights = { straight: 0, hook: 0, upper: 0, advanced: 0 };
+  const zoneWeights = { infighter: 0, outboxer: 0 };
+  let totalPunchWeight = 0;
+  let totalZoneWeight = 0;
+  for (const n of sorted) {
+    const exp = safeExp.get(n.id) || 0;
+    if (exp <= 0) continue;
+    const pt = String(n?.punch_type || '');
+    // common_X / X 모두 같은 펀치군으로 합산
+    if (pt.includes('straight') || pt === 'common') punchWeights.straight += exp;
+    else if (pt.includes('hook')) punchWeights.hook += exp;
+    else if (pt.includes('upper')) punchWeights.upper += exp;
+    else if (pt.includes('advanced')) punchWeights.advanced += exp;
+    totalPunchWeight += exp;
+    if (n?.zone === 'infighter') { zoneWeights.infighter += exp; totalZoneWeight += exp; }
+    else if (n?.zone === 'outboxer') { zoneWeights.outboxer += exp; totalZoneWeight += exp; }
+  }
+  const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0);
+  // 대표 펀치 (최대값) — 동률이면 우선순위 straight > hook > upper > advanced
+  const topPunchKey = totalPunchWeight === 0
+    ? null
+    : ['straight', 'hook', 'upper', 'advanced']
+        .reduce((best, k) => (punchWeights[k] > punchWeights[best] ? k : best), 'straight');
+  const topPunchLabel = { straight: '스트레이트', hook: '훅', upper: '어퍼', advanced: '심화' }[topPunchKey] || '—';
+  // 존 성향 — 60% 이상 우세하면 우세 라벨, 그 외 균형
+  const inPct = pct(zoneWeights.infighter, totalZoneWeight);
+  const outPct = pct(zoneWeights.outboxer, totalZoneWeight);
+  const zoneLabel = totalZoneWeight === 0
+    ? '미정'
+    : inPct >= 60 ? '인파이터'
+    : outPct >= 60 ? '아웃복서'
+    : '균형형';
+  // 종합 성향 — 1~2 단어
+  const styleLabel = totalPunchWeight === 0
+    ? '—'
+    : `${zoneLabel} · ${topPunchLabel} 위주`;
+
   return (
     <div className="animate-fade-in-up space-y-3 sm:space-y-4">
       {/* 헤더 */}
@@ -999,6 +1044,43 @@ function SkillSummaryPage({ nodes, expByNodeId, onBack }) {
           <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">내 스킬 요약</h1>
         </div>
       </div>
+
+      {/* 성향 표 — 찍은 스킬 기반 (간략) */}
+      <SpotlightCard className="p-3 sm:p-4 border border-white/12 bg-gradient-to-br from-slate-900/90 to-slate-950/90">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">성향</p>
+          <p className="text-sm sm:text-base font-extrabold text-white truncate">{styleLabel}</p>
+        </div>
+        <div className="grid grid-cols-[64px_1fr_44px] gap-x-2 sm:gap-x-3 gap-y-1.5 text-[11px] sm:text-xs items-center">
+          {[
+            { key: 'straight', label: '스트레이트', color: 'bg-cyan-400' },
+            { key: 'hook',     label: '훅',         color: 'bg-orange-400' },
+            { key: 'upper',    label: '어퍼',       color: 'bg-violet-400' },
+            { key: 'advanced', label: '심화',       color: 'bg-rose-400' },
+          ].map((row) => {
+            const p = pct(punchWeights[row.key], totalPunchWeight);
+            return (
+              <Fragment key={row.key}>
+                <span className="text-white/70 font-semibold whitespace-nowrap">{row.label}</span>
+                <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+                  <div className={`h-full ${row.color} transition-all duration-500`} style={{ width: `${p}%` }} />
+                </div>
+                <span className="text-right tabular-nums text-white/70 font-bold">{p}%</span>
+              </Fragment>
+            );
+          })}
+          {totalZoneWeight > 0 ? (
+            <>
+              <span className="text-white/70 font-semibold whitespace-nowrap pt-1">존</span>
+              <div className="h-1.5 rounded-full bg-white/8 overflow-hidden flex pt-1">
+                <div className="h-1.5 bg-red-400 transition-all duration-500" style={{ width: `${inPct}%` }} aria-label="인파이팅" />
+                <div className="h-1.5 bg-blue-400 transition-all duration-500" style={{ width: `${outPct}%` }} aria-label="아웃복싱" />
+              </div>
+              <span className="text-right tabular-nums text-white/60 font-bold pt-1">{inPct}/{outPct}</span>
+            </>
+          ) : null}
+        </div>
+      </SpotlightCard>
 
       {/* 통계 */}
       <SpotlightCard className="p-3 sm:p-4 border border-white/12 bg-gradient-to-br from-slate-900/90 to-slate-950/90">
@@ -1278,7 +1360,18 @@ function SkillTree({
     <div className="relative overflow-x-auto overflow-y-hidden pb-3">
       <div
         className="relative"
-        style={{ width: totalW, height: totalH, minWidth: '100%' }}
+        style={{
+          width: totalW,
+          height: totalH,
+          minWidth: '100%',
+          // ⭐ GPU 레이어 격리 — 외부 페이지 변화(SpotlightCard re-render 등)가 트리 paint 트리거 안 함.
+          //   contain: layout style paint → 자식 변화가 부모로 새지 않음
+          //   isolation: isolate → 별도 stacking context (z-index 충돌 방지)
+          //   transform: translateZ(0) → 강제 GPU layer (모바일 합성 안정화)
+          contain: 'layout style paint',
+          isolation: 'isolate',
+          transform: 'translateZ(0)',
+        }}
       >
         {/* SVG 연결선 레이어 */}
         <svg
@@ -1453,22 +1546,27 @@ const ActiveSkillsView = () => {
     setErrorMessage('');
     try {
       const { getSkillTreeNodes, getUserSkillNodeProgress, getUserSkillWallet } = await import('@/lib/supabase');
-      const { data: nodes, error: nodesError } = await getSkillTreeNodes();
+      // 3개 fetch 모두 병렬 — 노드/진행/지갑 사이 종속성 없음. 콜드 로드 latency ↓
+      // (getSkillTreeNodes 는 모듈 캐시 5분 적용 → 두 번째 진입부터는 즉시 반환)
+      const [nodesRes, progRes, walletRes] = await Promise.all([
+        getSkillTreeNodes(),
+        getUserSkillNodeProgress(user.id),
+        getUserSkillWallet(user.id),
+      ]);
+      const { data: nodes, error: nodesError } = nodesRes;
       if (nodesError) throw nodesError;
 
       const filtered = (nodes || []).filter((n) => n.zone !== 'legendary');
       setTreeNodes(filtered);
 
-      const [{ data: progRows, error: progError }, { data: wallet }] = await Promise.all([
-        getUserSkillNodeProgress(user.id),
-        getUserSkillWallet(user.id),
-      ]);
+      const { data: progRows, error: progError } = progRes;
       if (progError) {
         setErrorMessage('진행 데이터를 불러오지 못했습니다. sql/33_redesign_skill_tree.sql 적용 여부를 확인해 주세요.');
         setProgressRows([]);
       } else {
         setProgressRows(progRows || []);
       }
+      const { data: wallet } = walletRes;
       if (wallet) {
         setSkillPoints(Number(wallet.skill_points ?? 0));
         setSkillResetTickets(Number(wallet.skill_reset_tickets ?? 0));
@@ -1664,23 +1762,14 @@ const ActiveSkillsView = () => {
   const currentTab = PUNCH_TABS.find((tab) => tab.key === selectedTab) || PUNCH_TABS[0];
   const theme = ACCENT_THEME[currentTab.accent];
 
-  // 요약 페이지 모드 — 트리 전체를 대체
-  if (summaryOpen) {
-    return (
-      <SkillSummaryPage
-        nodes={treeNodes}
-        expByNodeId={expByNodeId}
-        onBack={() => setSummaryOpen(false)}
-      />
-    );
-  }
-
   /**
    * 탭 진행 완료 검사 — 다음 탭 해금 / CTA 표시 조건
    *  - 해당 탭의 common 노드가 1개 이상 있으면: common 전체 마스터
    *  - common 노드가 없으면(분류 미완): specific 노드 전체 마스터로 대체
    *  - 둘 다 없으면 false
    *  - 레거시 'common' 도 straight 탭에서 인정
+   *
+   *  ⚠️ 모든 hook 은 early return 보다 위에 있어야 함 (React Hooks 규칙)
    */
   const isTabAdvanced = useCallback((tabKey) => {
     const tab = PUNCH_TABS.find((t) => t.key === tabKey);
@@ -1697,17 +1786,6 @@ const ActiveSkillsView = () => {
     if (specificNodes.length === 0) return false;
     return specificNodes.every((n) => (expByNodeId.get(n.id) || 0) >= MAX_EXP);
   }, [treeNodes, expByNodeId]);
-
-  /** 현재 탭이 잠겨있는지 — 선행 탭이 진행 완료됐는지 */
-  const requiresTabKey = currentTab.requires === 'common_straight' ? 'straight'
-    : currentTab.requires === 'common_hook' ? 'hook'
-    : currentTab.requires === 'common_upper' ? 'upper'
-    : currentTab.requires === 'common_advanced' ? 'advanced'
-    : null;
-  const tabUnlocked = !requiresTabKey || isTabAdvanced(requiresTabKey);
-
-  /** 다음 탭 CTA 표시 — 현재 탭이 진행 완료됐는지 */
-  const currentTabReady = isTabAdvanced(currentTab.key);
 
   /** 해금된 탭을 처음 클릭할 때 축하 이펙트 트리거 (탭마다 1회) */
   const handleTabClick = useCallback((tab) => {
@@ -1748,6 +1826,28 @@ const ActiveSkillsView = () => {
     }
     setCelebrationTab(tab);
   }, [isTabAdvanced]);
+
+  // 요약 페이지 모드 — 트리 전체를 대체 (모든 hook 호출 이후)
+  if (summaryOpen) {
+    return (
+      <SkillSummaryPage
+        nodes={treeNodes}
+        expByNodeId={expByNodeId}
+        onBack={() => setSummaryOpen(false)}
+      />
+    );
+  }
+
+  /** 현재 탭이 잠겨있는지 — 선행 탭이 진행 완료됐는지 */
+  const requiresTabKey = currentTab.requires === 'common_straight' ? 'straight'
+    : currentTab.requires === 'common_hook' ? 'hook'
+    : currentTab.requires === 'common_upper' ? 'upper'
+    : currentTab.requires === 'common_advanced' ? 'advanced'
+    : null;
+  const tabUnlocked = !requiresTabKey || isTabAdvanced(requiresTabKey);
+
+  /** 다음 탭 CTA 표시 — 현재 탭이 진행 완료됐는지 */
+  const currentTabReady = isTabAdvanced(currentTab.key);
 
   return (
     <div className="animate-fade-in-up space-y-3 sm:space-y-4">

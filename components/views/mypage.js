@@ -85,6 +85,9 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
   const { profile, user, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  /** 닉네임 중복 확인: idle | checking | available | taken | error | unchanged
+   *  unchanged = 본인의 기존 닉네임과 동일 (변경 없음 → 통과 처리) */
+  const [nicknameCheckStatus, setNicknameCheckStatus] = useState('unchanged');
 
   const [formData, setFormData] = useState({
     nickname: '',
@@ -124,7 +127,19 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
       setError('사용자 정보가 없습니다');
       return;
     }
-    
+
+    // 닉네임 검증 — 변경된 경우에만 중복확인 통과 필수
+    const trimmedNick = formData.nickname.trim();
+    if (!trimmedNick) {
+      setError('닉네임을 입력해주세요.');
+      return;
+    }
+    const original = (profile?.nickname || profile?.name || '').trim();
+    if (trimmedNick !== original && nicknameCheckStatus !== 'available') {
+      setError('닉네임 중복 확인을 완료해주세요.');
+      return;
+    }
+
     console.log('[EditProfile] 저장 시작, formData:', formData);
     setLoading(true);
     setError('');
@@ -189,13 +204,63 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">닉네임</label>
-            <input
-              type="text"
-              value={formData.nickname}
-              onChange={(e) => setFormData({...formData, nickname: e.target.value})}
-              placeholder="닉네임을 입력하세요"
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-            />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={formData.nickname}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setFormData({ ...formData, nickname: next });
+                  // 본인 기존 닉네임과 같으면 별도 확인 불필요 (unchanged 로 통과)
+                  const original = profile?.nickname || profile?.name || '';
+                  if (next.trim() === original.trim()) {
+                    setNicknameCheckStatus('unchanged');
+                  } else {
+                    setNicknameCheckStatus('idle');
+                  }
+                }}
+                placeholder="닉네임을 입력하세요"
+                maxLength={30}
+                className="flex-1 min-w-0 px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              />
+              <button
+                type="button"
+                disabled={
+                  loading
+                  || !formData.nickname.trim()
+                  || nicknameCheckStatus === 'checking'
+                  || nicknameCheckStatus === 'unchanged'
+                }
+                onClick={async () => {
+                  setError('');
+                  setNicknameCheckStatus('checking');
+                  const { checkNicknameAvailable } = await import('@/lib/nicknameAvailability');
+                  const r = await checkNicknameAvailable(formData.nickname);
+                  if (!r.ok) {
+                    setNicknameCheckStatus('error');
+                    setError('닉네임 확인 중 오류가 발생했습니다.');
+                    return;
+                  }
+                  if (r.available) {
+                    setNicknameCheckStatus('available');
+                  } else {
+                    setNicknameCheckStatus('taken');
+                    setError('이미 사용 중인 닉네임입니다.');
+                  }
+                }}
+                className="shrink-0 px-4 py-3 rounded-lg border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {nicknameCheckStatus === 'checking' ? '확인 중…'
+                  : nicknameCheckStatus === 'unchanged' ? '변경 없음'
+                  : '중복 확인'}
+              </button>
+            </div>
+            {nicknameCheckStatus === 'available' && (
+              <p className="text-xs text-emerald-400 mt-1.5">사용 가능한 닉네임입니다.</p>
+            )}
+            {nicknameCheckStatus === 'taken' && (
+              <p className="text-xs text-red-400 mt-1.5">이미 사용 중인 닉네임입니다.</p>
+            )}
           </div>
 
           <div>
@@ -393,20 +458,22 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
   const [currentPwStatus, setCurrentPwStatus] = useState('idle');
 
   // 현재 비밀번호 디바운스 검증
+  // (passwordData.current 를 별도 변수로 추출 — ESLint 가 state.current 를 ref.current 로
+  //  오인하지 않도록 함. 의도된 동작은 동일.)
+  const currentPwInput = passwordData.current;
   useEffect(() => {
-    const pw = passwordData.current;
-    if (!pw) {
+    if (!currentPwInput) {
       setCurrentPwStatus('idle');
-      return;
+      return undefined;
     }
     setCurrentPwStatus('checking');
     const timer = setTimeout(async () => {
       try {
         const { verifyCurrentPassword } = await import('@/lib/supabase');
-        const { ok } = await verifyCurrentPassword(pw);
+        const { ok } = await verifyCurrentPassword(currentPwInput);
         // 사용자가 그 사이에 값을 바꿨을 수 있으므로 확인
         setPasswordData((cur) => {
-          if (cur.current !== pw) return cur;
+          if (cur.current !== currentPwInput) return cur;
           setCurrentPwStatus(ok ? 'match' : 'mismatch');
           return cur;
         });
@@ -415,7 +482,7 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [passwordData.current]);
+  }, [currentPwInput]);
 
   const newPwMatch =
     passwordData.new && passwordData.confirm
@@ -1249,7 +1316,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 xs:gap-4 sm:gap-6">
             {/* Tier Points */}
             <div>
-              <SpotlightCard className="p-4 sm:p-6 bg-[#1a1a1a] overflow-hidden relative">
+              <SpotlightCard className="p-4 sm:p-6 bg-[#1a2138] overflow-hidden relative">
                 <div className="relative flex flex-col gap-4">
                   <div className="flex items-start justify-between">
                     <div>
@@ -1313,19 +1380,16 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
 
             {/* Match History — 마이페이지 동일 */}
             <div className="lg:col-span-2">
-              <SpotlightCard className="p-3 xs:p-4 sm:p-6 bg-[#1a1a1a]">
+              <SpotlightCard className="p-3 xs:p-4 sm:p-6 bg-[#1a2138]">
                 <div className="mb-3 xs:mb-4 sm:mb-6 flex items-center justify-between gap-2">
                   <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white">{t('matchHistory')}</h3>
                   {opponentMatches.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setShowAllOpponentMatches((prev) => !prev)}
-                      className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm text-gray-300 hover:text-white font-semibold transition-colors flex items-center gap-1.5"
+                      onClick={() => setActiveTab(`opponent-match-history-${opponentId}`)}
+                      className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm text-gray-300 hover:text-white font-semibold transition-colors"
                     >
-                      <span>{showAllOpponentMatches ? '접기' : '전체 보기'}</span>
-                      <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] sm:text-[11px] tabular-nums text-amber-200 font-bold">
-                        {opponentMatches.length}
-                      </span>
+                      전체 보기
                     </button>
                   )}
                 </div>
@@ -1334,7 +1398,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
                   <MatchHistorySection
                     matches={opponentMatches.map(normalizeRawMatch)}
                     onOpenOpponent={(id) => setActiveTab(`opponent-profile-${id}`)}
-                    limit={showAllOpponentMatches ? opponentMatches.length : 10}
+                    limit={10}
                   />
                 ) : (
                   <div className="text-center py-8 xs:py-10 sm:py-12">
@@ -1403,4 +1467,60 @@ const MatchHistoryView = ({ setActiveTab, t = (key) => key }) => {
   );
 };
 
-export { MyPageView, SettingsView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView, MatchHistoryView };
+// 다른 회원의 전체 전적 페이지 — 본인용 MatchHistoryView 와 동일한 디자인, opponentId 로 동작
+const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key }) => {
+  const [opponent, setOpponent] = useState(null);
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!opponentId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getPublicPlayerProfileById, getUserMatches } = await import('@/lib/supabase');
+        const [profRes, matchRes] = await Promise.all([
+          getPublicPlayerProfileById(opponentId),
+          getUserMatches(opponentId),
+        ]);
+        if (cancelled) return;
+        setOpponent(profRes?.data || null);
+        setMatches(matchRes?.data || []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [opponentId]);
+
+  const displayName = opponent?.display_name || opponent?.nickname || opponent?.name || '선수';
+
+  return (
+    <div className="animate-fade-in-up w-full">
+      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
+          {displayName} {t('matchHistory') || '전적'}
+        </h2>
+        <button
+          type="button"
+          onClick={() => setActiveTab(`opponent-profile-${opponentId}`)}
+          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
+        >
+          ← 뒤로
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-16 text-center text-gray-400 text-sm">전적을 불러오는 중…</div>
+      ) : (
+        <MatchHistorySection
+          matches={matches.map(normalizeRawMatch)}
+          onOpenOpponent={(id) => setActiveTab(`opponent-profile-${id}`)}
+          limit={matches.length}
+        />
+      )}
+    </div>
+  );
+};
+
+export { MyPageView, SettingsView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView, MatchHistoryView, OpponentMatchHistoryView };

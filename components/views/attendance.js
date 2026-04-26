@@ -4,6 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 
+// 로컬 타임존 기준 YYYY-MM-DD — toISOString() UTC 버그 회피 (KST 새벽 시간이 어제로 들어가는 문제)
+function localYmd(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => {
   const { user, profile, refreshProfile } = useAuth();
   const locale = language === 'ko' ? 'ko-KR' : 'en-US';
@@ -25,13 +33,11 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
     try {
       const { getUserAttendance, default: supabase } = await import('@/lib/supabase');
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = localYmd();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const now = new Date();
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-        .toISOString()
-        .split('T')[0];
+      const firstOfMonth = localYmd(new Date(now.getFullYear(), now.getMonth(), 1));
 
       console.log('[Attendance] 데이터 로딩 시작 (병렬)');
 
@@ -105,24 +111,30 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
     if (todayChecked || isChecking || !user?.id) return;
 
     setIsChecking(true);
-    
+
     try {
       const { checkAttendance } = await import('@/lib/supabase');
-      const result = await checkAttendance(user.id);
+      const result = await checkAttendance();
 
       if (result.error) {
-        alert(`${t('checkInFailed')}: ${result.message}`);
-      } else {
-        alert(`${result.message}\n${t('skillPointsEarned')}`);
-        setTodayChecked(true);
-        setAttendanceData(result.data);
-        
-        // 프로필 새로고침과 출석 데이터 재로드 병렬 처리
-        await Promise.all([
-          refreshProfile(),
-          loadAttendanceData()
-        ]);
+        alert(`${t('checkInFailed')}: ${result.error.message || result.message || ''}`);
+        return;
       }
+      // RPC 가 멱등이므로 already_checked 도 성공으로 간주
+      const alreadyChecked = result.data?.already_checked === true;
+      if (!alreadyChecked) {
+        alert(`${result.message}\n${t('skillPointsEarned')}`);
+      }
+      setTodayChecked(true);
+      // RPC 응답으로 즉시 정확한 통계 반영
+      if (typeof result.totalSkillPoints === 'number') {
+        setStats((prev) => ({ ...prev, skillPointsEarned: result.totalSkillPoints }));
+      }
+      if (typeof result.currentStreak === 'number') {
+        setStats((prev) => ({ ...prev, currentStreak: result.currentStreak }));
+      }
+      // 프로필 + 전체 데이터 재동기화 (백그라운드)
+      Promise.all([refreshProfile(), loadAttendanceData()]);
     } catch (error) {
       console.error('[Attendance] 출석 체크 에러:', error);
       alert(t('checkInError'));
@@ -248,7 +260,7 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
           <div className="space-y-2">
             {recentAttendance.slice(0, 10).map((record, index) => {
               const date = new Date(record.check_in_time);
-              const isToday = date.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
+              const isToday = localYmd(date) === localYmd();
               
               return (
                 <div

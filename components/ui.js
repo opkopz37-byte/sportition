@@ -134,8 +134,19 @@ const SpotlightCard = ({ children, className = "", onClick, theme = 'blue' }) =>
   const divRef = useRef(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
+  // 터치 디바이스 감지 — mousemove 시뮬레이션으로 인한 setState 폭주 차단
+  const [isTouch, setIsTouch] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(hover: none), (pointer: coarse)');
+    const apply = () => setIsTouch(mql.matches);
+    apply();
+    mql.addEventListener?.('change', apply);
+    return () => mql.removeEventListener?.('change', apply);
+  }, []);
 
   const handleMouseMove = (e) => {
+    if (isTouch) return;          // ⭐ 터치 디바이스에선 무시 — 깜빡임 차단
     if (!divRef.current) return;
     const rect = divRef.current.getBoundingClientRect();
     setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
@@ -147,45 +158,64 @@ const SpotlightCard = ({ children, className = "", onClick, theme = 'blue' }) =>
   return (
     <div
       ref={divRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setOpacity(0)}
+      // 터치 디바이스에선 핸들러 자체를 등록 안 함 (이벤트 리스너 비용 절감)
+      onMouseMove={isTouch ? undefined : handleMouseMove}
+      onMouseLeave={isTouch ? undefined : () => setOpacity(0)}
       onClick={onClick}
-      className={`relative rounded-xl border border-white/10 bg-[#0A0A0A] overflow-hidden group ${onClick ? 'cursor-pointer hover:scale-[1.01] transition-transform duration-300' : ''} ${className}`}
+      // 카드 배경: 거의 검정 #0A0A0A → 살짝 푸른 톤이 도는 #131829 (채도 +)
+      // border 도 살짝 더 진하게 — 카드 분리감 ↑
+      className={`relative rounded-xl border border-white/12 bg-[#131829] overflow-hidden group ${onClick ? 'cursor-pointer hover:scale-[1.01] transition-transform duration-300' : ''} ${className}`}
     >
-      <div
-        className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 group-hover:opacity-100"
-        style={{
-          opacity,
-          background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(${glowColor}, 0.15), transparent 40%)`,
-        }}
-      />
+      {/* 터치 디바이스에선 spotlight 오버레이 자체 렌더 안 함 — re-render 트리거 0 */}
+      {!isTouch ? (
+        <div
+          className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 group-hover:opacity-100"
+          style={{
+            opacity,
+            // 호버 글로우 강도 0.15 → 0.22 (채도/생기 ↑)
+            background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(${glowColor}, 0.22), transparent 40%)`,
+          }}
+        />
+      ) : null}
       <div className="relative h-full">{children}</div>
     </div>
   );
 };
 
 // BackgroundGrid 컴포넌트
+//  - 짙은 네이비(#0c1024) 베이스 + 컬러 블롭으로 채도/생기 부스트
+//  - 모바일(터치)에선 blob 의 animate-pulse-slow 를 CSS @media 가 자동 OFF 하고
+//    blur 반경도 모바일에서 줄임 → GPU 합성 부담 ↓ → 깜빡임 차단
 const BackgroundGrid = ({ theme }) => {
-  const bgColor = theme.accent === 'blue' 
-    ? 'rgba(37, 99, 235, 0.2)' 
-    : 'rgba(16, 185, 129, 0.2)';
-    
+  const bgColor = theme.accent === 'blue'
+    ? 'rgba(59, 130, 246, 0.32)'
+    : 'rgba(16, 185, 129, 0.30)';
+
   return (
-    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-black">
-      <div 
-        className="absolute inset-0 opacity-[0.15]"
+    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden" style={{ backgroundColor: '#0c1024' }}>
+      {/* 그리드 패턴 — 정적 (애니메이션 없음) */}
+      <div
+        className="absolute inset-0 opacity-[0.18]"
         style={{
-          backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)',
+          backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px)',
           backgroundSize: '40px 40px',
-          maskImage: 'radial-gradient(circle at 50% 50%, black, transparent 80%)'
+          maskImage: 'radial-gradient(circle at 50% 50%, black, transparent 80%)',
         }}
       />
-      <div 
-        className="absolute top-0 left-1/4 w-[500px] h-[500px] rounded-full mix-blend-screen opacity-40 animate-pulse-slow"
-        style={{
-          background: bgColor,
-          filter: 'blur(120px)'
-        }}
+      {/* 좌상단 메인 액센트 블롭 */}
+      <div
+        className="bg-grid-blob absolute -top-32 left-1/4 w-[520px] h-[520px] rounded-full opacity-50 animate-pulse-slow"
+        style={{ background: bgColor }}
+      />
+      {/* 우상단 보조 — 보라 */}
+      <div
+        className="bg-grid-blob bg-grid-blob-purple absolute top-0 right-0 w-[400px] h-[400px] rounded-full opacity-30 animate-pulse-slow"
+        style={{ background: 'rgba(168, 85, 247, 0.35)', animationDelay: '1.5s' }}
+      />
+      {/* 좌하단 보조 — 시안 */}
+      <div
+        className="bg-grid-blob bg-grid-blob-cyan absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full opacity-25 animate-pulse-slow"
+        style={{ background: 'rgba(34, 211, 238, 0.30)', animationDelay: '3s' }}
       />
     </div>
   );

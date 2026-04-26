@@ -904,8 +904,9 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
   const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
 
   // 모달 열릴 때마다 모달 내부 스크롤만 맨 위로 (페이지는 그대로)
+  // selectedMember?.id 만 의존 — 객체 reference 변화에 휘둘리지 않음
   useEffect(() => {
-    if (selectedMember && memberModalScrollRef.current) {
+    if (selectedMember?.id && memberModalScrollRef.current) {
       memberModalScrollRef.current.scrollTop = 0;
     }
   }, [selectedMember?.id, memberDetailMode]);

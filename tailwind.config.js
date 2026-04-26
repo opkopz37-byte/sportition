@@ -7,6 +7,26 @@ module.exports = {
     // TIER_COLORS 등 lib 안의 동적 className 도 JIT 가 인식하도록 포함
     './lib/**/*.{js,ts}',
   ],
+  // 배포 환경 JIT 가 동적 문자열을 못 찾는 케이스 대비 — 티어/테마/존 컬러 안전망
+  safelist: [
+    // tier text colors
+    'text-amber-600', 'text-slate-300', 'text-yellow-400', 'text-teal-300',
+    'text-sky-200', 'text-purple-300', 'text-fuchsia-300', 'text-amber-200',
+    // tier border colors
+    'border-amber-700/50', 'border-slate-300/40', 'border-yellow-400/60',
+    'border-teal-400/55', 'border-sky-300/60', 'border-purple-500/60',
+    'border-fuchsia-400/60', 'border-amber-300/70',
+    // tier bg gradient stops (with alpha)
+    {
+      pattern: /(from|via|to)-(amber|orange|slate|yellow|teal|cyan|sky|purple|violet|fuchsia|pink|rose|red|blue|emerald|green)-(200|300|400|500|600|700|800|900)\/(10|15|20|25|30|35|40|55|60|70)/,
+    },
+    // tier bar gradient stops (no alpha)
+    {
+      pattern: /(from|via|to)-(amber|orange|slate|yellow|teal|cyan|sky|purple|violet|fuchsia|pink|rose|red|blue|emerald|green)-(200|300|400|500|600|700|800)/,
+    },
+    // glow class
+    'tier-challenger-glow',
+  ],
   theme: {
     extend: {
       screens: {

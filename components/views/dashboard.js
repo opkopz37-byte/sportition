@@ -3,11 +3,13 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
+import AvatarCropModal from '@/components/AvatarCropModal';
 import MatchHistorySection from '@/components/MatchHistorySection';
 import DashboardAttendanceInline from '@/components/views/DashboardAttendanceInline';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 import { computeMatchPoints, getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
+import { uploadUserAvatarBlob } from '@/lib/supabase';
 
 const dashDevLog = (...args) => {
   if (process.env.NODE_ENV === 'development') console.log(...args);
@@ -124,6 +126,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
   const [rankingNews, setRankingNews] = useState([]);
   const [matchResetTickets, setMatchResetTickets] = useState(0);
   const [matchResetBusy, setMatchResetBusy] = useState(false);
+  const [pendingAvatarFile, setPendingAvatarFile] = useState(null); // 크롭 모달 열림 트리거
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -137,15 +140,32 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
   const [avatarBusy, setAvatarBusy] = useState(false);
   const avatarFileRef = useRef(null);
 
-  const handleAvatarChange = useCallback(async (e) => {
+  // 1단계: 파일 선택 → 크롭 모달 오픈 (즉시 업로드 안 함)
+  const handleAvatarChange = useCallback((e) => {
     const f = e.target?.files?.[0];
     e.target.value = '';
     if (!f || !user?.id) return;
+    // iOS 사진 라이브러리는 file.type 이 비어 있는 케이스가 있어서 확장자도 허용
+    // (accept 속성이 이미 1차 필터링 → 여기선 너무 엄격하게 막지 않음)
+    const isImageMime = typeof f.type === 'string' && f.type.startsWith('image/');
+    const isImageExt = /\.(png|jpe?g|webp|heic|heif|gif|bmp)$/i.test(f.name || '');
+    if (!isImageMime && !isImageExt) {
+      alert('이미지 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    if (f.size > 12 * 1024 * 1024) {
+      alert('파일이 너무 큽니다. 12MB 이하로 선택해 주세요.');
+      return;
+    }
+    setPendingAvatarFile(f);
+  }, [user?.id]);
+
+  // 2단계: 크롭 완료 → 512x512 JPEG Blob 으로 업로드
+  const handleAvatarCropped = useCallback(async (blob) => {
+    setPendingAvatarFile(null);
+    if (!user?.id || !blob) return;
     setAvatarBusy(true);
     try {
-      const { fileToResizedJpegBlob } = await import('@/lib/avatarClient');
-      const { uploadUserAvatarBlob } = await import('@/lib/supabase');
-      const blob = await fileToResizedJpegBlob(f);
       const { error: upE } = await uploadUserAvatarBlob(user.id, blob);
       if (upE) throw upE;
       await refreshProfile();
@@ -626,6 +646,12 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
   if (isGymRole(role) || isGymRole(profile?.role)) {
     return (
       <div className="animate-fade-in-up space-y-3 xs:space-y-4 sm:space-y-6">
+        {/* 프로필 사진 편집 모달 (체육관 뷰) */}
+        <AvatarCropModal
+          file={pendingAvatarFile}
+          onCancel={() => setPendingAvatarFile(null)}
+          onCropped={handleAvatarCropped}
+        />
         {!embeddedInMyPage && (
           <div className="mb-4 xs:mb-6 sm:mb-8">
             <div className="flex items-center gap-2 mb-1.5 xs:mb-2 flex-wrap">
@@ -643,6 +669,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
         <SpotlightCard className="p-3 xs:p-4 sm:p-6 bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f]">
           <div className="flex items-center gap-2 xs:gap-3 sm:gap-4">
             <div className="relative flex-shrink-0">
+              {/* 모바일에서 갤러리(사진 보관함)로 직행 — capture 속성 미지정 + 정적 MIME 리스트로 일부 Android Chrome 이 카메라 단계 스킵 */}
               <input
                 ref={avatarFileRef}
                 type="file"
@@ -742,6 +769,12 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
 
   return (
     <div className="animate-fade-in-up space-y-3 xs:space-y-4 sm:space-y-6">
+      {/* 프로필 사진 편집 모달 (선수/코치 뷰) */}
+      <AvatarCropModal
+        file={pendingAvatarFile}
+        onCancel={() => setPendingAvatarFile(null)}
+        onCropped={handleAvatarCropped}
+      />
       {/* 헤더 — 마이페이지에 넣을 때는 상단 제목과 중복되므로 생략 */}
       {!embeddedInMyPage && (
         <div className="mb-4 xs:mb-6 sm:mb-8">
@@ -832,6 +865,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
             {/* 선수 프로필 헤더 */}
             <div className="flex items-center gap-2 xs:gap-3 sm:gap-4 mb-4 xs:mb-5 sm:mb-6 pb-3 xs:pb-4 border-b border-white/5">
               <div className="relative flex-shrink-0">
+                {/* 모바일에서 갤러리(사진 보관함)로 직행 — capture 속성 미지정 + 정적 MIME 리스트 */}
                 <input
                   ref={avatarFileRef}
                   type="file"
@@ -1016,7 +1050,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
         {/* Tier Points */}
         <div>
           <SpotlightCard
-            className="p-4 sm:p-6 bg-[#1a1a1a] cursor-pointer hover:bg-[#1e1e1e] transition-all overflow-hidden relative"
+            className="p-4 sm:p-6 bg-[#1a2138] cursor-pointer hover:bg-[#1e1e1e] transition-all overflow-hidden relative"
             onClick={() => setActiveTab && setActiveTab('ranking')}
           >
 
@@ -1095,7 +1129,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
         {/* Match History */}
         <div className="lg:col-span-2" id="match-history-section">
           <SpotlightCard 
-            className="p-3 xs:p-4 sm:p-6 bg-[#1a1a1a] transition-all"
+            className="p-3 xs:p-4 sm:p-6 bg-[#1a2138] transition-all"
           >
             <div className="mb-3 xs:mb-4 sm:mb-6 flex items-center justify-between gap-2">
               <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white">{t('matchHistory')}</h3>
@@ -1103,12 +1137,9 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                 <button
                   type="button"
                   onClick={() => setActiveTab('mypage-match-history')}
-                  className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm text-gray-300 hover:text-white font-semibold transition-colors flex items-center gap-1.5"
+                  className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm text-gray-300 hover:text-white font-semibold transition-colors"
                 >
-                  <span>전체 보기</span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] sm:text-[11px] tabular-nums text-amber-200 font-bold">
-                    {matchHistory.length}
-                  </span>
+                  전체 보기
                 </button>
               )}
             </div>

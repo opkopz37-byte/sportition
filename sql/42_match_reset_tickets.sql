@@ -53,11 +53,11 @@ BEGIN
   )
   SELECT COUNT(*) INTO _deleted_count FROM deleted;
 
-  -- 2) statistics 초기화
+  -- 2) statistics 초기화 — 매치 관련 컬럼만 0, 출석 관련은 유지
+  --    current_streak / total_attendance / longest_streak 은 출석 데이터라 보존
   UPDATE public.statistics
      SET total_matches = 0, wins = 0, losses = 0, draws = 0,
-         ko_wins = 0, win_streak = 0, current_streak = 0,
-         total_attendance = COALESCE(total_attendance, 0)  -- 출석은 유지
+         ko_wins = 0, win_streak = 0
    WHERE user_id = _uid;
 
   -- 3) tier_rankings 초기화

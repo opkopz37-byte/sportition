@@ -143,11 +143,12 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
       )}
 
       <div className="flex-1 flex flex-col items-center text-center w-full">
+        {/* 로고 워드마크 — 흰색 굵은 SPORTITION (이미지 동일 스타일) */}
         <h1
-          className="text-4xl sm:text-5xl md:text-6xl font-bold mb-8 sm:mb-10 tracking-tight bg-gradient-to-r from-blue-400 via-violet-400 to-purple-500 bg-clip-text text-transparent"
-          style={{ fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}
+          className="text-4xl sm:text-5xl md:text-6xl font-extrabold mb-8 sm:mb-10 tracking-tight text-white"
+          style={{ fontFamily: 'ui-sans-serif, system-ui, sans-serif', letterSpacing: '0.04em' }}
         >
-          Sportition
+          SPORTITION
         </h1>
 
         <div className="w-full max-w-6xl relative">

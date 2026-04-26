@@ -194,7 +194,15 @@ return (
 
   return (
 <>
-  <header className="fixed top-0 inset-x-0 z-50 min-h-[clamp(2.75rem,7vw,4rem)] border-b border-white/5 bg-black/50 backdrop-blur-xl flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-[clamp(0.375rem,2vw,1.5rem)] py-2 min-w-0 overflow-visible">
+  <header
+    className="fixed top-0 inset-x-0 z-50 min-h-[clamp(2.75rem,7vw,4rem)] border-b border-white/5 bg-black/50 backdrop-blur-xl flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-[clamp(0.375rem,2vw,1.5rem)] py-2 min-w-0 overflow-visible"
+    style={{
+      // iOS 노치 아래로 안 가도록 — safe-area-inset-top 만큼 위쪽 padding
+      paddingTop: 'max(env(safe-area-inset-top), 8px)',
+      paddingLeft: 'max(env(safe-area-inset-left), clamp(0.375rem, 2vw, 1.5rem))',
+      paddingRight: 'max(env(safe-area-inset-right), clamp(0.375rem, 2vw, 1.5rem))',
+    }}
+  >
     <div className="flex items-center gap-[clamp(0.375rem,2vw,1.5rem)] min-w-0 flex-1 basis-0 min-[520px]:basis-auto xl:flex-initial overflow-visible">
       <button 
         type="button"
@@ -204,17 +212,14 @@ return (
         <Icon type={showMobileMenu ? "x" : "menu"} size={18} />
       </button>
 
-      <div className="flex items-center gap-[clamp(0.25rem,1.2vw,0.5rem)] font-bold text-white tracking-tight cursor-pointer min-w-0 shrink-0" onClick={() => setActiveTab(menuItems[0]?.id || 'mypage')}>
-        <div className={`rounded-lg flex items-center justify-center shrink-0 w-[clamp(1.375rem,3.5vw,1.75rem)] h-[clamp(1.375rem,3.5vw,1.75rem)] ${
-          theme.accent === 'blue' 
-            ? 'bg-blue-500/20 text-blue-500' 
-            : theme.accent === 'emerald'
-            ? 'bg-emerald-500/20 text-emerald-500'
-            : 'bg-purple-500/20 text-purple-500'
-        }`}>
-          {role === 'player_common' ? <Icon type="zap" className="w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)]" fill="currentColor" /> : role === 'player_athlete' ? <Icon type="target" className="w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)]" /> : <Icon type="home" className="w-[clamp(0.75rem,2vw,1rem)] h-[clamp(0.75rem,2vw,1rem)]" />}
-        </div>
-        <span className="text-[clamp(0.7rem,calc(0.8vw+0.45rem),0.875rem)] whitespace-nowrap truncate max-w-[min(8rem,28vw)] sm:max-w-none">Sportition</span>
+      {/* 로고 — 흰색 굵은 SPORTITION 워드마크 (아이콘 없음) */}
+      <div
+        className="flex items-center cursor-pointer min-w-0 shrink-0"
+        onClick={() => setActiveTab(menuItems[0]?.id || 'mypage')}
+      >
+        <span className="font-extrabold text-white tracking-[0.04em] leading-none whitespace-nowrap text-[clamp(0.95rem,2.4vw,1.15rem)]">
+          SPORTITION
+        </span>
       </div>
 
       <nav className="hidden xl:flex flex-wrap items-center gap-x-0.5 gap-y-1 justify-start overflow-visible min-w-0 flex-1 xl:max-w-none py-0.5" aria-label="Main">

@@ -202,12 +202,9 @@ export default function PublicPlayerRecordView({ playerId, onBack, language = 'k
                 <button
                   type="button"
                   onClick={() => setShowAllOpponentMatches((p) => !p)}
-                  className="mt-3 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white inline-flex items-center gap-1.5"
+                  className="mt-3 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white"
                 >
-                  <span>{showAllOpponentMatches ? t('collapse') : '전체 보기'}</span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] tabular-nums text-amber-200 font-bold">
-                    {opponentMatches.length}
-                  </span>
+                  {showAllOpponentMatches ? t('collapse') : '전체 보기'}
                 </button>
               )}
             </div>
@@ -215,7 +212,7 @@ export default function PublicPlayerRecordView({ playerId, onBack, language = 'k
         </div>
 
         <div>
-          <SpotlightCard className="p-6 bg-[#1a1a1a]">
+          <SpotlightCard className="p-6 bg-[#1a2138]">
             <h3 className="text-lg font-bold text-white mb-4">{t('tierInfo')}</h3>
             <div className="text-center mb-4">
               <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-1">

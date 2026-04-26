@@ -6,7 +6,7 @@ import { Navbar } from '@/components/navigation';
 import { LoginModal, SignupPage, LandingPage } from '@/components/views/landing';
 import { ActiveSkillsView } from '@/components/views/skills';
 import { TierBoardView } from '@/components/views/ranking';
-import { MyPageView, SettingsView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView, MatchHistoryView } from '@/components/views/mypage';
+import { MyPageView, SettingsView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView, MatchHistoryView, OpponentMatchHistoryView } from '@/components/views/mypage';
 import TermsOfServiceInlineView from '@/components/legal/TermsOfServiceInlineView';
 import { PlayersManagementView, MatchRoomView, GymNewMemberRegisterView } from '@/components/views/coach';
 import { ApprovalView } from '@/components/views/approval';
@@ -253,6 +253,10 @@ export default function SportitionApp() {
 
   /** 선수: 스킬·랭킹 (통계 메뉴 제거) */
   const renderPlayerMainRoutes = () => {
+    if (activeTab.startsWith('opponent-match-history-')) {
+      const opponentId = activeTab.replace('opponent-match-history-', '');
+      return <OpponentMatchHistoryView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
+    }
     if (activeTab.startsWith('opponent-profile-')) {
       const opponentId = activeTab.replace('opponent-profile-', '');
       return <OpponentProfileView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
@@ -314,6 +318,10 @@ export default function SportitionApp() {
   };
 
   const renderView = () => {
+    if (activeTab.startsWith('opponent-match-history-')) {
+      const opponentId = activeTab.replace('opponent-match-history-', '');
+      return <OpponentMatchHistoryView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
+    }
     if (activeTab.startsWith('opponent-profile-')) {
       const opponentId = activeTab.replace('opponent-profile-', '');
       return <OpponentProfileView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
@@ -352,13 +360,17 @@ export default function SportitionApp() {
   };
 
   return (
-    <div className="relative min-h-screen bg-black text-white">
+    // 모바일에서 화면을 정확히 꽉 채우도록 — 100dvh + iOS 안전 영역 패딩 분리
+    <div
+      className="relative w-full bg-black text-white"
+      style={{ minHeight: '100vh' }}
+    >
       <BackgroundGrid theme={theme} />
-      
-      <Navbar 
-        role={effectiveRole} 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+
+      <Navbar
+        role={effectiveRole}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
         onLogout={handleLogout}
         language={language}
         setLanguage={setLanguage}
@@ -368,9 +380,18 @@ export default function SportitionApp() {
       <main
         className={
           activeTab === 'skills' || activeTab === 'roadmap-active-skills' || activeTab === 'home'
-            ? 'relative z-10 pt-16 xs:pt-18 sm:pt-24 pb-8 sm:pb-10 w-full min-w-0 max-w-none min-h-screen overflow-x-hidden'
-            : 'relative z-10 pt-16 xs:pt-18 sm:pt-24 px-2 xs:px-3 sm:px-4 lg:px-6 pb-12 xs:pb-14 sm:pb-20 max-w-7xl mx-auto min-h-screen'
+            ? 'relative z-10 pb-8 sm:pb-10 w-full min-w-0 max-w-none overflow-x-hidden'
+            : 'relative z-10 px-2 xs:px-3 sm:px-4 lg:px-6 pb-12 xs:pb-14 sm:pb-20 max-w-7xl mx-auto'
         }
+        style={{
+          // 상단: 네비바 높이(반응형) + iOS 노치 safe-area-inset-top 포함
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + clamp(3.75rem, 8vw, 6rem))',
+          // 하단/좌/우: iOS 안전 영역 포함 — 풀 화면 유지하면서 잘림 방지
+          paddingLeft: 'max(env(safe-area-inset-left), 0px)',
+          paddingRight: 'max(env(safe-area-inset-right), 0px)',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 32px)',
+          minHeight: '100vh',
+        }}
       >
         {renderView()}
       </main>

@@ -30,9 +30,18 @@
   animation: tier-challenger-glow 2.0s ease-in-out infinite;
 }
 
+html, body {
+  width: 100%;
+  /* 정적 100vh — 모바일 toolbar 토글 시 전체 reflow 방지.
+     toolbar 가 잠깐 가린 영역도 body 의 솔리드 #0c1024 가 깔려있어 시각 차이 거의 없음.
+     (이전에 100dvh 우선이었으나, dvh 변동으로 SkillTree 리페인트가 트리거되어 깜빡임 ↑) */
+  min-height: 100vh;
+}
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #000;
+  /* 순수 #000 → 짙은 네이비 (#0c1024) — 채도가 살짝 살아나면서 답답함 ↓
+     iOS 노치/홈인디케이터 영역도 같은 톤으로 연장 */
+  background-color: #0c1024;
   color: #fff;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
@@ -149,6 +158,42 @@ body {
 }
 .skill-pickable-glow {
   animation: skill-pickable-glow 1.6s ease-in-out infinite;
+  will-change: box-shadow;
+}
+
+/* 사용자가 모션 줄임 설정 시 — 모든 무한 애니메이션 정지 (모바일 배터리/성능) */
+@media (prefers-reduced-motion: reduce) {
+  .skill-pickable-glow,
+  .skill-pickable-shine::before,
+  .skill-pickable-twinkle,
+  .skill-add-pulse,
+  .tier-challenger-glow,
+  .animate-pulse-slow {
+    animation: none !important;
+  }
+}
+
+/* ⭐⭐⭐ 터치 디바이스에서 backdrop-filter 비활성화
+   - iOS Safari / Android Chrome 의 backdrop-filter 는 매 프레임 GPU 재합성 → 깜빡임의 핵심
+   - bg-black/* 같은 솔리드 배경은 그대로 유지되어 시각 차이는 "약간 덜 흐릿" 뿐
+   - 데스크탑은 영향 없음 — 시각적 정체성 그대로 */
+@media (hover: none) and (pointer: coarse) {
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* BackgroundGrid blob — 데스크톱·모바일 동일 blur 적용 (시각 일관성)
+   GPU 비용은 있지만 모바일에서도 동일 시각이 우선 */
+.bg-grid-blob {
+  filter: blur(120px);
+}
+.bg-grid-blob-purple {
+  filter: blur(140px);
+}
+.bg-grid-blob-cyan {
+  filter: blur(130px);
 }
 
 /* 찍을 수 있는 노드 — 대각선 반짝임 스윕 (좌상→우하 흐르는 하이라이트) */
@@ -174,7 +219,8 @@ body {
   border-radius: inherit;
   overflow: hidden;
   pointer-events: none;
-  mix-blend-mode: screen;
+  /* mix-blend-mode 제거 — 모바일 GPU 합성 비용 매우 큼.
+     기본 합성으로도 동일한 흰빛 sweep 효과 유지됨 */
 }
 .skill-pickable-shine::before {
   content: '';
@@ -191,6 +237,7 @@ body {
   );
   animation: skill-pickable-shine 2.4s ease-in-out infinite;
   animation-delay: 0.4s;
+  will-change: transform, opacity;
 }
 
 /* 찍을 수 있는 노드 — 작은 별빛 점 (좌상단/우하단 깜빡) */
@@ -293,14 +340,15 @@ body {
   animation: unlock-overlay-fade 0.7s ease-out forwards;
 }
 
-/* 1단계: 배경이 점점 검게, 블러 자연스럽게 강해짐 */
+/* 1단계: 배경이 점점 검게 변함 — backdrop-filter 애니메이션 제거 (iOS 깜빡임 폭주 원인)
+   대신 background-color 만 단계적으로 진해지도록 → GPU 합성에 문제 없음 */
 @keyframes unlock-bg-build {
-  0%   { background-color: rgba(0, 0, 0, 0);    backdrop-filter: blur(0);     -webkit-backdrop-filter: blur(0); }
-  15%  { background-color: rgba(0, 0, 0, 0.18); backdrop-filter: blur(2px);   -webkit-backdrop-filter: blur(2px); }
-  35%  { background-color: rgba(0, 0, 0, 0.45); backdrop-filter: blur(6px);   -webkit-backdrop-filter: blur(6px); }
-  55%  { background-color: rgba(0, 0, 0, 0.7);  backdrop-filter: blur(11px);  -webkit-backdrop-filter: blur(11px); }
-  75%  { background-color: rgba(0, 0, 0, 0.85); backdrop-filter: blur(16px);  -webkit-backdrop-filter: blur(16px); }
-  100% { background-color: rgba(0, 0, 0, 0.92); backdrop-filter: blur(20px);  -webkit-backdrop-filter: blur(20px); }
+  0%   { background-color: rgba(0, 0, 0, 0); }
+  15%  { background-color: rgba(0, 0, 0, 0.30); }
+  35%  { background-color: rgba(0, 0, 0, 0.55); }
+  55%  { background-color: rgba(0, 0, 0, 0.75); }
+  75%  { background-color: rgba(0, 0, 0, 0.88); }
+  100% { background-color: rgba(0, 0, 0, 0.95); }
 }
 .unlock-bg-build {
   animation: unlock-bg-build 2.8s cubic-bezier(0.45, 0.05, 0.55, 0.95) forwards;
