@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Icon, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
+import AttendanceClaimModal from '@/components/AttendanceClaimModal';
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -25,7 +26,7 @@ function getWeekDates() {
   });
 }
 
-export default function DashboardAttendanceInline({ t = (k) => k }) {
+export default function DashboardAttendanceInline({ t = (k) => k, setActiveTab }) {
   const { user, refreshProfile } = useAuth();
   const [isChecking, setIsChecking] = useState(false);
   const [todayChecked, setTodayChecked] = useState(false);
@@ -35,6 +36,12 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
     thisMonth: 0,
     skillPointsEarned: 0,
   });
+  // 출석 후 모달 상태
+  const [modalState, setModalState] = useState({
+    open: false,
+    alreadyClaimed: false,
+    pendingPromotion: null,
+  });
 
   const weekDates = getWeekDates();
   const todayYmd = localYmd();
@@ -43,37 +50,30 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
     return dow === 0 ? 6 : dow - 1;
   })();
 
+  // 페이지 진입 시 — 1 RPC 로 모든 통계 한 번에 (이전: 5 parallel queries)
   const loadAttendanceData = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const { default: supabase } = await import('@/lib/supabase');
-      const now = new Date();
-      // 로컬(KST) 기준 — UTC 변환 시 한국 새벽 시간이 어제 달로 잘못 들어가는 문제 방지
-      const firstOfMonth = localYmd(new Date(now.getFullYear(), now.getMonth(), 1));
-      const weekStart = weekDates[0];
-      const weekEnd = weekDates[6];
+      const { getMyAttendanceSummary } = await import('@/lib/supabase');
+      const { data, error } = await getMyAttendanceSummary();
+      if (error) {
+        console.warn('[DashboardAttendanceInline] summary 에러:', error.message);
+        return;
+      }
+      if (!data) return;
 
-      const [todayResult, statsResult, userRowResult, monthCountResult, weekResult] = await Promise.all([
-        supabase.from('attendance').select('attendance_date').eq('user_id', user.id).eq('attendance_date', todayYmd).maybeSingle(),
-        supabase.from('statistics').select('current_streak').eq('user_id', user.id).maybeSingle(),
-        supabase.from('users').select('skill_points').eq('id', user.id).maybeSingle(),
-        supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('attendance_date', firstOfMonth),
-        supabase.from('attendance').select('attendance_date').eq('user_id', user.id).gte('attendance_date', weekStart).lte('attendance_date', weekEnd),
-      ]);
-
-      setTodayChecked(!!todayResult?.data);
-      const s = statsResult?.data;
-      const monthCnt = typeof monthCountResult?.count === 'number' ? monthCountResult.count : 0;
-      const skillPts = userRowResult?.data?.skill_points != null ? Number(userRowResult.data.skill_points) : 0;
+      setTodayChecked(data.today_checked === true);
       setStats({
-        currentStreak: s?.current_streak != null ? Number(s.current_streak) : 0,
-        thisMonth: monthCnt,
-        skillPointsEarned: skillPts,
+        currentStreak: Number(data.current_streak ?? 0),
+        thisMonth: Number(data.this_month_count ?? 0),
+        skillPointsEarned: Number(data.skill_points ?? 0),
       });
-      const attended = new Set((weekResult?.data || []).map((r) => String(r.attendance_date).split('T')[0]));
+      // week_dates 는 PG DATE[] → ['2026-04-25', ...] 문자열 배열
+      const dates = Array.isArray(data.week_dates) ? data.week_dates : [];
+      const attended = new Set(dates.map((d) => String(d).split('T')[0]));
       setWeekAttended(attended);
     } catch (e) {
-      console.error('[DashboardAttendanceInline]', e);
+      console.error('[DashboardAttendanceInline] loadAttendanceData 예외:', e);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -82,59 +82,102 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
     if (user) loadAttendanceData();
   }, [user, loadAttendanceData]);
 
+  // 출석체크 버튼 = 1 RPC 호출 (이전: 4 sequential)
+  // 출석 기록 + 처리 안 된 마스터 검출 + 모달 상태 한 번에.
   const handleCheckAttendance = async () => {
-    if (todayChecked || isChecking || !user?.id) return;
+    if (isChecking || !user?.id) return;
     setIsChecking(true);
-    // 낙관적 UI 업데이트 — 버튼 누른 즉시 상태 반영
-    setTodayChecked(true);
-    setWeekAttended((prev) => new Set([...prev, todayYmd]));
-    setStats((prev) => ({
-      ...prev,
-      currentStreak: prev.currentStreak + 1,
-      thisMonth: prev.thisMonth + 1,
-      skillPointsEarned: prev.skillPointsEarned + 1,
-    }));
-
     try {
-      const { checkAttendance } = await import('@/lib/supabase');
-      const result = await checkAttendance();
-      if (result.error) {
-        // 롤백
-        setTodayChecked(false);
-        setWeekAttended((prev) => {
-          const next = new Set(prev);
-          next.delete(todayYmd);
-          return next;
-        });
-        setStats((prev) => ({
-          ...prev,
-          currentStreak: Math.max(0, prev.currentStreak - 1),
-          thisMonth: Math.max(0, prev.thisMonth - 1),
-          skillPointsEarned: Math.max(0, prev.skillPointsEarned - 1),
-        }));
-        alert(`${t('checkInFailed')}: ${result.error.message || result.message || ''}`);
+      const { openAttendanceModal } = await import('@/lib/supabase');
+      const { data, error } = await openAttendanceModal();
+      if (error || !data) {
+        alert(`${t('checkInFailed')}: ${error?.message || ''}`);
         return;
       }
-      // RPC 응답으로 정확한 수치 즉시 동기화 (재호출 불필요 → 트래픽 ↓)
-      if (typeof result.totalSkillPoints === 'number') {
-        setStats((prev) => ({ ...prev, skillPointsEarned: result.totalSkillPoints }));
-      }
-      if (typeof result.currentStreak === 'number') {
-        setStats((prev) => ({ ...prev, currentStreak: result.currentStreak }));
-      }
-      // 프로필의 skill_points 도 갱신
-      refreshProfile();
+
+      // 카드 visual 동기화
+      const wasFirstToday = data.already_checked === false;
+      setTodayChecked(true);
+      setWeekAttended((prev) => new Set([...prev, todayYmd]));
+      setStats((prev) => ({
+        ...prev,
+        currentStreak: typeof data.current_streak === 'number' ? data.current_streak : prev.currentStreak,
+        thisMonth: wasFirstToday
+          ? (typeof data.this_month === 'number' ? data.this_month : prev.thisMonth + 1)
+          : prev.thisMonth,
+      }));
+
+      // 모달 열기 — RPC 가 unfinished mastery 까지 같이 반환
+      const u = data.unfinished;
+      const pendingPromotion = u
+        ? { node_id: u.node_id, status: u.status, skill_name: u.skill_name }
+        : null;
+
+      setModalState({
+        open: true,
+        alreadyClaimed: data.sp_claimed === true,
+        pendingPromotion,
+      });
     } catch (e) {
       console.error(e);
-      setTodayChecked(false);
       alert(t('checkInError'));
     } finally {
       setIsChecking(false);
     }
   };
 
+  // 모달 [스킬 포인트 적립] 클릭 → SP +1 (출석은 이미 기록됨)
+  const handleClaimSkillPoint = useCallback(async () => {
+    // 프론트 방어선 #1 — 처리 안 된 마스터 있으면 절대 적립 불가
+    if (modalState.pendingPromotion) {
+      return {
+        ok: false,
+        message: '마스터한 스킬의 승단 심사가 필요합니다. 먼저 승인 받으세요.',
+      };
+    }
+    try {
+      const { claimDailySkillPoint } = await import('@/lib/supabase');
+      const r = await claimDailySkillPoint();
+      if (r.error) return { ok: false, message: r.error.message };
+      if (typeof r.skillPoints === 'number') {
+        setStats((prev) => ({ ...prev, skillPointsEarned: r.skillPoints }));
+      }
+      refreshProfile();
+      setModalState((prev) => ({ ...prev, alreadyClaimed: true }));
+      return { ok: true, skillPoints: r.skillPoints };
+    } catch (e) {
+      console.error(e);
+      return { ok: false, message: '스킬 포인트 적립 실패' };
+    }
+  }, [refreshProfile, modalState.pendingPromotion]);
+
+  // 모달 [레벨업 신청] 클릭 → 스킬 페이지 이동 (출석은 이미 기록됨)
+  const handleGoToLevelUp = useCallback((nodeId) => {
+    if (typeof window !== 'undefined' && nodeId != null) {
+      try {
+        window.sessionStorage.setItem('skill_focus_node_id', String(nodeId));
+      } catch { /* ignore */ }
+    }
+    if (typeof setActiveTab === 'function') {
+      setActiveTab('skills');
+    } else {
+      console.warn('[DashboardAttendanceInline] setActiveTab 미전달 — location 폴백');
+      if (typeof window !== 'undefined') {
+        window.location.assign('/');
+      }
+    }
+  }, [setActiveTab]);
+
   return (
     <SpotlightCard className="p-4 sm:p-5 bg-[#1a2138] h-full overflow-hidden relative">
+      <AttendanceClaimModal
+        open={modalState.open}
+        onClose={() => setModalState((prev) => ({ ...prev, open: false }))}
+        pendingPromotion={modalState.pendingPromotion}
+        alreadyClaimed={modalState.alreadyClaimed}
+        onClaimSkillPoint={handleClaimSkillPoint}
+        onGoToLevelUp={handleGoToLevelUp}
+      />
       <div className="relative flex flex-col gap-3">
         {/* 상단: 타이틀 + 아이콘 */}
         <div className="flex items-start justify-between">
@@ -191,16 +234,22 @@ export default function DashboardAttendanceInline({ t = (k) => k }) {
           </div>
         </div>
 
-        {/* 체크인 버튼 or 완료 상태 */}
+        {/* 체크인 버튼 or 완료 상태 (출석 후에도 보상 모달 다시 열기 가능) */}
         {todayChecked ? (
-          <div className="p-2.5 rounded-2xl bg-white/[0.04] border border-white/8 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCheckAttendance}
+            disabled={isChecking}
+            className="w-full p-2.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/8 flex items-center gap-2 transition-colors disabled:opacity-50"
+          >
             <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
-            <p className="text-xs font-bold text-emerald-300">내일도 화이팅</p>
-          </div>
+            <p className="text-xs font-bold text-emerald-300 flex-1 text-left">내일도 화이팅</p>
+            <span className="text-[10px] text-amber-300/80 font-bold">보상 다시 열기</span>
+          </button>
         ) : (
           <button
             type="button"

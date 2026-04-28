@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
+import AttendanceClaimModal from '@/components/AttendanceClaimModal';
 
 // 로컬 타임존 기준 YYYY-MM-DD — toISOString() UTC 버그 회피 (KST 새벽 시간이 어제로 들어가는 문제)
 function localYmd(d = new Date()) {
@@ -26,12 +27,17 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
     thisMonth: 0,
     skillPointsEarned: 0
   });
+  const [modalState, setModalState] = useState({
+    open: false,
+    alreadyClaimed: false,
+    pendingPromotion: null,
+  });
 
   const loadAttendanceData = useCallback(async () => {
     if (!user?.id) return;
 
     try {
-      const { getUserAttendance, default: supabase } = await import('@/lib/supabase');
+      const { getUserAttendance, supabase } = await import('@/lib/supabase');
 
       const today = localYmd();
       const thirtyDaysAgo = new Date();
@@ -108,32 +114,50 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
   }, [user, loadAttendanceData]);
 
   const handleCheckAttendance = async () => {
-    if (todayChecked || isChecking || !user?.id) return;
-
+    if (isChecking || !user?.id) return;
     setIsChecking(true);
 
     try {
-      const { checkAttendance } = await import('@/lib/supabase');
+      // checkAttendance 는 멱등 — 이미 출석한 경우엔 sp_claimed 상태만 다시 받아옴
+      const { checkAttendance, getMyPromotionRequests, supabase } = await import('@/lib/supabase');
       const result = await checkAttendance();
 
       if (result.error) {
         alert(`${t('checkInFailed')}: ${result.error.message || result.message || ''}`);
         return;
       }
-      // RPC 가 멱등이므로 already_checked 도 성공으로 간주
-      const alreadyChecked = result.data?.already_checked === true;
-      if (!alreadyChecked) {
-        alert(`${result.message}\n${t('skillPointsEarned')}`);
-      }
+
       setTodayChecked(true);
-      // RPC 응답으로 즉시 정확한 통계 반영
-      if (typeof result.totalSkillPoints === 'number') {
-        setStats((prev) => ({ ...prev, skillPointsEarned: result.totalSkillPoints }));
-      }
       if (typeof result.currentStreak === 'number') {
         setStats((prev) => ({ ...prev, currentStreak: result.currentStreak }));
       }
-      // 프로필 + 전체 데이터 재동기화 (백그라운드)
+
+      // 심사 대기 중인 promotion 조회
+      const { data: promoRows } = await getMyPromotionRequests();
+      const pending = (promoRows || []).find(
+        (r) => r.status === 'pending' || r.status === 'reviewing'
+      );
+      let pendingPromotion = null;
+      if (pending?.node_id) {
+        const { data: nodes } = await supabase
+          .from('skill_tree_nodes')
+          .select('id, name')
+          .eq('id', pending.node_id);
+        pendingPromotion = {
+          id: pending.id,
+          node_id: pending.node_id,
+          status: pending.status,
+          skill_name: nodes?.[0]?.name || '승단 신청 스킬',
+        };
+      }
+
+      setModalState({
+        open: true,
+        alreadyClaimed: result.spClaimed === true,
+        pendingPromotion,
+      });
+
+      // 백그라운드 재동기화
       Promise.all([refreshProfile(), loadAttendanceData()]);
     } catch (error) {
       console.error('[Attendance] 출석 체크 에러:', error);
@@ -143,8 +167,42 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
     }
   };
 
+  const handleClaimSkillPoint = useCallback(async () => {
+    try {
+      const { claimDailySkillPoint } = await import('@/lib/supabase');
+      const r = await claimDailySkillPoint();
+      if (r.error) return { ok: false, message: r.error.message };
+      if (typeof r.skillPoints === 'number') {
+        setStats((prev) => ({ ...prev, skillPointsEarned: r.skillPoints }));
+      }
+      refreshProfile();
+      setModalState((prev) => ({ ...prev, alreadyClaimed: true }));
+      return { ok: true, skillPoints: r.skillPoints };
+    } catch (e) {
+      console.error(e);
+      return { ok: false, message: '스킬 포인트 적립 실패' };
+    }
+  }, [refreshProfile]);
+
+  const handleGoToLevelUp = useCallback((nodeId) => {
+    if (typeof window !== 'undefined' && nodeId != null) {
+      try {
+        window.sessionStorage.setItem('skill_focus_node_id', String(nodeId));
+      } catch { /* ignore */ }
+    }
+    setActiveTab?.('skills');
+  }, [setActiveTab]);
+
   return (
     <div className="animate-fade-in-up space-y-4 xs:space-y-6">
+      <AttendanceClaimModal
+        open={modalState.open}
+        onClose={() => setModalState((prev) => ({ ...prev, open: false }))}
+        pendingPromotion={modalState.pendingPromotion}
+        alreadyClaimed={modalState.alreadyClaimed}
+        onClaimSkillPoint={handleClaimSkillPoint}
+        onGoToLevelUp={handleGoToLevelUp}
+      />
       <PageHeader
         title={t('attendance')}
         description={t('checkInDescription')}
@@ -167,13 +225,12 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
               </p>
               <button
                 type="button"
-                onClick={async () => {
-                  await Promise.all([refreshProfile(), loadAttendanceData()]);
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 rounded-lg transition-colors"
+                onClick={handleCheckAttendance}
+                disabled={isChecking}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/40 text-amber-300 rounded-lg transition-colors disabled:opacity-50"
               >
                 <Icon type="star" size={20} />
-                <span className="font-bold">스킬 포인트 +1</span>
+                <span className="font-bold">보상 모달 열기</span>
               </button>
             </>
           ) : (

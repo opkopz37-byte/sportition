@@ -34,25 +34,4 @@ UPDATE public.skill_tree_nodes SET parent_nodes = ARRAY[26]::integer[] WHERE nod
 UPDATE public.skill_tree_nodes SET parent_nodes = ARRAY[421]::integer[] WHERE node_number = 422;
 UPDATE public.skill_tree_nodes SET parent_nodes = ARRAY[422]::integer[] WHERE node_number = 423;
 
--- 이호진: 스킬 포인트 100, 진행 초기화 (08과 동일 조건, SP만 100)
-UPDATE public.users u
-SET skill_points = 100,
-    updated_at = NOW()
-WHERE u.name ILIKE '%이호진%'
-   OR u.nickname ILIKE '%이호진%'
-   OR u.email ILIKE '%ihojin%';
-
-DELETE FROM public.user_skill_node_progress p
-USING public.users u
-WHERE p.user_id = u.id
-  AND (u.name ILIKE '%이호진%' OR u.nickname ILIKE '%이호진%' OR u.email ILIKE '%ihojin%');
-
-DELETE FROM public.user_skill_unlocks x
-USING public.users u
-WHERE x.user_id = u.id
-  AND (u.name ILIKE '%이호진%' OR u.nickname ILIKE '%이호진%' OR u.email ILIKE '%ihojin%');
-
-DELETE FROM public.skill_promotion_requests r
-USING public.users u
-WHERE r.user_id = u.id
-  AND (u.name ILIKE '%이호진%' OR u.nickname ILIKE '%이호진%' OR u.email ILIKE '%ihojin%');
+-- (제거됨) 테스트 편의용 100 SP 백필 — sql/51 의 일회성 정리에서 0 으로 reset.

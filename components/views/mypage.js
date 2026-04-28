@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
+import TierIcon from '@/components/TierIcon';
 import MatchHistorySection from '@/components/MatchHistorySection';
 import { normalizeRawMatch } from '@/lib/matchRecords';
 import Link from 'next/link';
@@ -25,8 +26,16 @@ const MyPageView = ({ setActiveTab, t }) => {
 
   return (
   <div className="animate-fade-in-up">
-    <div className="mb-6">
+    <div className="mb-6 flex items-center justify-between gap-3">
       <h2 className="text-2xl sm:text-3xl font-bold text-white">{t('myPage')}</h2>
+      <button
+        type="button"
+        onClick={() => setActiveTab('mypage-edit-profile')}
+        className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-semibold text-gray-300 hover:text-white transition-colors"
+      >
+        <Icon type="edit" size={14} />
+        프로필 편집
+      </button>
     </div>
 
     {embedDashboard ? (
@@ -90,6 +99,7 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
   const [nicknameCheckStatus, setNicknameCheckStatus] = useState('unchanged');
 
   const [formData, setFormData] = useState({
+    name: '',
     nickname: '',
     phone: '',
     birth_date: '',
@@ -106,6 +116,7 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
     console.log('[EditProfile] 프로필 데이터 확인:', profile);
     if (profile) {
       const newFormData = {
+        name: profile.name || '',
         nickname: profile.nickname || profile.name || '',
         phone: profile.phone || '',
         birth_date: profile.birth_date || '',
@@ -128,6 +139,12 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
       return;
     }
 
+    // 이름 검증
+    const trimmedName = (formData.name || '').trim();
+    if (!trimmedName) {
+      setError('이름을 입력해주세요.');
+      return;
+    }
     // 닉네임 검증 — 변경된 경우에만 중복확인 통과 필수
     const trimmedNick = formData.nickname.trim();
     if (!trimmedNick) {
@@ -148,8 +165,8 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
       const { updateUserProfile } = await import('@/lib/supabase');
       
       const updates = {
-        name: formData.nickname,
-        nickname: formData.nickname,
+        name: trimmedName,
+        nickname: trimmedNick,
         phone: formData.phone || null,
         birth_date: formData.birth_date || null,
         gender: formData.gender || null,
@@ -202,6 +219,20 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
         <h3 className="text-lg font-bold text-white mb-6">기본 정보</h3>
 
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">이름</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              placeholder="실제 이름 (예: 홍길동)"
+              disabled={loading}
+              maxLength={30}
+            />
+            <p className="text-xs text-gray-500 mt-1">상대 프로필 등에서 닉네임 옆에 표시됩니다</p>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">닉네임</label>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -1110,10 +1141,11 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
   useEffect(() => {
     const loadOpponent = async () => {
       setLoading(true);
-      const { getPublicPlayerProfileById, getUserMatches } = await import('@/lib/supabase');
+      const { getPublicPlayerProfileById, getPublicPlayerMatches } = await import('@/lib/supabase');
       const [{ data: profileData }, { data: matchData }] = await Promise.all([
         getPublicPlayerProfileById(opponentId),
-        getUserMatches(opponentId, 50),
+        // RLS 우회 — 상대 회원의 전적 전부 조회 (sql/56). 폴백 자동.
+        getPublicPlayerMatches(opponentId, 50),
       ]);
       setOpponent(profileData);
       setOpponentMatches(matchData || []);
@@ -1163,11 +1195,8 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
 
   return (
     <div className="animate-fade-in-up w-full">
-      {/* 헤더 + 뒤로가기 */}
+      {/* 헤더: 좌측 [← 뒤로] (이름은 아래 카드에 이미 노출) */}
       <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0 truncate">
-          {opponent.display_name}
-        </h2>
         <button
           type="button"
           onClick={() => setActiveTab('ranking-tier-board')}
@@ -1188,9 +1217,18 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3 mb-1 xs:mb-1.5 sm:mb-2 flex-wrap">
+              {/* 티어 아이콘 — 선수만 */}
+              {(opponent.role === 'player_common' || opponent.role === 'player_athlete') && opponent.tier ? (
+                <TierIcon tier={opponent.tier} size={28} />
+              ) : null}
               <h3 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-white truncate">
-                {opponent.display_name}
+                {opponent.nickname || opponent.display_name}
               </h3>
+              {opponent.name && opponent.name !== (opponent.nickname || opponent.display_name) ? (
+                <span className="text-xs xs:text-sm sm:text-base text-gray-400 font-medium truncate">
+                  ({opponent.name})
+                </span>
+              ) : null}
               <span className={`px-2 py-0.5 xs:px-2.5 xs:py-1 sm:px-3 rounded-full text-[10px] xs:text-xs sm:text-sm font-bold shadow-lg whitespace-nowrap ${
                 opponent.role === 'player_common' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
                 opponent.role === 'player_athlete' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
@@ -1383,15 +1421,6 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
               <SpotlightCard className="p-3 xs:p-4 sm:p-6 bg-[#1a2138]">
                 <div className="mb-3 xs:mb-4 sm:mb-6 flex items-center justify-between gap-2">
                   <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white">{t('matchHistory')}</h3>
-                  {opponentMatches.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab(`opponent-match-history-${opponentId}`)}
-                      className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm text-gray-300 hover:text-white font-semibold transition-colors"
-                    >
-                      전체 보기
-                    </button>
-                  )}
                 </div>
 
                 {opponentMatches.length > 0 ? (
@@ -1478,10 +1507,11 @@ const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key }
     let cancelled = false;
     (async () => {
       try {
-        const { getPublicPlayerProfileById, getUserMatches } = await import('@/lib/supabase');
+        const { getPublicPlayerProfileById, getPublicPlayerMatches } = await import('@/lib/supabase');
         const [profRes, matchRes] = await Promise.all([
           getPublicPlayerProfileById(opponentId),
-          getUserMatches(opponentId),
+          // RLS 우회 — 상대 회원의 전적 전부 조회 (sql/56)
+          getPublicPlayerMatches(opponentId),
         ]);
         if (cancelled) return;
         setOpponent(profRes?.data || null);
@@ -1493,13 +1523,16 @@ const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key }
     return () => { cancelled = true; };
   }, [opponentId]);
 
-  const displayName = opponent?.display_name || opponent?.nickname || opponent?.name || '선수';
+  const nickName = opponent?.nickname || opponent?.display_name || '선수';
+  const realName = opponent?.name && opponent?.name !== nickName ? opponent.name : null;
 
   return (
     <div className="animate-fade-in-up w-full">
       <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
         <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
-          {displayName} {t('matchHistory') || '전적'}
+          {nickName}
+          {realName ? <span className="text-sm sm:text-base text-gray-400 font-medium ml-1.5">({realName})</span> : null}
+          <span className="ml-1.5">{t('matchHistory') || '전적'}</span>
         </h2>
         <button
           type="button"

@@ -9,6 +9,8 @@ import DashboardAttendanceInline from '@/components/views/DashboardAttendanceInl
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 import { computeMatchPoints, getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
+import TierIcon from '@/components/TierIcon';
+import { computeMatchRecords } from '@/lib/matchRecords';
 import { uploadUserAvatarBlob } from '@/lib/supabase';
 
 const dashDevLog = (...args) => {
@@ -215,6 +217,16 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
     }
   }, [matchResetBusy, matchResetTickets, user?.id]);
 
+  // 프로필 헤더 4-stat 타일 — matchHistory 기반으로 계산해서 MatchHistorySection 과 일치 보장.
+  // (옛 'statistics' 테이블 캐시는 reset / 동기화 누락으로 어긋날 수 있음 → 매치 배열을 단일 source 로)
+  const matchAgg = useMemo(() => {
+    const r = computeMatchRecords(matchHistory || []);
+    return r.aggregate || {
+      totalMatches: 0, wins: 0, losses: 0, draws: 0,
+      kos: 0, currentStreak: 0, longestStreak: 0, winRate: 0,
+    };
+  }, [matchHistory]);
+
   const tierBoardUi = useMemo(() => {
     const fromRecord = profile?.match_points ?? profile?.tier_points;
     const mp =
@@ -292,9 +304,14 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
               ? playedAt.toISOString().split('T')[0]
               : '-';
             const result = match.result === 'win' || match.result === 'loss' || match.result === 'draw' ? match.result : 'draw';
+            const oppNickname = match.opponent?.nickname || null;
+            const oppRealName = match.opponent?.name || null;
+            const displayOpponent = match.opponent_name || oppNickname || oppRealName || '상대 미상';
+            const opponentRealName = oppRealName && oppRealName !== displayOpponent ? oppRealName : null;
             return {
               opponentId: match.opponent?.id || match.opponent_id || null,
-              opponent: match.opponent_name || match.opponent?.nickname || match.opponent?.name || '상대 미상',
+              opponent: displayOpponent,
+              opponentRealName,
               opponentAvatarUrl: match.opponent?.avatar_url || null,
               date: dateLabel,
               played_at: match.played_at,
@@ -810,9 +827,14 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
               }}
             >
               {rankingNews.map((news, index) => (
-                <div
+                <button
+                  type="button"
                   key={news.id ?? index}
-                  className="h-14 sm:h-16 flex items-center justify-center box-border pl-[4.25rem] pr-[5.5rem] xs:pl-20 xs:pr-24 sm:pl-24 sm:pr-28"
+                  onClick={() => {
+                    if (news.id && setActiveTab) setActiveTab(`opponent-profile-${news.id}`);
+                  }}
+                  disabled={!news.id}
+                  className="h-14 sm:h-16 w-full flex items-center justify-center box-border pl-[4.25rem] pr-[5.5rem] xs:pl-20 xs:pr-24 sm:pl-24 sm:pr-28 hover:bg-white/[0.04] transition-colors text-left disabled:cursor-default"
                 >
                   <div className="flex items-center justify-center gap-1.5 xs:gap-2 sm:gap-3 w-full min-w-0 max-w-full">
                     <span className="text-sm xs:text-base sm:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-500 flex-shrink-0 tabular-nums">
@@ -850,7 +872,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                       )}
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -894,7 +916,19 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3 mb-1 xs:mb-1.5 sm:mb-2 flex-wrap">
-                  <h3 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-white truncate">{profile?.nickname || profile?.name || '사용자'}</h3>
+                  {/* 티어 아이콘 — 선수만 */}
+                  {(profile?.role === 'player_common' || profile?.role === 'player_athlete') && profile?.tier ? (
+                    <TierIcon tier={profile.tier} size={28} />
+                  ) : null}
+                  <h3 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-white truncate">
+                    {profile?.nickname || profile?.name || '사용자'}
+                  </h3>
+                  {/* 실명 — 닉네임과 다를 때만 괄호로 */}
+                  {profile?.name && profile?.name !== (profile?.nickname || '') ? (
+                    <span className="text-xs xs:text-sm sm:text-base text-gray-400 font-medium truncate">
+                      ({profile.name})
+                    </span>
+                  ) : null}
                   <span className={`px-2 py-0.5 xs:px-2.5 xs:py-1 sm:px-3 rounded-full text-[10px] xs:text-xs sm:text-sm font-bold shadow-lg whitespace-nowrap ${
                     profile?.role === 'player_common' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
                     profile?.role === 'player_athlete' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
@@ -944,29 +978,29 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
               </div>
             </div>
 
-            {/* 핵심 전적 - 4개의 주요 지표 */}
+            {/* 핵심 전적 - 4개의 주요 지표 (matchHistory 단일 source — MatchHistorySection 과 일치) */}
             <div className="rounded-2xl border border-white/8 overflow-hidden bg-white/[0.03] mb-3 xs:mb-3.5 sm:mb-4">
               <div className="flex divide-x divide-white/8">
                 <div className="flex-1 py-2.5 px-2 text-center min-w-0">
-                  <div className="text-sm sm:text-base font-bold text-white tabular-nums leading-none">{statistics?.total_matches || 0}</div>
+                  <div className="text-sm sm:text-base font-bold text-white tabular-nums leading-none">{matchAgg.totalMatches}</div>
                   <div className="text-[9px] sm:text-[10px] text-gray-500 mt-1 tracking-wide">{t('totalMatches')}</div>
                 </div>
                 <div className="flex-1 py-2.5 px-2 text-center min-w-0">
                   <div className="text-sm sm:text-base font-bold text-white tabular-nums leading-none">
-                    <span className="text-blue-400">{statistics?.wins || 0}</span>
+                    <span className="text-blue-400">{matchAgg.wins}</span>
                     <span className="text-gray-600 text-[10px] mx-0.5">/</span>
-                    <span className="text-gray-300">{statistics?.draws || 0}</span>
+                    <span className="text-gray-300">{matchAgg.draws}</span>
                     <span className="text-gray-600 text-[10px] mx-0.5">/</span>
-                    <span className="text-red-400">{statistics?.losses || 0}</span>
+                    <span className="text-red-400">{matchAgg.losses}</span>
                   </div>
                   <div className="text-[9px] sm:text-[10px] text-gray-500 mt-1 tracking-wide">{t('record')}</div>
                 </div>
                 <div className="flex-1 py-2.5 px-2 text-center min-w-0">
-                  <div className="text-sm sm:text-base font-bold text-red-400 tabular-nums leading-none">{statistics?.ko_wins || 0}</div>
+                  <div className="text-sm sm:text-base font-bold text-red-400 tabular-nums leading-none">{matchAgg.kos}</div>
                   <div className="text-[9px] sm:text-[10px] text-gray-500 mt-1 tracking-wide">{t('koWins')}</div>
                 </div>
                 <div className="flex-1 py-2.5 px-2 text-center min-w-0">
-                  <div className="text-sm sm:text-base font-bold text-purple-400 tabular-nums leading-none">{statistics?.current_win_streak || 0}</div>
+                  <div className="text-sm sm:text-base font-bold text-purple-400 tabular-nums leading-none">{matchAgg.currentStreak}</div>
                   <div className="text-[9px] sm:text-[10px] text-gray-500 mt-1 tracking-wide">{t('winStreak')}</div>
                 </div>
               </div>
@@ -1041,7 +1075,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
 
         {/* 오른쪽: 출석 (대시보드 전용 컴팩트 레이아웃) */}
         <div className="min-h-[280px] lg:min-h-0">
-          <DashboardAttendanceInline t={t} />
+          <DashboardAttendanceInline t={t} setActiveTab={setActiveTab} />
         </div>
       </div>
 
@@ -1133,15 +1167,6 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           >
             <div className="mb-3 xs:mb-4 sm:mb-6 flex items-center justify-between gap-2">
               <h3 className="text-sm xs:text-base sm:text-lg font-bold text-white">{t('matchHistory')}</h3>
-              {matchHistory.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('mypage-match-history')}
-                  className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm text-gray-300 hover:text-white font-semibold transition-colors"
-                >
-                  전체 보기
-                </button>
-              )}
             </div>
 
             {matchHistory.length > 0 ? (

@@ -92,15 +92,21 @@ const TierBoardView = ({
         return;
       }
       const { data } = await getUserMatches(user.id, 20);
-      const normalized = (data || []).map((match) => ({
-        id: match.id,
-        opponent: match.opponent_name || match.opponent?.nickname || match.opponent?.name || '상대 미상',
-        score: match.score || '-',
-        method: (match.method || 'decision').toUpperCase(),
-        result: match.result || 'draw',
-        playedAt: match.played_at ? new Date(match.played_at).toISOString().split('T')[0] : '-',
-        playedAtSort: match.played_at ? new Date(match.played_at).getTime() : 0,
-      }));
+      const normalized = (data || []).map((match) => {
+        const oppNickname = match.opponent?.nickname || null;
+        const oppRealName = match.opponent?.name || null;
+        const display = match.opponent_name || oppNickname || oppRealName || '상대 미상';
+        return {
+          id: match.id,
+          opponent: display,
+          opponentRealName: oppRealName && oppRealName !== display ? oppRealName : null,
+          score: match.score || '-',
+          method: (match.method || 'decision').toUpperCase(),
+          result: match.result || 'draw',
+          playedAt: match.played_at ? new Date(match.played_at).toISOString().split('T')[0] : '-',
+          playedAtSort: match.played_at ? new Date(match.played_at).getTime() : 0,
+        };
+      });
       normalized.sort((a, b) => b.playedAtSort - a.playedAtSort);
       setRecentMatches(normalized);
     };
@@ -303,7 +309,12 @@ const TierBoardView = ({
                 'bg-zinc-900/55 border-l-gray-500 border border-zinc-600/40'
               }`}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs sm:text-sm font-bold text-white truncate">vs {m.opponent}</div>
+                  <div className="text-xs sm:text-sm font-bold text-white truncate">
+                    vs {m.opponent}
+                    {m.opponentRealName ? (
+                      <span className="text-[10px] sm:text-xs text-gray-400 font-medium ml-1">({m.opponentRealName})</span>
+                    ) : null}
+                  </div>
                   <div className="text-[10px] sm:text-xs text-gray-400">{m.playedAt}</div>
                 </div>
                 <div className="mt-1 flex items-center justify-between text-[11px] sm:text-xs">

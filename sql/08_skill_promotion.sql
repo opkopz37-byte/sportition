@@ -516,26 +516,6 @@ USING public.skill_tree_nodes s
 WHERE u.node_id = s.id AND COALESCE(s.is_fork, false);
 
 -- ---------------------------------------------------------------------------
--- 이호진 회원 스킬 포인트·진행 초기화 (이름/닉네임/이메일 일치 시)
+-- (제거됨) 옛 테스트 편의용 100 SP 백필 — sql/50 정책에서는 신규 회원 0 SP 고정.
+-- 기존 DB 에 남은 잔재 데이터는 sql/51 의 일회성 정리에서 처리.
 -- ---------------------------------------------------------------------------
-UPDATE public.users u
-SET skill_points = 100,
-    updated_at = NOW()
-WHERE u.name ILIKE '%이호진%'
-   OR u.nickname ILIKE '%이호진%'
-   OR u.email ILIKE '%ihojin%';
-
-DELETE FROM public.user_skill_node_progress p
-USING public.users u
-WHERE p.user_id = u.id
-  AND (u.name ILIKE '%이호진%' OR u.nickname ILIKE '%이호진%' OR u.email ILIKE '%ihojin%');
-
-DELETE FROM public.user_skill_unlocks x
-USING public.users u
-WHERE x.user_id = u.id
-  AND (u.name ILIKE '%이호진%' OR u.nickname ILIKE '%이호진%' OR u.email ILIKE '%ihojin%');
-
-DELETE FROM public.skill_promotion_requests r
-USING public.users u
-WHERE r.user_id = u.id
-  AND (u.name ILIKE '%이호진%' OR u.nickname ILIKE '%이호진%' OR u.email ILIKE '%ihojin%');

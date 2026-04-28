@@ -60,5 +60,22 @@
 05_views.sql
 06_seed_game_content.sql
 skill_tree/SKILL_TREE_UNIFIED.sql
+52_consolidated_runtime_state.sql   ← 출석/SP/스킬/승단 통합 마이그레이션
 README.md
 ```
+
+## 출석 / SP / 스킬 / 승단 통합 (52)
+
+`52_consolidated_runtime_state.sql` — sql/49 + sql/50 + sql/51 의 모든 변경을
+정리해 단일 파일로 묶은 멱등 마이그레이션. 여러 번 돌려도 안전.
+
+이 파일이 적용된 정책:
+- 출석체크 = DB 기록 + 모달 표시. SP 자동 지급 없음.
+- 모달 [스킬 포인트 적립] 클릭 시만 +1 SP.
+- 5/5 마스터 + 미승인 노드 1개라도 있으면 SP 적립 차단 (mastery_unresolved).
+- 심사 대기/진행 중이면 모든 스킬 투자 차단.
+- 마스터 5/5 고정 (거절 시 SP 맥스 +1 시스템 폐기).
+- 모든 노드 최소 1 SP 비용.
+- 신규 회원 SP = 0.
+
+옛 파일 (49 / 50 / 51) 은 **52 가 적용된 후 다시 돌릴 필요 없음**. 히스토리 보관 용도.

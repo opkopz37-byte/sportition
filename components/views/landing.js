@@ -310,6 +310,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     agreeMarketing: false,
 
     // Step 2: 프로필 정보
+    name: '',
     nickname: '',
     phone: '',
     birthYear: '',
@@ -359,6 +360,10 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
 
   // Step 2 검증
   const validateStep2 = () => {
+    if (!formData.name || !formData.name.trim()) {
+      setError('이름을 입력해주세요.');
+      return false;
+    }
     if (!formData.nickname) {
       setError('닉네임을 입력해주세요.');
       return false;
@@ -436,8 +441,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       const birthDateIso = `${y}-${m}-${d}`;
       
       const userData = {
-        name: formData.nickname,
-        nickname: formData.nickname,
+        name: formData.name.trim(),
+        nickname: formData.nickname.trim(),
         phone: formData.phone,
         birth_date: birthDateIso,
         role: formData.role,
@@ -828,6 +833,21 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       {/* Step 2: 프로필 정보 */}
       {step === 2 && (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* 이름 (실명) — 닉네임과 별도 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">이름 *</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+              placeholder="실제 이름 (예: 홍길동)"
+              disabled={loading}
+              maxLength={30}
+            />
+            <p className="text-xs text-gray-500 mt-1">상대 프로필 등에서 닉네임 옆에 표시됩니다</p>
+          </div>
+
           {/* 공통 필드 — 닉네임 + 중복 확인 */}
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">닉네임 *</label>

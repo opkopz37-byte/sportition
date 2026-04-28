@@ -103,12 +103,6 @@ const ACCENT_THEME = {
 };
 
 const MAX_EXP = 5;
-const MAX_PROMOTION_FAILS = 5;
-/** 거절 횟수에 따른 동적 max EXP. 기본 5, 거절 1회당 +1, 최대 +5 (총 10). */
-function effectiveMaxExp(failCount) {
-  const f = Math.max(0, Math.min(MAX_PROMOTION_FAILS, Number(failCount || 0)));
-  return MAX_EXP + f;
-}
 
 /** EXP 단계별 그라디언트 — 채워질수록 차가운 → 뜨거운 색으로 */
 function getExpGradient(exp, themeBar) {
@@ -166,7 +160,7 @@ function computeDepths(nodes) {
  *     → 단순히 부모가 5/5 마스터해도 부족. 체육관 승인이 떨어져야 다음 스킬 가능.
  *     거절되면 거절된 스킬까지만 열려 있고, 자식은 잠금 상태.
  */
-function isUnlocked(node, expByNodeId, nodeByNumber, promotionByNodeId) {
+function isUnlocked(node, nodeByNumber, promotionByNodeId) {
   const parents = getParentNumbers(node);
   if (!parents.length) return true;
   return parents.some((pNum) => {
@@ -478,9 +472,9 @@ const CARD_ZONE_LABEL = {
 };
 
 /** 노드 카드 — 트렌디 디자인 (그라디언트 보더 + 메시 배경 + 도트 텍스처) */
-const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked, maxExp = MAX_EXP }) {
-  const mastered = exp >= maxExp;
-  const inProgress = exp > 0 && exp < maxExp;
+const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked }) {
+  const mastered = exp >= MAX_EXP;
+  const inProgress = exp > 0 && exp < MAX_EXP;
   const isCommon = typeof node?.punch_type === 'string' && node.punch_type.startsWith('common');
   // 다른 스킬 진행 중 차단 — 마스터/진행중 본인은 예외
   const isSoftLocked = softLocked && !mastered && !inProgress;
@@ -625,7 +619,7 @@ const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selecte
         <div className="absolute bottom-[1.5px] left-[1.5px] right-[1.5px] h-[2px] rounded-b-[10px] overflow-hidden bg-black/50">
           <div
             className="h-full transition-all duration-500"
-            style={{ width: `${Math.min(100, (exp / maxExp) * 100)}%`, background: progressColor }}
+            style={{ width: `${Math.min(100, (exp / MAX_EXP) * 100)}%`, background: progressColor }}
           />
         </div>
       ) : null}
@@ -693,7 +687,7 @@ const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selecte
           className="text-[8px] sm:text-[9px] tabular-nums font-bold"
           style={{ color: mastered ? 'rgba(253,224,71,0.55)' : 'rgba(255,255,255,0.4)' }}
         >
-          /{maxExp}
+          /{MAX_EXP}
         </span>
       </div>
 
@@ -1013,14 +1007,12 @@ const PUNCH_GROUP_ORDER = [
 ];
 
 /** 스킬 요약 페이지 뷰 — 카테고리별 세로 리스트, 게임 카드 형태 */
-function SkillSummaryPage({ nodes, expByNodeId, maxByNodeId, onBack }) {
+function SkillSummaryPage({ nodes, expByNodeId, onBack }) {
   const safeNodes = Array.isArray(nodes) ? nodes : [];
   const safeExp = expByNodeId instanceof Map ? expByNodeId : new Map();
-  const safeMax = maxByNodeId instanceof Map ? maxByNodeId : new Map();
-  const maxFor = (id) => safeMax.get(id) ?? MAX_EXP;
   const sorted = [...safeNodes].sort((a, b) => (Number(a?.node_number) || 0) - (Number(b?.node_number) || 0));
   const totalExp = sorted.reduce((s, n) => s + (safeExp.get(n.id) || 0), 0);
-  const masteredCount = sorted.filter((n) => (safeExp.get(n.id) || 0) >= maxFor(n.id)).length;
+  const masteredCount = sorted.filter((n) => (safeExp.get(n.id) || 0) >= MAX_EXP).length;
   const startedCount = sorted.filter((n) => (safeExp.get(n.id) || 0) > 0).length;
 
   // 카테고리별로 묶기
@@ -1145,15 +1137,14 @@ function SkillSummaryPage({ nodes, expByNodeId, maxByNodeId, onBack }) {
         {groups.map((g) => (
           <div key={g.key}>
             <div className={`inline-flex items-center gap-2 mb-2 px-3 py-1 rounded-full border text-xs font-bold ${PUNCH_COLOR[g.key] || PUNCH_COLOR.common}`}>
-              {PUNCH_LABEL[g.key] || g.key} <span className="opacity-60">·</span> <span className="opacity-80 tabular-nums">{g.nodes.filter((n) => (safeExp.get(n.id) || 0) >= maxFor(n.id)).length}/{g.nodes.length}</span>
+              {PUNCH_LABEL[g.key] || g.key} <span className="opacity-60">·</span> <span className="opacity-80 tabular-nums">{g.nodes.filter((n) => (safeExp.get(n.id) || 0) >= MAX_EXP).length}/{g.nodes.length}</span>
             </div>
             <div className="space-y-2">
               {g.nodes.map((n) => {
                 const exp = safeExp.get(n.id) || 0;
-                const nodeMax = maxFor(n.id);
-                const mastered = exp >= nodeMax;
+                const mastered = exp >= MAX_EXP;
                 const started = exp > 0;
-                const fillPct = Math.min(100, (exp / nodeMax) * 100);
+                const fillPct = Math.min(100, (exp / MAX_EXP) * 100);
                 return (
                   <div
                     key={n.id}
@@ -1193,7 +1184,7 @@ function SkillSummaryPage({ nodes, expByNodeId, maxByNodeId, onBack }) {
                         <span className={`text-base font-black tabular-nums ${
                           mastered ? 'text-amber-300' : started ? 'text-cyan-200' : 'text-slate-600'
                         }`}>
-                          {exp}<span className="text-xs text-white/30">/{nodeMax}</span>
+                          {exp}<span className="text-xs text-white/30">/{MAX_EXP}</span>
                         </span>
                         {mastered ? (
                           <p className="text-[9px] font-black tracking-wider text-amber-300 mt-0.5">MASTER</p>
@@ -1216,14 +1207,13 @@ function InlineExpPanel({
   node, exp, sp, unlocked, busy, theme, onAddSkill,
   blockedByOther, blockedByName,
   promotionStatus = 'none', onSubmitPromotion,
-  maxExp = MAX_EXP, failCount = 0,
   globallyLocked = false,        // 다른 스킬이 심사 대기 중 — 전체 잠금
   globalLockName = '',           // 심사 대기 중인 스킬 이름
 }) {
-  const mastered = exp >= maxExp;
-  const cost = Number(node?.point_cost ?? 1);
+  const mastered = exp >= MAX_EXP;
+  const cost = Math.max(1, Number(node?.point_cost ?? 1) || 1); // 최소 1 SP 강제
   const canAfford = sp >= cost;
-  const fillPct = Math.min(100, (exp / maxExp) * 100);
+  const fillPct = Math.min(100, (exp / MAX_EXP) * 100);
   const expGradient = getExpGradient(exp, theme.expBar);
   // 활성(찍을 수 있는) 상태일 때만 펄스 — "찍어주세요" 신호
   const canAdd = unlocked && !busy && !mastered && canAfford && !blockedByOther && !globallyLocked;
@@ -1232,10 +1222,8 @@ function InlineExpPanel({
   const isPending = promotionStatus === 'pending' || promotionStatus === 'reviewing';
   const isApproved = promotionStatus === 'approved';
   const isRejected = promotionStatus === 'rejected';
-  // 거절 후 재마스터 안 한 상태 (exp < maxExp) → 재투자 필요. 아래 + 추가 버튼이 노출됨.
   // ⛔ 전역 잠금(다른 스킬 심사 중) 일 때는 재신청도 불가
   const canSubmitPromo = mastered && (promotionStatus === 'none' || isRejected) && !globallyLocked;
-  const hasFailed = Number(failCount || 0) > 0;
 
   return (
     <div
@@ -1270,7 +1258,7 @@ function InlineExpPanel({
               : globallyLocked
                 ? '심사 진행 중 — 잠금'
                 : isRejected
-                  ? (failCount > 0 ? `★ 재신청 (거절 ${failCount}회)` : '★ 재신청')
+                  ? '★ 재신청'
                   : busy
                     ? '신청 중...'
                     : '★ 승단 심사 신청'}
@@ -1303,9 +1291,7 @@ function InlineExpPanel({
                   ? `SP 부족`
                   : busy
                     ? '추가 중...'
-                    : hasFailed
-                      ? `+ 재마스터 · ${cost} SP`
-                      : `+ 추가 · ${cost} SP`}
+                    : `+ 추가 · ${cost} SP`}
         </button>
       )}
 
@@ -1313,7 +1299,7 @@ function InlineExpPanel({
       <div className="relative">
         <div className="flex items-baseline justify-between mb-0.5">
           <span className="text-[8px] font-bold uppercase tracking-wider text-white/40">EXP</span>
-          <span className={`text-[9px] sm:text-[10px] font-bold tabular-nums ${mastered ? 'text-amber-300' : theme.expLabel}`}>{exp}/{maxExp}</span>
+          <span className={`text-[9px] sm:text-[10px] font-bold tabular-nums ${mastered ? 'text-amber-300' : theme.expLabel}`}>{exp}/{MAX_EXP}</span>
         </div>
         <div className="h-2 sm:h-2.5 rounded-full bg-black/50 border border-white/10 overflow-hidden relative">
           {/* 채워진 부분 — 단계별 색 + 시머 오버레이 */}
@@ -1323,7 +1309,7 @@ function InlineExpPanel({
           />
           {/* 칸 구분선 */}
           <div className="absolute inset-0 flex pointer-events-none">
-            {Array.from({ length: Math.max(0, maxExp - 1) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, MAX_EXP - 1) }).map((_, i) => (
               <div key={i} className="flex-1 border-r border-black/40" />
             ))}
             <div className="flex-1" />
@@ -1343,11 +1329,8 @@ function SkillTree({
   nextTabCta,
   inProgressNodeId, inProgressNodeName,
   promotionByNodeId, onSubmitPromotion,
-  maxByNodeId, failByNodeId,
   pendingPromotionNodeId, pendingPromotionName,
 }) {
-  const maxFor = (id) => (maxByNodeId instanceof Map ? maxByNodeId.get(id) : undefined) ?? MAX_EXP;
-  const failFor = (id) => Number((failByNodeId instanceof Map ? failByNodeId.get(id) : 0) || 0);
   // 카드/간격 (모바일·데스크톱 분리)
   const [isWide, setIsWide] = useState(false);
   useEffect(() => {
@@ -1502,7 +1485,7 @@ function SkillTree({
           if (!pos) return null;
           const exp = expByNodeId.get(node.id) || 0;
           const sibLocked = siblingLockSet.has(node.id);
-          const unlocked = !sibLocked && isUnlocked(node, expByNodeId, nodeByNumber, promotionByNodeId || {});
+          const unlocked = !sibLocked && isUnlocked(node, nodeByNumber, promotionByNodeId || {});
           const isSelected = node.id === selectedId;
           return (
             <div
@@ -1519,7 +1502,6 @@ function SkillTree({
               <SkillNodeCard
                 node={node}
                 exp={exp}
-                maxExp={maxFor(node.id)}
                 unlocked={unlocked}
                 selected={isSelected}
                 dimmed={hasSelection}
@@ -1625,7 +1607,7 @@ function SkillTree({
           if (!sel || !pos) return null;
           const exp = expByNodeId.get(sel.id) || 0;
           const sibLocked = siblingLockSet.has(sel.id);
-          const unlocked = !sibLocked && isUnlocked(sel, expByNodeId, nodeByNumber, promotionByNodeId || {});
+          const unlocked = !sibLocked && isUnlocked(sel, nodeByNumber, promotionByNodeId || {});
           return (
             <div
               className="absolute"
@@ -1639,19 +1621,12 @@ function SkillTree({
               <InlineExpPanel
                 node={sel}
                 exp={exp}
-                maxExp={maxFor(sel.id)}
-                failCount={failFor(sel.id)}
                 sp={sp}
                 unlocked={unlocked}
                 busy={busy}
                 theme={theme}
                 onAddSkill={() => onAddSkill(sel.id)}
-                /* 재마스터(exp>=MAX_EXP)는 항상 허용 — 다른 진행 노드와 무관 */
-                blockedByOther={
-                  Boolean(inProgressNodeId)
-                  && inProgressNodeId !== sel.id
-                  && exp < MAX_EXP
-                }
+                blockedByOther={Boolean(inProgressNodeId) && inProgressNodeId !== sel.id}
                 blockedByName={inProgressNodeName}
                 /* 다른 스킬이 심사 대기 중 — 본인 노드 제외 모두 잠금 */
                 globallyLocked={Boolean(pendingPromotionNodeId) && pendingPromotionNodeId !== sel.id}
@@ -1697,17 +1672,24 @@ const ActiveSkillsView = () => {
 
   useEffect(() => () => { if (burstTimerRef.current) clearTimeout(burstTimerRef.current); }, []);
 
-  /** 선택된 노드를 화면에 잘 보이게 자동 포커스 (가로 스크롤 + 세로 정렬) */
+  /** 선택된 노드를 화면에 잘 보이게 자동 포커스 (가로 스크롤 + 세로 정렬).
+   *  탭 전환 직후엔 카드 DOM 이 아직 마운트 안 되어있을 수 있어 retry 적용. */
   useEffect(() => {
-    if (selectedNodeId == null) return;
+    if (selectedNodeId == null) return undefined;
     const id = selectedNodeId;
-    // 패널 마운트·레이아웃 안정 후 스크롤
-    const timer = setTimeout(() => {
+    let attempt = 0;
+    let timer = null;
+    const tryFocus = () => {
       const row = document.querySelector(`[data-skill-row="${id}"]`);
-      if (!row) return;
-      // 1) 가로 스크롤 컨테이너 안에서 카드+패널이 가운데 오도록
+      if (!row) {
+        // 최대 ~1.2초까지 재시도 (탭 전환 + 트리 레이아웃 안정 대기)
+        if (attempt < 8) {
+          attempt += 1;
+          timer = setTimeout(tryFocus, 150);
+        }
+        return;
+      }
       row.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-      // 2) 모바일에서 티어 섹션 자체가 뷰포트 밖이면 살짝 보이도록 살짝만 세로 스크롤
       requestAnimationFrame(() => {
         const rect = row.getBoundingClientRect();
         const vh = window.innerHeight || document.documentElement.clientHeight;
@@ -1718,8 +1700,9 @@ const ActiveSkillsView = () => {
           window.scrollBy({ top: rect.bottom - vh + margin + 20, behavior: 'smooth' });
         }
       });
-    }, 80);
-    return () => clearTimeout(timer);
+    };
+    timer = setTimeout(tryFocus, 80);
+    return () => { if (timer) clearTimeout(timer); };
   }, [selectedNodeId]);
 
   const loadData = useCallback(async () => {
@@ -1798,6 +1781,30 @@ const ActiveSkillsView = () => {
     };
   }, [loadData]);
 
+  // 출석 모달 [레벨업 신청] → sessionStorage 로 전달된 노드 ID 자동 선택 + 탭 전환
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!treeNodes.length) return;
+    let raw = null;
+    try {
+      raw = window.sessionStorage.getItem('skill_focus_node_id');
+    } catch { /* ignore */ }
+    if (!raw) return;
+    try { window.sessionStorage.removeItem('skill_focus_node_id'); } catch { /* ignore */ }
+    const focusId = Number(raw);
+    if (!Number.isFinite(focusId)) return;
+    const node = treeNodes.find((n) => Number(n.id) === focusId);
+    if (!node) return;
+    // 노드의 punch_type 으로 탭 자동 전환
+    const pt = node.punch_type || '';
+    if (pt === 'common_hook' || pt === 'hook') setSelectedTab('hook');
+    else if (pt === 'common_upper' || pt === 'upper') setSelectedTab('upper');
+    else if (pt === 'common_advanced' || pt === 'advanced') setSelectedTab('advanced');
+    else setSelectedTab('straight');
+    setSelectedNodeId(node.id);
+    initialFocusDoneRef.current = true; // 초기 자동 포커스 로직과 충돌 방지
+  }, [treeNodes]);
+
   const expByNodeId = useMemo(() => {
     const m = new Map();
     for (const r of progressRows || []) {
@@ -1805,26 +1812,6 @@ const ActiveSkillsView = () => {
     }
     return m;
   }, [progressRows]);
-
-  // 노드별 거절 횟수 — 동적 max EXP 산출용
-  const failByNodeId = useMemo(() => {
-    const m = new Map();
-    for (const r of progressRows || []) {
-      m.set(r.node_id, Number(r.promotion_fail_count || 0));
-    }
-    return m;
-  }, [progressRows]);
-
-  // 노드별 동적 max EXP (5 + LEAST(fail_count, 5))
-  const maxByNodeId = useMemo(() => {
-    const m = new Map();
-    for (const r of progressRows || []) {
-      m.set(r.node_id, effectiveMaxExp(r.promotion_fail_count));
-    }
-    return m;
-  }, [progressRows]);
-
-  const getMaxFor = useCallback((nodeId) => maxByNodeId.get(nodeId) ?? MAX_EXP, [maxByNodeId]);
 
   const nodeByNumber = useMemo(() => {
     const m = new Map();
@@ -1900,59 +1887,73 @@ const ActiveSkillsView = () => {
 
   /** 진행 중(0<exp<MAX_EXP)인 노드 — 마스터 전까지 다른 스킬 추가 차단.
    *  ⚠️ 재마스터(거절 후 exp>=5, max>5) 는 별도 흐름이라 in-progress 로 보지 않음.
-   *      → 같은 노드 재마스터 가능, 다른 노드도 정상 진행 가능. */
+   *      → 0<exp<5 인 노드만 forward in-progress 로 봄. */
   const inProgressNode = useMemo(() => {
     for (const n of treeNodes) {
       const e = expByNodeId.get(n.id) || 0;
-      // 0<exp<5 만 forward in-progress (재마스터는 exp>=5 → 제외)
-      if (e > 0 && e < MAX_EXP && e < getMaxFor(n.id)) return n;
+      if (e > 0 && e < MAX_EXP) return n;
     }
     return null;
-  }, [treeNodes, expByNodeId, getMaxFor]);
+  }, [treeNodes, expByNodeId]);
   const inProgressNodeId = inProgressNode?.id ?? null;
   const inProgressNodeName = inProgressNode ? nodeDisplayTitle(inProgressNode) : '';
 
-  /** 승단 심사 대기 중인 노드 — pending 또는 reviewing 상태.
-   *  심사 중에는 모든 스킬 투자(추가/재마스터 포함) 가 차단됨. */
+  /** 처리 안 된 마스터 노드 — 5/5 인데 승단 승인 안 받은 상태.
+   *  미신청 / pending / reviewing / rejected 모두 포함.
+   *  락 해제 조건: 그 노드 promotion status='approved'.
+   *  우선순위: pending(4) > reviewing(3) > rejected(2) > unsubmitted(1) */
   const pendingPromotion = useMemo(() => {
-    for (const id of Object.keys(promotionByNodeId || {})) {
-      const r = promotionByNodeId[id];
-      if (r?.status === 'pending' || r?.status === 'reviewing') {
-        const node = treeNodes.find((n) => String(n.id) === String(id));
-        return { nodeId: Number(id), node, status: r.status };
+    const STATUS_PRIORITY = { pending: 4, reviewing: 3, rejected: 2, unsubmitted: 1 };
+    let best = null;
+    for (const n of treeNodes) {
+      const exp = expByNodeId.get(n.id) || 0;
+      if (exp < MAX_EXP) continue; // 5/5 만 검토
+      const r = promotionByNodeId?.[n.id];
+      const status = r?.status || 'unsubmitted';
+      if (status === 'approved') continue; // 승인된 건 락 아님
+      const prio = STATUS_PRIORITY[status] || 0;
+      if (!best || prio > best.prio) {
+        best = { nodeId: n.id, node: n, status, prio };
       }
     }
-    return null;
-  }, [promotionByNodeId, treeNodes]);
+    return best ? { nodeId: best.nodeId, node: best.node, status: best.status } : null;
+  }, [promotionByNodeId, treeNodes, expByNodeId]);
   const pendingPromotionName = pendingPromotion?.node ? nodeDisplayTitle(pendingPromotion.node) : '';
+
+  // 락 사유별 메시지
+  const lockMessage = (() => {
+    if (!pendingPromotion) return '';
+    switch (pendingPromotion.status) {
+      case 'pending':
+        return `'${pendingPromotionName}' 의 승단 심사 대기 중입니다.\n심사 결과가 나올 때까지 다른 스킬을 찍을 수 없습니다.`;
+      case 'reviewing':
+        return `'${pendingPromotionName}' 의 승단 심사가 진행 중입니다.\n심사 결과가 나올 때까지 다른 스킬을 찍을 수 없습니다.`;
+      case 'rejected':
+        return `'${pendingPromotionName}' 의 승단이 거절되었습니다.\n재신청 후 승인 받기 전에는 다른 스킬을 찍을 수 없습니다.`;
+      default: // 'unsubmitted'
+        return `'${pendingPromotionName}' 을(를) 마스터했습니다.\n승단 심사 신청 후 승인 받기 전에는 다른 스킬을 찍을 수 없습니다.`;
+    }
+  })();
 
   const handleAddSkill = useCallback(async (nodeId) => {
     // ref 기반 동기 락 — React state 갱신 전 빠른 연타도 차단
     if (busyRef.current) return;
 
-    // ⛔ 승단 심사 대기/진행 중 — 모든 스킬 투자 차단 (재마스터 포함)
-    if (pendingPromotion) {
-      alert(
-        `'${pendingPromotionName}' 의 승단 심사가 진행 중입니다.\n심사 결과가 나올 때까지 다른 스킬을 찍을 수 없습니다.`
-      );
+    // ⛔ 5/5 마스터 + 승단 미승인 노드가 있으면 다른 스킬 투자 차단
+    if (pendingPromotion && pendingPromotion.nodeId !== nodeId) {
+      alert(lockMessage);
       return;
     }
 
-    const targetExp = expByNodeId.get(nodeId) || 0;
-    const isRemaster = targetExp >= MAX_EXP; // 재마스터: 이미 기본 5 마스터한 노드를 +1
-
-    // 재마스터는 다른 진행 중 노드와 무관하게 항상 허용 (한 번 마스터한 스킬을 거절 후 보강하는 것)
-    if (!isRemaster) {
-      const blocking = treeNodes.find((n) => {
-        if (n.id === nodeId) return false;
-        const e = expByNodeId.get(n.id) || 0;
-        // 재마스터 노드는 다른 진행으로 간주하지 않음
-        return e > 0 && e < MAX_EXP && e < getMaxFor(n.id);
-      });
-      if (blocking) {
-        alert(`'${nodeDisplayTitle(blocking)}' 을(를) 먼저 마스터해야 다른 스킬을 찍을 수 있습니다.`);
-        return;
-      }
+    // 다른 forward in-progress 노드가 있으면 차단 (마스터는 5 고정)
+    const blocking = treeNodes.find((n) => {
+      if (n.id === nodeId) return false;
+      const e = expByNodeId.get(n.id) || 0;
+      return e > 0 && e < MAX_EXP;
+    });
+    if (blocking) {
+      alert(`'${nodeDisplayTitle(blocking)}' 을(를) 먼저 마스터해야 다른 스킬을 찍을 수 있습니다.`);
+      return;
     }
 
     busyRef.current = true;
@@ -1977,19 +1978,8 @@ const ActiveSkillsView = () => {
       const newSp = Number(data?.out_sp_remaining ?? data?.sp_remaining ?? skillPoints);
       setSkillPoints(newSp);
       setProgressRows((prev) => {
-        const existing = prev.find((r) => r.node_id === nodeId);
         const others = prev.filter((r) => r.node_id !== nodeId);
-        return [
-          ...others,
-          {
-            ...(existing || {}),
-            node_id: nodeId,
-            exp_level: newExp,
-            // RPC 가 fail_count 를 반환하면 우선 사용 (서버 진실)
-            promotion_fail_count: Number(data?.fail_count ?? existing?.promotion_fail_count ?? 0),
-            updated_at: new Date().toISOString(),
-          },
-        ];
+        return [...others, { node_id: nodeId, exp_level: newExp, updated_at: new Date().toISOString() }];
       });
       setBurstNodeId(nodeId);
       setBurstKey((k) => k + 1);
@@ -2004,7 +1994,7 @@ const ActiveSkillsView = () => {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [skillPoints, treeNodes, expByNodeId, getMaxFor, loadData, pendingPromotion, pendingPromotionName]);
+  }, [skillPoints, treeNodes, expByNodeId, loadData, pendingPromotion, lockMessage]);
 
   // 마스터 스킬 → 승단 심사 신청 — 커스텀 모달로 확인 받음
   // 모달 트리거: handleSubmitPromotion(nodeId) → setPromotionConfirmNode(node)
@@ -2014,13 +2004,12 @@ const ActiveSkillsView = () => {
     const node = treeNodes.find((n) => n.id === nodeId);
     if (!node) return;
     const exp = expByNodeId.get(nodeId) || 0;
-    const nodeMax = getMaxFor(nodeId);
-    if (exp < nodeMax) {
-      alert(`스킬을 마스터(${nodeMax}/${nodeMax}) 한 후에 승단 심사를 신청할 수 있습니다.`);
+    if (exp < MAX_EXP) {
+      alert('스킬을 마스터(5/5) 한 후에 승단 심사를 신청할 수 있습니다.');
       return;
     }
     setPromotionConfirmNode(node);
-  }, [treeNodes, expByNodeId, getMaxFor]);
+  }, [treeNodes, expByNodeId]);
 
   const confirmSubmitPromotion = useCallback(async () => {
     const node = promotionConfirmNode;
@@ -2127,13 +2116,13 @@ const ActiveSkillsView = () => {
       n.punch_type === tab.common || (tab.key === 'straight' && n.punch_type === 'common')
     );
     if (commonNodes.length > 0) {
-      return commonNodes.every((n) => (expByNodeId.get(n.id) || 0) >= getMaxFor(n.id));
+      return commonNodes.every((n) => (expByNodeId.get(n.id) || 0) >= MAX_EXP);
     }
     // 2순위 폴백: specific
     const specificNodes = treeNodes.filter((n) => n.punch_type === tab.specific);
     if (specificNodes.length === 0) return false;
-    return specificNodes.every((n) => (expByNodeId.get(n.id) || 0) >= getMaxFor(n.id));
-  }, [treeNodes, expByNodeId, getMaxFor]);
+    return specificNodes.every((n) => (expByNodeId.get(n.id) || 0) >= MAX_EXP);
+  }, [treeNodes, expByNodeId]);
 
   /** 탭 클릭 — 단순 전환만 (celebration 은 아래 useEffect 가 자동 처리) */
   const handleTabClick = useCallback((tab) => {
@@ -2199,7 +2188,6 @@ const ActiveSkillsView = () => {
       <SkillSummaryPage
         nodes={treeNodes}
         expByNodeId={expByNodeId}
-        maxByNodeId={maxByNodeId}
         onBack={() => setSummaryOpen(false)}
       />
     );
@@ -2282,21 +2270,39 @@ const ActiveSkillsView = () => {
         </div>
       ) : null}
 
-      {/* 승단 심사 대기 중 배너 — 모든 스킬 잠금 안내 */}
-      {pendingPromotion ? (
-        <div className="mx-3 sm:mx-4 px-3 py-2.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 flex items-center gap-2.5">
-          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-cyan-400/20 border border-cyan-300/50 text-cyan-200 text-sm flex-shrink-0">
-            ★
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-bold tracking-wider text-cyan-300/80 uppercase mb-0.5">승단 심사 진행 중</div>
-            <div className="text-sm text-white truncate">
-              <span className="font-extrabold text-cyan-100">{pendingPromotionName}</span>
-              <span className="text-white/70"> · 심사가 끝날 때까지 모든 스킬 투자 잠금</span>
+      {/* 처리 안 된 마스터 노드 배너 — 다른 스킬 잠금 안내 */}
+      {pendingPromotion ? (() => {
+        const bannerLabel = (() => {
+          switch (pendingPromotion.status) {
+            case 'pending':    return '승단 심사 대기 중';
+            case 'reviewing':  return '승단 심사 진행 중';
+            case 'rejected':   return '승단 거절 — 재신청 필요';
+            default:           return '승단 심사 신청 필요';
+          }
+        })();
+        const bannerHint = (() => {
+          switch (pendingPromotion.status) {
+            case 'pending':
+            case 'reviewing':  return '· 심사가 끝날 때까지 다른 스킬 투자 잠금';
+            case 'rejected':   return '· 재신청 후 승인 받기 전까지 다른 스킬 잠금';
+            default:           return '· 승단 신청 + 승인 받기 전까지 다른 스킬 잠금';
+          }
+        })();
+        return (
+          <div className="mx-3 sm:mx-4 px-3 py-2.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-cyan-400/20 border border-cyan-300/50 text-cyan-200 text-sm flex-shrink-0">
+              ★
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-bold tracking-wider text-cyan-300/80 uppercase mb-0.5">{bannerLabel}</div>
+              <div className="text-sm text-white truncate">
+                <span className="font-extrabold text-cyan-100">{pendingPromotionName}</span>
+                <span className="text-white/70"> {bannerHint}</span>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
 
       {/* 페이지 타이틀 + 요약 버튼 */}
       <div className="px-3 sm:px-4 flex items-center justify-between gap-3">
@@ -2427,8 +2433,6 @@ const ActiveSkillsView = () => {
             <SkillTree
               nodes={sortedNodesForTab}
               expByNodeId={expByNodeId}
-              maxByNodeId={maxByNodeId}
-              failByNodeId={failByNodeId}
               nodeByNumber={nodeByNumber}
               selectedId={selectedNodeId}
               burstNodeId={burstNodeId}

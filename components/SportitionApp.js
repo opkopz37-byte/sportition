@@ -300,7 +300,7 @@ export default function SportitionApp() {
               <p className="text-xs text-gray-500 mt-0.5">{t('dailyCheckIn')}</p>
             </div>
           </div>
-          <DashboardAttendanceInline t={t} />
+          <DashboardAttendanceInline t={t} setActiveTab={setActiveTab} />
         </div>
       );
       default: return null;

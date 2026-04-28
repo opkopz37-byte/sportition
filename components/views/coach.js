@@ -2109,9 +2109,15 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
         const draws = Number(stats?.draws) || 0;
         const totalMatches = Number(stats?.total_matches) || wins + losses + draws;
         const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 1000) / 10 : 0;
+        const nick = user.nickname || user.name || '이름 미등록';
+        const realName = user.name && user.name !== nick ? user.name : null;
         return {
           id: user.id,
-          name: user.nickname || user.name || '이름 미등록',
+          // name = 표시용 (닉네임 우선) — 정렬·검색에 그대로 사용
+          name: nick,
+          // 추가 — 닉네임 / 실명 분리 (UI 에서 "닉네임 (이름)" 표시용)
+          nickname: nick,
+          realName,
           avatarUrl: user.avatar_url || null,
           weight: Number.isFinite(Number(user.weight)) ? Number(user.weight) : null,
           height: Number.isFinite(Number(user.height)) ? Number(user.height) : null,
@@ -2539,7 +2545,12 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                     gradientClassName="bg-gradient-to-br from-blue-500 to-blue-700"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-base sm:text-lg font-extrabold text-white truncate">{blueCorner.name}</p>
+                    <p className="text-base sm:text-lg font-extrabold text-white truncate">
+                      {blueCorner.name}
+                      {blueCorner.realName ? (
+                        <span className="text-xs sm:text-sm text-blue-200/70 font-medium ml-1.5">({blueCorner.realName})</span>
+                      ) : null}
+                    </p>
                     <p className="text-xs text-blue-200/80 mt-0.5 tabular-nums">
                       {blueCorner.weight ? `${blueCorner.weight}kg` : '체중 미등록'}
                       {blueCorner.tier ? <span className="text-blue-300/70"> · {blueCorner.tier}</span> : null}
@@ -2603,7 +2614,12 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                     gradientClassName="bg-gradient-to-br from-red-500 to-red-700"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-base sm:text-lg font-extrabold text-white truncate">{redCorner.name}</p>
+                    <p className="text-base sm:text-lg font-extrabold text-white truncate">
+                      {redCorner.name}
+                      {redCorner.realName ? (
+                        <span className="text-xs sm:text-sm text-red-200/70 font-medium ml-1.5">({redCorner.realName})</span>
+                      ) : null}
+                    </p>
                     <p className="text-xs text-red-200/80 mt-0.5 tabular-nums">
                       {redCorner.weight ? `${redCorner.weight}kg` : '체중 미등록'}
                       {redCorner.tier ? <span className="text-red-300/70"> · {redCorner.tier}</span> : null}
@@ -2771,6 +2787,9 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 mb-0.5 sm:mb-1 flex-wrap">
                                     <span className="font-bold text-white text-base sm:text-xl truncate">{member.name}</span>
+                                    {member.realName ? (
+                                      <span className="text-xs sm:text-sm text-gray-400 font-medium truncate">({member.realName})</span>
+                                    ) : null}
                                     {member.tier ? (
                                       <span className="px-1.5 py-0.5 rounded-md bg-white/10 border border-white/15 text-[9px] sm:text-[10px] font-bold text-white/85 whitespace-nowrap">{member.tier}</span>
                                     ) : null}
