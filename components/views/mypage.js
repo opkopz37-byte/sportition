@@ -16,6 +16,298 @@ import {
 } from '@/lib/legal/termsOfService';
 import { formatAuthPasswordErrorMessage, isAuthPasswordPolicyError } from '@/lib/authPasswordErrors';
 import { computeMatchPoints, getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
+
+// 체육관 코드 형식: 2글자 prefix + 4자리 숫자
+const MYPAGE_GYM_CODE_REGEX = /^(SE|GG|GW|CC|JL|GS|JJ)\d{4}$/;
+const normalizeMypageGymCode = (raw) => String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+const formatHistoryDate = (iso) => {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+  } catch {
+    return '';
+  }
+};
+
+// 회원 체육관 이력 — 출신 체육관 표시 (자기 본인 only via get_my_gym_history RPC)
+const GymHistoryList = ({ items, loading }) => {
+  if (loading) {
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-400 mb-2">출신 체육관 이력</label>
+        <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-500">불러오는 중...</div>
+      </div>
+    );
+  }
+  if (!items || items.length === 0) return null;
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-400 mb-2">출신 체육관 이력</label>
+      <ul className="bg-white/5 border border-white/10 rounded-lg divide-y divide-white/5">
+        {items.map((h, i) => (
+          <li key={`${h.gym_user_id || 'none'}-${h.joined_at || i}`} className="px-4 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm text-white truncate">{h.gym_name || '(이름 없음)'}</div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                {formatHistoryDate(h.joined_at)} ~ {h.is_current ? '현재' : formatHistoryDate(h.left_at)}
+              </div>
+            </div>
+            {h.is_current && (
+              <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">현 소속</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+// 회원 체육관 변경 모달 — 2단계: 경고 → 코드 입력
+const GymChangeModal = ({ open, currentCode, onClose, onApply }) => {
+  const [stage, setStage] = useState('warning');
+  const [code, setCode] = useState('');
+  const [preview, setPreview] = useState({ status: 'idle', gymName: null });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setStage('warning');
+      setCode('');
+      setPreview({ status: 'idle', gymName: null });
+      setError('');
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  // 코드 입력 시 미리보기
+  useEffect(() => {
+    if (!open || stage !== 'input') return;
+    if (!code) {
+      setPreview({ status: 'idle', gymName: null });
+      return;
+    }
+    if (!MYPAGE_GYM_CODE_REGEX.test(code)) {
+      setPreview({ status: 'invalid', gymName: null });
+      return;
+    }
+    if (currentCode && code === currentCode) {
+      setPreview({ status: 'same', gymName: null });
+      return;
+    }
+    let cancelled = false;
+    setPreview({ status: 'checking', gymName: null });
+    const timer = setTimeout(async () => {
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const { data, error: rpcError } = await supabase.rpc('lookup_gym_by_code', { p_code: code });
+        if (cancelled) return;
+        if (rpcError) {
+          setPreview({ status: 'error', gymName: null });
+          return;
+        }
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row && row.gym_name) {
+          setPreview({ status: 'found', gymName: row.gym_name });
+        } else {
+          setPreview({ status: 'notfound', gymName: null });
+        }
+      } catch {
+        if (!cancelled) setPreview({ status: 'error', gymName: null });
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [code, open, stage, currentCode]);
+
+  const handleApply = async (forceLeave = false) => {
+    setError('');
+    const codeToApply = forceLeave ? '' : code;
+    if (!forceLeave) {
+      if (!codeToApply) {
+        setError('코드를 입력해주세요.');
+        return;
+      }
+      if (preview.status === 'invalid') {
+        setError('코드 형식이 올바르지 않습니다.');
+        return;
+      }
+      if (preview.status === 'notfound') {
+        setError('존재하지 않는 코드입니다.');
+        return;
+      }
+      if (preview.status === 'checking') {
+        setError('코드 확인 중입니다. 잠시만 기다려주세요.');
+        return;
+      }
+      if (preview.status === 'same') {
+        setError('현재 소속과 같은 코드입니다.');
+        return;
+      }
+    }
+    setSubmitting(true);
+    try {
+      const result = await onApply(codeToApply);
+      if (result?.ok) {
+        onClose();
+      } else {
+        setError(result?.message || '변경 실패. 다시 시도해주세요.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-[#0a0e14] border border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        {stage === 'warning' && (
+          <>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-lg">⚠</div>
+              <h3 className="text-lg font-bold text-white">체육관 변경</h3>
+            </div>
+            <div className="space-y-3 text-sm text-gray-300">
+              <p className="text-gray-400">체육관을 변경하면 다음이 처리됩니다:</p>
+              <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-2">
+                <div className="flex gap-2"><span className="text-amber-400">•</span><span>진행 중인 승단 신청이 새 체육관으로 이동되어 새 관장이 다시 검토합니다.</span></div>
+                <div className="flex gap-2"><span className="text-amber-400">•</span><span>이 시점 이후 매치는 새 체육관 소속으로 기록됩니다.</span></div>
+              </div>
+              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 space-y-2">
+                <div className="text-emerald-400 font-medium text-xs">유지되는 데이터:</div>
+                <div className="flex gap-2"><span className="text-emerald-400">✓</span><span>출석 기록·스킬 진행도</span></div>
+                <div className="flex gap-2"><span className="text-emerald-400">✓</span><span>과거 매치 기록 (옛 체육관 소속으로 보존)</span></div>
+                <div className="flex gap-2"><span className="text-emerald-400">✓</span><span>완료된 승단 기록 (옛 체육관에서 받은 것)</span></div>
+                <div className="flex gap-2"><span className="text-emerald-400">✓</span><span>출신 체육관 이력에 옛 체육관 자동 기록</span></div>
+              </div>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => setStage('input')}
+                className="flex-1 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors"
+              >
+                계속
+              </button>
+            </div>
+          </>
+        )}
+
+        {stage === 'input' && (
+          <>
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-lg font-bold text-white">새 체육관 코드</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">새로 가입할 체육관의 관장에게 코드를 받아 입력하세요.</p>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(normalizeMypageGymCode(e.target.value))}
+              maxLength={6}
+              placeholder="GG0001"
+              autoCapitalize="characters"
+              disabled={submitting}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all font-mono tracking-widest text-lg"
+            />
+            {code && (
+              <p className={`mt-2 text-xs ${
+                preview.status === 'found' ? 'text-emerald-400' :
+                preview.status === 'notfound' || preview.status === 'invalid' || preview.status === 'error' ? 'text-red-400' :
+                preview.status === 'same' ? 'text-amber-400' :
+                'text-gray-500'
+              }`}>
+                {preview.status === 'checking' && '확인 중...'}
+                {preview.status === 'found' && `✓ ${preview.gymName}`}
+                {preview.status === 'notfound' && '✗ 존재하지 않는 코드입니다'}
+                {preview.status === 'invalid' && '코드 형식: 지역 2글자 + 숫자 4자리 (예: GG0001)'}
+                {preview.status === 'error' && '확인 중 오류가 발생했습니다'}
+                {preview.status === 'same' && '현재 소속 체육관과 같은 코드입니다'}
+              </p>
+            )}
+            {error && (
+              <div className="mt-3 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs">{error}</div>
+            )}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setStage('warning')}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                뒤로
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApply(false)}
+                disabled={submitting || preview.status !== 'found'}
+                className="flex-1 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? '변경 중...' : '변경 적용'}
+              </button>
+            </div>
+            {currentCode && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('현재 체육관에서 탈퇴하시겠습니까? 이후 어느 체육관에도 소속되지 않은 상태가 됩니다.')) {
+                    handleApply(true);
+                  }
+                }}
+                disabled={submitting}
+                className="mt-3 w-full py-2 text-xs text-gray-500 hover:text-red-400 transition-colors"
+              >
+                또는 체육관에서 탈퇴 (소속 비우기)
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// 체육관 코드 표시 (read-only). role='gym' 은 자기 코드, member 는 소속 체육관 코드.
+// 외부 노출 금지: RPC 로만 가져오며 화면 표시는 본인 프로필 편집에서만.
+const GymCodeDisplay = ({ role, code, loading, copied, onCopy }) => {
+  const isGym = role === 'gym';
+  const accent = isGym ? 'border-purple-500/30 bg-purple-500/5' : 'border-blue-500/30 bg-blue-500/5';
+  const helpText = isGym
+    ? '회원에게 이 코드를 알려주면 회원가입 시 입력하여 우리 체육관에 자동 등록됩니다. 외부에 공개 게시하지 마세요.'
+    : '소속된 체육관의 코드입니다. 외부에 공유하지 마세요.';
+  const emptyText = isGym ? '코드 미발급 (지역을 먼저 등록해주세요)' : '소속된 체육관이 없습니다';
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-400 mb-2">체육관 코드</label>
+      <div className={`w-full px-4 py-3 ${accent} border rounded-lg flex items-center justify-between gap-3`}>
+        <span className="text-white font-mono text-lg tracking-widest">
+          {loading ? '...' : (code || <span className="text-gray-500 text-sm font-sans tracking-normal">{emptyText}</span>)}
+        </span>
+        {code && (
+          <button
+            type="button"
+            onClick={onCopy}
+            className="flex-shrink-0 text-xs px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition-colors"
+          >
+            {copied ? '✓ 복사됨' : '복사'}
+          </button>
+        )}
+      </div>
+      <p className="mt-1.5 text-xs text-gray-500">{helpText}</p>
+    </div>
+  );
+};
+
 // 마이페이지 뷰들
 
 const MyPageView = ({ setActiveTab, t }) => {
@@ -112,6 +404,15 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
     representative_phone: '',
   });
 
+  // 체육관 코드 — 회원/체육관이 자기 코드 확인용 (read-only). 외부 노출 차단을 위해 RPC 로만 조회.
+  const [gymCode, setGymCode] = useState(null);
+  const [gymCodeLoading, setGymCodeLoading] = useState(false);
+  const [gymCodeCopied, setGymCodeCopied] = useState(false);
+  // 회원 출신 체육관 이력 + 변경 모달
+  const [gymHistory, setGymHistory] = useState([]);
+  const [gymHistoryLoading, setGymHistoryLoading] = useState(false);
+  const [gymChangeModalOpen, setGymChangeModalOpen] = useState(false);
+
   useEffect(() => {
     console.log('[EditProfile] 프로필 데이터 확인:', profile);
     if (profile) {
@@ -132,6 +433,109 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
       setFormData(newFormData);
     }
   }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const role = profile.role;
+    const isMember = role === 'player_common' || role === 'player_athlete';
+    const isGymRole = role === 'gym';
+    if (!isMember && !isGymRole) return;
+
+    let cancelled = false;
+    (async () => {
+      setGymCodeLoading(true);
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const rpcName = isGymRole ? 'get_my_gym_code' : 'get_my_current_gym_code';
+        const { data, error: rpcError } = await supabase.rpc(rpcName);
+        if (cancelled) return;
+        if (rpcError) {
+          console.warn('[EditProfile] gym_code RPC 에러:', rpcError);
+          setGymCode(null);
+        } else {
+          setGymCode(data || null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error('[EditProfile] gym_code 조회 실패:', e);
+          setGymCode(null);
+        }
+      } finally {
+        if (!cancelled) setGymCodeLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [profile]);
+
+  const handleCopyGymCode = useCallback(async () => {
+    if (!gymCode) return;
+    try {
+      await navigator.clipboard.writeText(gymCode);
+      setGymCodeCopied(true);
+      setTimeout(() => setGymCodeCopied(false), 1500);
+    } catch (e) {
+      console.error('[EditProfile] 클립보드 복사 실패:', e);
+    }
+  }, [gymCode]);
+
+  // 회원의 출신 체육관 이력 로드
+  const loadGymHistory = useCallback(async () => {
+    if (!profile) return;
+    const isMember = profile.role === 'player_common' || profile.role === 'player_athlete';
+    if (!isMember) return;
+    setGymHistoryLoading(true);
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      const { data, error: rpcError } = await supabase.rpc('get_my_gym_history');
+      if (rpcError) {
+        console.warn('[EditProfile] gym_history RPC 에러:', rpcError);
+        setGymHistory([]);
+      } else {
+        setGymHistory(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('[EditProfile] gym_history 조회 실패:', e);
+      setGymHistory([]);
+    } finally {
+      setGymHistoryLoading(false);
+    }
+  }, [profile]);
+
+  useEffect(() => { loadGymHistory(); }, [loadGymHistory]);
+
+  // 모달에서 코드 변경 적용 — change_my_gym_by_code RPC 호출
+  const handleApplyGymChange = useCallback(async (newCode) => {
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      const { data, error: rpcError } = await supabase.rpc('change_my_gym_by_code', { p_code: newCode || '' });
+      if (rpcError) {
+        return { ok: false, message: rpcError.message || '변경 실패' };
+      }
+      if (!data || data.ok === false) {
+        const errMap = {
+          not_authenticated: '로그인이 필요합니다.',
+          not_a_member: '회원 계정만 변경 가능합니다.',
+          invalid_code_format: '코드 형식이 올바르지 않습니다.',
+          code_not_found: '존재하지 않는 코드입니다.',
+        };
+        return { ok: false, message: errMap[data?.error] || '변경 실패' };
+      }
+      // 성공 → 코드/이력 새로고침 + 프로필 새로고침
+      await refreshProfile();
+      await loadGymHistory();
+      // gymCode 도 새로 가져옴
+      const isMember = profile?.role === 'player_common' || profile?.role === 'player_athlete';
+      if (isMember) {
+        const { data: newCodeData } = await supabase.rpc('get_my_current_gym_code');
+        setGymCode(newCodeData || null);
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error('[EditProfile] gym change 실패:', e);
+      return { ok: false, message: e.message || '변경 실패' };
+    }
+  }, [profile, refreshProfile, loadGymHistory]);
 
   const handleSave = async () => {
     if (!user?.id) {
@@ -175,10 +579,11 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
       };
 
       if (profile?.role === 'player_common') {
-        updates.gym_name = formData.gym_name || null;
+        // 체육관(gym_name) 변경은 GymChangeModal → change_my_gym_by_code RPC 로만.
+        // 이 저장 경로에선 gym_name 을 보내지 않음 (의도치 않은 덮어쓰기 방지).
       } else if (profile?.role === 'player_athlete') {
         updates.boxing_style = formData.boxing_style || null;
-        updates.gym_name = formData.gym_name || null;
+        // 위와 동일한 이유로 gym_name 미전송.
       } else if (profile?.role === 'gym') {
         updates.gym_name = formData.gym_name || null;
         updates.gym_location = formData.gym_location || null;
@@ -340,16 +745,29 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
           </div>
 
           {profile?.role === 'player_common' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">소속 체육관</label>
-              <input
-                type="text"
-                value={formData.gym_name}
-                onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
-                placeholder="체육관 이름을 입력하세요"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">소속 체육관</label>
+                <div className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-gray-200 flex items-center justify-between gap-3">
+                  <span className="truncate">{formData.gym_name || <span className="text-gray-500">소속 없음</span>}</span>
+                  <button
+                    type="button"
+                    onClick={() => setGymChangeModalOpen(true)}
+                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 transition-colors"
+                  >
+                    변경
+                  </button>
+                </div>
+              </div>
+              <GymCodeDisplay
+                role="member"
+                code={gymCode}
+                loading={gymCodeLoading}
+                copied={gymCodeCopied}
+                onCopy={handleCopyGymCode}
               />
-            </div>
+              <GymHistoryList items={gymHistory} loading={gymHistoryLoading} />
+            </>
           )}
 
           {profile?.role === 'player_athlete' && (
@@ -371,14 +789,25 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">소속 체육관</label>
-                <input
-                  type="text"
-                  value={formData.gym_name}
-                  onChange={(e) => setFormData({...formData, gym_name: e.target.value})}
-                  placeholder="체육관 이름을 입력하세요"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
-                />
+                <div className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-gray-200 flex items-center justify-between gap-3">
+                  <span className="truncate">{formData.gym_name || <span className="text-gray-500">소속 없음</span>}</span>
+                  <button
+                    type="button"
+                    onClick={() => setGymChangeModalOpen(true)}
+                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition-colors"
+                  >
+                    변경
+                  </button>
+                </div>
               </div>
+              <GymCodeDisplay
+                role="member"
+                code={gymCode}
+                loading={gymCodeLoading}
+                copied={gymCodeCopied}
+                onCopy={handleCopyGymCode}
+              />
+              <GymHistoryList items={gymHistory} loading={gymHistoryLoading} />
             </>
           )}
 
@@ -414,6 +843,13 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
                 />
               </div>
+              <GymCodeDisplay
+                role="gym"
+                code={gymCode}
+                loading={gymCodeLoading}
+                copied={gymCodeCopied}
+                onCopy={handleCopyGymCode}
+              />
             </>
           )}
 
@@ -475,6 +911,13 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
           </button>
         </div>
       </SpotlightCard>
+
+      <GymChangeModal
+        open={gymChangeModalOpen}
+        currentCode={gymCode}
+        onClose={() => setGymChangeModalOpen(false)}
+        onApply={handleApplyGymChange}
+      />
     </div>
   );
 };

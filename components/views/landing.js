@@ -320,9 +320,11 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     height: '',
     weight: '',
     boxingStyle: '', // 선수만
-    gymName: '', // 일반/선수
+    gymCode: '', // 일반/선수 — 체육관 코드 입력 (gym_name 자유 입력 대체)
+    gymName: '', // 체육관만 — 자기 체육관 이름
     gymLocation: '', // 체육관만
     representativePhone: '', // 체육관만
+    region: '', // 체육관만 — 지역 (코드 prefix 결정)
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -333,6 +335,52 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   const [nicknameCheckStatus, setNicknameCheckStatus] = useState('idle');
   /** null | 'full' 필수 약관 전문 | 'optional' 선택(마케팅) 동의 전문 */
   const [termsModalView, setTermsModalView] = useState(null);
+  /** 체육관 코드 미리보기: { status: 'idle'|'checking'|'found'|'notfound'|'invalid'|'error', gymName: string|null } */
+  const [gymCodePreview, setGymCodePreview] = useState({ status: 'idle', gymName: null });
+
+  // 체육관 코드 형식: 2글자 prefix + 4자리 숫자 (예: GG0001)
+  const GYM_CODE_REGEX = /^(SE|GG|GW|CC|JL|GS|JJ)\d{4}$/;
+  const normalizeGymCode = (raw) => String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+
+  // 체육관 코드 입력 → 디바운스 후 lookup_gym_by_code RPC 호출
+  useEffect(() => {
+    const isMember = formData.role === 'player_common' || formData.role === 'player_athlete';
+    if (!isMember) {
+      setGymCodePreview({ status: 'idle', gymName: null });
+      return;
+    }
+    const code = formData.gymCode;
+    if (!code) {
+      setGymCodePreview({ status: 'idle', gymName: null });
+      return;
+    }
+    if (!GYM_CODE_REGEX.test(code)) {
+      setGymCodePreview({ status: 'invalid', gymName: null });
+      return;
+    }
+    let cancelled = false;
+    setGymCodePreview({ status: 'checking', gymName: null });
+    const timer = setTimeout(async () => {
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const { data, error: rpcError } = await supabase.rpc('lookup_gym_by_code', { p_code: code });
+        if (cancelled) return;
+        if (rpcError) {
+          setGymCodePreview({ status: 'error', gymName: null });
+          return;
+        }
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row && row.gym_name) {
+          setGymCodePreview({ status: 'found', gymName: row.gym_name });
+        } else {
+          setGymCodePreview({ status: 'notfound', gymName: null });
+        }
+      } catch (e) {
+        if (!cancelled) setGymCodePreview({ status: 'error', gymName: null });
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [formData.gymCode, formData.role]);
 
   // Step 1 검증
   const validateStep1 = () => {
@@ -398,6 +446,10 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
         setError('체육관 이름을 입력해주세요.');
         return false;
       }
+      if (!formData.region) {
+        setError('체육관 지역을 선택해주세요.');
+        return false;
+      }
       if (!formData.gymLocation) {
         setError('체육관 위치를 입력해주세요.');
         return false;
@@ -405,6 +457,28 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       if (!formData.representativePhone) {
         setError('대표 연락처를 입력해주세요.');
         return false;
+      }
+    }
+
+    // 회원이 체육관 코드를 입력했다면 형식·존재 확인
+    if (formData.role === 'player_common' || formData.role === 'player_athlete') {
+      if (formData.gymCode) {
+        if (!GYM_CODE_REGEX.test(formData.gymCode)) {
+          setError('체육관 코드 형식이 올바르지 않습니다 (예: GG0001).');
+          return false;
+        }
+        if (gymCodePreview.status === 'checking') {
+          setError('체육관 코드 확인 중입니다. 잠시만 기다려주세요.');
+          return false;
+        }
+        if (gymCodePreview.status === 'notfound') {
+          setError('존재하지 않는 체육관 코드입니다.');
+          return false;
+        }
+        if (gymCodePreview.status === 'error') {
+          setError('체육관 코드 확인 중 오류가 발생했습니다. 다시 시도해주세요.');
+          return false;
+        }
       }
     }
 
@@ -454,17 +528,19 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
 
       // 역할별 추가 데이터 (멤버십은 가입 시 UI 없음 → 기본 베이직)
       if (formData.role === 'player_common') {
-        userData.gym_name = formData.gymName || null;
+        // gym_name 은 트리거가 코드 → 이름으로 자동 채움. 입력값 없음.
+        userData.gym_code = formData.gymCode || null;
         userData.membership_type = 'basic';
       } else if (formData.role === 'player_athlete') {
         userData.boxing_style = formData.boxingStyle || null;
-        userData.gym_name = formData.gymName || null;
+        userData.gym_code = formData.gymCode || null;
         userData.membership_type = 'basic';
       } else if (formData.role === 'gym') {
         // 체육관
         userData.gym_name = formData.gymName;
         userData.gym_location = formData.gymLocation;
         userData.representative_phone = formData.representativePhone;
+        userData.region = formData.region; // 트리거가 region → gym_code 자동 발급
       }
       
       console.log('[SignUp] signUp 함수에 전달할 userData:', userData);
@@ -1048,15 +1124,34 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">소속 체육관</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  소속 체육관 코드 <span className="text-gray-500 text-xs">(선택 — 체육관 관장에게 받으세요)</span>
+                </label>
                 <input
                   type="text"
-                  value={formData.gymName}
-                  onChange={(e) => setFormData({...formData, gymName: e.target.value})}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                  placeholder="체육관 이름"
+                  value={formData.gymCode}
+                  onChange={(e) => setFormData({...formData, gymCode: normalizeGymCode(e.target.value)})}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all font-mono tracking-widest"
+                  placeholder="GG0001"
+                  maxLength={6}
+                  autoCapitalize="characters"
                   disabled={loading}
                 />
+                {formData.gymCode && (
+                  <p className={`mt-1.5 text-xs ${
+                    gymCodePreview.status === 'found' ? 'text-emerald-400' :
+                    gymCodePreview.status === 'notfound' ? 'text-red-400' :
+                    gymCodePreview.status === 'invalid' ? 'text-red-400' :
+                    gymCodePreview.status === 'error' ? 'text-red-400' :
+                    'text-gray-500'
+                  }`}>
+                    {gymCodePreview.status === 'checking' && '확인 중...'}
+                    {gymCodePreview.status === 'found' && `✓ ${gymCodePreview.gymName}`}
+                    {gymCodePreview.status === 'notfound' && '✗ 존재하지 않는 코드입니다'}
+                    {gymCodePreview.status === 'invalid' && '코드 형식: 지역 2글자 + 숫자 4자리 (예: GG0001)'}
+                    {gymCodePreview.status === 'error' && '확인 중 오류가 발생했습니다'}
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -1074,6 +1169,28 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                   placeholder="체육관 이름"
                   disabled={loading}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">지역 *</label>
+                <select
+                  value={formData.region}
+                  onChange={(e) => setFormData({...formData, region: e.target.value})}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  disabled={loading}
+                >
+                  <option value="">선택하세요</option>
+                  <option value="seoul">서울</option>
+                  <option value="gyeonggi">경기</option>
+                  <option value="gangwon">강원</option>
+                  <option value="chungcheong">충청</option>
+                  <option value="jeolla">전라</option>
+                  <option value="gyeongsang">경상</option>
+                  <option value="jeju">제주</option>
+                </select>
+                <p className="mt-1.5 text-xs text-gray-500">
+                  지역에 따라 가입 직후 고유 체육관 코드가 자동 발급됩니다 (예: 경기 → GG0002).
+                </p>
               </div>
 
               <div>
