@@ -15,7 +15,7 @@ function isSameGymContext(profile, gymUserId, gymName) {
   return false;
 }
 
-const ApprovalView = ({ t = (key) => key }) => {
+const ApprovalView = ({ t = (key) => key, setActiveTab }) => {
   const { user, profile } = useAuth();
 
   const [promotionQueue, setPromotionQueue] = useState([]);
@@ -215,11 +215,10 @@ const ApprovalView = ({ t = (key) => key }) => {
 
   return (
     <div className="animate-fade-in-up w-full">
-      <div className="mb-5 sm:mb-7">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words">
-          스킬 승단 심사
-        </h2>
-      </div>
+      <PageHeader
+        title="스킬 승단 심사"
+        onBack={() => setActiveTab('home')}
+      />
 
       {promoError && (
         <SpotlightCard className="p-4 mb-4 border border-amber-500/30 bg-amber-500/10">

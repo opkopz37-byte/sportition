@@ -634,19 +634,10 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
 
   return (
     <div className="animate-fade-in-up w-full">
-      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
-          {t('newMemberRegistration')}
-        </h2>
-        <button
-          type="button"
-          onClick={cancelRegistration}
-          disabled={registeringMember}
-          className="flex-shrink-0 px-4 py-2 text-base sm:text-lg font-bold text-gray-300 hover:text-white transition-colors disabled:opacity-50"
-        >
-          취소
-        </button>
-      </div>
+      <PageHeader
+        title={t('newMemberRegistration')}
+        onBack={cancelRegistration}
+      />
 
       {!gymName && (
         <SpotlightCard className="p-4 mb-4 border border-amber-500/30 bg-amber-500/10">

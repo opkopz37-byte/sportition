@@ -182,11 +182,10 @@ const TierBoardView = ({
 
   return (
     <div className="animate-fade-in-up w-full">
-      <div className="mb-5 sm:mb-7">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words">
-          {publicMode ? t('publicTierBoardTitle') : t('tierBoard')}
-        </h2>
-      </div>
+      <PageHeader
+        title={publicMode ? t('publicTierBoardTitle') : t('tierBoard')}
+        onBack={!publicMode && setActiveTab ? () => setActiveTab('home') : undefined}
+      />
 
       {/* 검색 바 */}
       <div className="mb-3 sm:mb-4 relative">

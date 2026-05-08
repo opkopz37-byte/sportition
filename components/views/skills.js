@@ -1643,7 +1643,7 @@ function SkillTree({
 }
 
 /** 메인 뷰 */
-const ActiveSkillsView = () => {
+const ActiveSkillsView = ({ setActiveTab }) => {
   const { user, loading: authLoading } = useAuth();
   const [dataLoading, setDataLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -2306,7 +2306,22 @@ const ActiveSkillsView = () => {
 
       {/* 페이지 타이틀 + 요약 버튼 */}
       <div className="px-3 sm:px-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">스킬</h1>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {setActiveTab && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('home')}
+              aria-label="뒤로가기"
+              className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center group"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-white transition-colors">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+            </button>
+          )}
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">스킬</h1>
+        </div>
         <button
           type="button"
           onClick={() => setSummaryOpen(true)}

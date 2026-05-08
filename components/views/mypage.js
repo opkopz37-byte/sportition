@@ -18,8 +18,8 @@ import { formatAuthPasswordErrorMessage, isAuthPasswordPolicyError } from '@/lib
 import { computeMatchPoints, getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
 
 // 체육관 코드 형식: 2글자 prefix + 4자리 숫자
-const MYPAGE_GYM_CODE_REGEX = /^(SE|GG|GW|CC|JL|GS|JJ)\d{4}$/;
-const normalizeMypageGymCode = (raw) => String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+const MYPAGE_GYM_CODE_REGEX = /^(se|gg|gw|cc|jl|gs|jj)\d{4}$/;
+const normalizeMypageGymCode = (raw) => String(raw || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6);
 const formatHistoryDate = (iso) => {
   if (!iso) return '';
   try {
@@ -214,8 +214,8 @@ const GymChangeModal = ({ open, currentCode, onClose, onApply }) => {
               value={code}
               onChange={(e) => setCode(normalizeMypageGymCode(e.target.value))}
               maxLength={6}
-              placeholder="GG0001"
-              autoCapitalize="characters"
+              placeholder="gg0001"
+              autoCapitalize="none"
               disabled={submitting}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all font-mono tracking-widest text-lg"
             />
@@ -346,18 +346,10 @@ const MyPageView = ({ setActiveTab, t }) => {
 const SettingsView = ({ setActiveTab, t = (key) => key }) => {
   return (
     <div className="animate-fade-in-up w-full">
-      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
-          {t('settings')}
-        </h2>
-        <button
-          type="button"
-          onClick={() => setActiveTab('home')}
-          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
-        >
-          ← 뒤로
-        </button>
-      </div>
+      <PageHeader
+        title={t('settings')}
+        onBack={() => setActiveTab('home')}
+      />
 
       <SpotlightCard className="p-5 sm:p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1011,18 +1003,10 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
 
   return (
     <div className="animate-fade-in-up w-full">
-      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
-          {t('privacySettings')}
-        </h2>
-        <button
-          type="button"
-          onClick={() => setActiveTab('mypage')}
-          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
-        >
-          ← 뒤로
-        </button>
-      </div>
+      <PageHeader
+        title={t('privacySettings')}
+        onBack={() => setActiveTab('mypage')}
+      />
 
       <div className="space-y-4">
         {/* 비밀번호 변경 */}
@@ -1603,16 +1587,10 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
   if (loading) {
     return (
       <div className="animate-fade-in-up w-full">
-        <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">프로필 불러오는 중</h2>
-          <button
-            type="button"
-            onClick={() => setActiveTab('ranking-tier-board')}
-            className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
-          >
-            ← 뒤로
-          </button>
-        </div>
+        <PageHeader
+          title="프로필 불러오는 중"
+          onBack={() => setActiveTab('ranking-tier-board')}
+        />
         <div className="py-16 text-center text-gray-400 text-sm">잠시만 기다려주세요.</div>
       </div>
     );
@@ -1621,16 +1599,10 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
   if (!opponent) {
     return (
       <div className="animate-fade-in-up w-full">
-        <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">프로필을 찾을 수 없음</h2>
-          <button
-            type="button"
-            onClick={() => setActiveTab('ranking-tier-board')}
-            className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
-          >
-            ← 뒤로
-          </button>
-        </div>
+        <PageHeader
+          title="프로필을 찾을 수 없음"
+          onBack={() => setActiveTab('ranking-tier-board')}
+        />
         <div className="py-16 text-center text-gray-400 text-sm">존재하지 않거나 비공개 처리된 선수입니다.</div>
       </div>
     );
@@ -1639,13 +1611,17 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
   return (
     <div className="animate-fade-in-up w-full">
       {/* 헤더: 좌측 [← 뒤로] (이름은 아래 카드에 이미 노출) */}
-      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
+      <div className="mb-5 sm:mb-7">
         <button
           type="button"
           onClick={() => setActiveTab('ranking-tier-board')}
-          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
+          aria-label="뒤로가기"
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center group"
         >
-          ← 뒤로
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-white transition-colors">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
         </button>
       </div>
 
@@ -1913,18 +1889,10 @@ const MatchHistoryView = ({ setActiveTab, t = (key) => key }) => {
 
   return (
     <div className="animate-fade-in-up w-full">
-      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
-          {t('matchHistory') || '전적'}
-        </h2>
-        <button
-          type="button"
-          onClick={() => setActiveTab('mypage')}
-          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
-        >
-          ← 뒤로
-        </button>
-      </div>
+      <PageHeader
+        title={t('matchHistory') || '전적'}
+        onBack={() => setActiveTab('mypage')}
+      />
 
       {loading ? (
         <div className="py-16 text-center text-gray-400 text-sm">전적을 불러오는 중…</div>
@@ -1966,25 +1934,14 @@ const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key }
     return () => { cancelled = true; };
   }, [opponentId]);
 
-  const nickName = opponent?.nickname || opponent?.display_name || '선수';
-  const realName = opponent?.name && opponent?.name !== nickName ? opponent.name : null;
+  const titleText = `${nickName}${realName ? ` (${realName})` : ''} ${t('matchHistory') || '전적'}`;
 
   return (
     <div className="animate-fade-in-up w-full">
-      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
-          {nickName}
-          {realName ? <span className="text-sm sm:text-base text-gray-400 font-medium ml-1.5">({realName})</span> : null}
-          <span className="ml-1.5">{t('matchHistory') || '전적'}</span>
-        </h2>
-        <button
-          type="button"
-          onClick={() => setActiveTab(`opponent-profile-${opponentId}`)}
-          className="flex-shrink-0 px-4 py-2 text-sm sm:text-base font-semibold text-gray-300 hover:text-white transition-colors"
-        >
-          ← 뒤로
-        </button>
-      </div>
+      <PageHeader
+        title={titleText}
+        onBack={() => setActiveTab(`opponent-profile-${opponentId}`)}
+      />
 
       {loading ? (
         <div className="py-16 text-center text-gray-400 text-sm">전적을 불러오는 중…</div>
