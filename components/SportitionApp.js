@@ -66,9 +66,6 @@ export default function SportitionApp() {
   };
 
   const canGoBack = currentPage === 'app' && activeTab !== 'home';
-  const mainTopPadding = canGoBack
-    ? 'calc(env(safe-area-inset-top, 0px) + clamp(3.75rem, 8vw, 6rem) + 2.75rem)'
-    : 'calc(env(safe-area-inset-top, 0px) + clamp(3.75rem, 8vw, 6rem))';
   const handleGlobalBack = () => {
     setTabHistory((prev) => {
       if (prev.length === 0) {
@@ -409,7 +406,7 @@ export default function SportitionApp() {
         }
         style={{
           // 상단: 네비바 높이(반응형) + iOS 노치 safe-area-inset-top 포함
-          paddingTop: mainTopPadding,
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + clamp(3.75rem, 8vw, 6rem))',
           // 하단/좌/우: iOS 안전 영역 포함 — 풀 화면 유지하면서 잘림 방지
           paddingLeft: 'max(env(safe-area-inset-left), 0px)',
           paddingRight: 'max(env(safe-area-inset-right), 0px)',
