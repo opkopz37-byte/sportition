@@ -1364,7 +1364,14 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                 }`} />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-base sm:text-lg font-semibold text-white truncate mb-1">{member.name}</h3>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-base sm:text-lg font-semibold text-white truncate">
+                    {member.nicknameRaw || member.name}
+                  </h3>
+                  {member.nameRaw && member.nameRaw !== (member.nicknameRaw || member.name) && (
+                    <span className="text-xs sm:text-sm text-gray-400 truncate">({member.nameRaw})</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 text-sm text-gray-400 flex-wrap">
                   <span className="truncate">{member.phone || '연락처 없음'}</span>
                   {lastAttendanceLabel ? (

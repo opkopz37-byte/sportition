@@ -340,11 +340,11 @@ export default function SportitionApp() {
   const renderView = () => {
     if (activeTab.startsWith('opponent-match-history-')) {
       const opponentId = activeTab.replace('opponent-match-history-', '');
-      return <OpponentMatchHistoryView setActiveTab={navigateToTab} t={t} opponentId={opponentId} />;
+      return <OpponentMatchHistoryView setActiveTab={navigateToTab} t={t} opponentId={opponentId} onBack={handleGlobalBack} />;
     }
     if (activeTab.startsWith('opponent-profile-')) {
       const opponentId = activeTab.replace('opponent-profile-', '');
-      return <OpponentProfileView setActiveTab={navigateToTab} t={t} opponentId={opponentId} />;
+      return <OpponentProfileView setActiveTab={navigateToTab} t={t} opponentId={opponentId} onBack={handleGlobalBack} />;
     }
     if (
       activeTab === 'home' &&
