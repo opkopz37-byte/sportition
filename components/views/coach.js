@@ -1226,10 +1226,10 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
 
   return (
     <div className="animate-fade-in-up">
-      <div className="mb-5 sm:mb-7 flex items-center justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white break-words flex-1 min-w-0">
-          {t('members')}
-        </h2>
+      <PageHeader
+        title={t('members')}
+        onBack={onBack}
+      >
         <button
           type="button"
           onClick={() => setActiveTab('gym-register-member')}
@@ -1238,7 +1238,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
           <span>+</span>
           <span>신규등록</span>
         </button>
-      </div>
+      </PageHeader>
 
       {!gymName && (
         <SpotlightCard className="p-4 mb-4 border border-amber-500/30 bg-amber-500/10">

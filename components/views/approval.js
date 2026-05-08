@@ -15,7 +15,7 @@ function isSameGymContext(profile, gymUserId, gymName) {
   return false;
 }
 
-const ApprovalView = ({ t = (key) => key, setActiveTab }) => {
+const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const { user, profile } = useAuth();
 
   const [promotionQueue, setPromotionQueue] = useState([]);
