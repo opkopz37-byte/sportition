@@ -419,8 +419,8 @@ export default function SportitionApp() {
             type="button"
             onClick={handleGlobalBack}
             aria-label="뒤로가기"
-            className="fixed left-3 sm:left-4 z-40 w-9 h-9 rounded-full bg-black/65 backdrop-blur border border-white/20 hover:bg-black/80 transition-all flex items-center justify-center"
-            style={{ top: 'calc(env(safe-area-inset-top, 0px) + clamp(3.9rem, 8.2vw, 6.2rem))' }}
+            className="absolute left-3 sm:left-4 z-30 w-9 h-9 rounded-full bg-black/65 backdrop-blur border border-white/20 hover:bg-black/80 transition-all flex items-center justify-center"
+            style={{ top: '0.5rem' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-100">
               <line x1="19" y1="12" x2="5" y2="12" />
