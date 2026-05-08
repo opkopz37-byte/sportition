@@ -398,6 +398,23 @@ export default function SportitionApp() {
         t={t}
       />
 
+      {canGoBack && (
+        <button
+          type="button"
+          onClick={handleGlobalBack}
+          aria-label="뒤로가기"
+          className="fixed left-3 sm:left-4 z-[60] w-9 h-9 rounded-full bg-black/65 backdrop-blur border border-white/20 hover:bg-black/80 transition-all flex items-center justify-center"
+          style={{
+            top: 'calc(env(safe-area-inset-top, 0px) + clamp(3rem, 7.5vw, 4.5rem))'
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-100">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
+      )}
+
       <main
         className={
           activeTab === 'skills' || activeTab === 'roadmap-active-skills' || activeTab === 'home'
@@ -414,20 +431,6 @@ export default function SportitionApp() {
           minHeight: '100vh',
         }}
       >
-        {canGoBack && (
-          <button
-            type="button"
-            onClick={handleGlobalBack}
-            aria-label="뒤로가기"
-            className="absolute left-3 sm:left-4 z-30 w-9 h-9 rounded-full bg-black/65 backdrop-blur border border-white/20 hover:bg-black/80 transition-all flex items-center justify-center"
-            style={{ top: '0.5rem' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-100">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-          </button>
-        )}
         {renderView()}
       </main>
     </div>
