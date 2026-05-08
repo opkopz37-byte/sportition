@@ -310,7 +310,7 @@ const GymCodeDisplay = ({ role, code, loading, copied, onCopy }) => {
 
 // 마이페이지 뷰들
 
-const MyPageView = ({ setActiveTab, t }) => {
+const MyPageView = ({ setActiveTab, t, onBack, canGoBack }) => {
   const { profile } = useAuth();
   const isPlayer = profile?.role === 'player_common' || profile?.role === 'player_athlete';
   const isGym = profile?.role === 'gym' || profile?.role === 'admin';
@@ -319,7 +319,22 @@ const MyPageView = ({ setActiveTab, t }) => {
   return (
   <div className="animate-fade-in-up">
     <div className="mb-6 flex items-center justify-between gap-3">
-      <h2 className="text-2xl sm:text-3xl font-bold text-white">{t('myPage')}</h2>
+      <div className="flex items-center gap-2 sm:gap-3">
+        {canGoBack && onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="뒤로가기"
+            className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center group"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-white transition-colors">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+          </button>
+        )}
+        <h2 className="text-2xl sm:text-3xl font-bold text-white">{t('myPage')}</h2>
+      </div>
       <button
         type="button"
         onClick={() => setActiveTab('mypage-edit-profile')}
@@ -343,12 +358,12 @@ const MyPageView = ({ setActiveTab, t }) => {
 };
 
 // 설정 페이지 (네비게이션 드롭다운에서 접근)
-const SettingsView = ({ setActiveTab, t = (key) => key }) => {
+const SettingsView = ({ setActiveTab, t = (key) => key, onBack }) => {
   return (
     <div className="animate-fade-in-up w-full">
       <PageHeader
         title={t('settings')}
-        onBack={() => setActiveTab('home')}
+        onBack={onBack}
       />
 
       <SpotlightCard className="p-5 sm:p-6">
@@ -374,7 +389,7 @@ const SettingsView = ({ setActiveTab, t = (key) => key }) => {
 };
 
 // Edit Profile 페이지
-const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
+const EditProfileView = ({ setActiveTab, t = (key) => key, onBack }) => {
   const { profile, user, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -609,7 +624,7 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
     <div className="animate-fade-in-up w-full">
       <PageHeader
         title={t('editProfile')}
-        onBack={() => setActiveTab('mypage')}
+        onBack={onBack}
       />
 
       <SpotlightCard className="p-5 sm:p-6">
@@ -915,7 +930,7 @@ const EditProfileView = ({ setActiveTab, t = (key) => key }) => {
 };
 
 // Privacy Settings 페이지 (비밀번호 변경 + 약관 포함)
-const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
+const PrivacySettingsView = ({ setActiveTab, t = (key) => key, onBack }) => {
   const [passwordData, setPasswordData] = useState({ current: '', new: '', confirm: '' });
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState({ type: null, text: '' });
@@ -1005,7 +1020,7 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
     <div className="animate-fade-in-up w-full">
       <PageHeader
         title={t('privacySettings')}
-        onBack={() => setActiveTab('mypage')}
+        onBack={onBack}
       />
 
       <div className="space-y-4">
@@ -1115,7 +1130,7 @@ const PrivacySettingsView = ({ setActiveTab, t = (key) => key }) => {
 
 
 // Activity History 페이지
-const ActivityHistoryView = ({ setActiveTab, t = (key) => key }) => {
+const ActivityHistoryView = ({ setActiveTab, t = (key) => key, onBack }) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [showDetailPage, setShowDetailPage] = useState(false);
   
@@ -1367,7 +1382,7 @@ const ActivityHistoryView = ({ setActiveTab, t = (key) => key }) => {
       <PageHeader 
         title="🗓️ 트레이닝 캘린더" 
         description="날짜를 클릭하여 운동 기록을 확인하세요"
-        onBack={() => setActiveTab('mypage')}
+        onBack={onBack}
       >
         <div className="flex gap-2">
           <button className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm transition-all">
@@ -1559,7 +1574,7 @@ const ActivityHistoryView = ({ setActiveTab, t = (key) => key }) => {
 };
 
 // Opponent Profile 페이지
-const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => {
+const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId, onBack }) => {
   const [opponent, setOpponent] = useState(null);
   const [opponentMatches, setOpponentMatches] = useState([]);
   const [showAllOpponentMatches, setShowAllOpponentMatches] = useState(false);
@@ -1589,7 +1604,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
       <div className="animate-fade-in-up w-full">
         <PageHeader
           title="프로필 불러오는 중"
-          onBack={() => setActiveTab('ranking-tier-board')}
+          onBack={onBack}
         />
         <div className="py-16 text-center text-gray-400 text-sm">잠시만 기다려주세요.</div>
       </div>
@@ -1601,7 +1616,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
       <div className="animate-fade-in-up w-full">
         <PageHeader
           title="프로필을 찾을 수 없음"
-          onBack={() => setActiveTab('ranking-tier-board')}
+          onBack={onBack}
         />
         <div className="py-16 text-center text-gray-400 text-sm">존재하지 않거나 비공개 처리된 선수입니다.</div>
       </div>
@@ -1614,7 +1629,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
       <div className="mb-5 sm:mb-7">
         <button
           type="button"
-          onClick={() => setActiveTab('ranking-tier-board')}
+          onClick={onBack}
           aria-label="뒤로가기"
           className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center group"
         >
@@ -1866,7 +1881,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId }) => 
 };
 
 // 전체 전적 목록 페이지
-const MatchHistoryView = ({ setActiveTab, t = (key) => key }) => {
+const MatchHistoryView = ({ setActiveTab, t = (key) => key, onBack }) => {
   const { user } = useAuth();
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1891,7 +1906,7 @@ const MatchHistoryView = ({ setActiveTab, t = (key) => key }) => {
     <div className="animate-fade-in-up w-full">
       <PageHeader
         title={t('matchHistory') || '전적'}
-        onBack={() => setActiveTab('mypage')}
+        onBack={onBack}
       />
 
       {loading ? (
@@ -1908,7 +1923,7 @@ const MatchHistoryView = ({ setActiveTab, t = (key) => key }) => {
 };
 
 // 다른 회원의 전체 전적 페이지 — 본인용 MatchHistoryView 와 동일한 디자인, opponentId 로 동작
-const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key }) => {
+const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key, onBack }) => {
   const [opponent, setOpponent] = useState(null);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1940,7 +1955,7 @@ const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key }
     <div className="animate-fade-in-up w-full">
       <PageHeader
         title={titleText}
-        onBack={() => setActiveTab(`opponent-profile-${opponentId}`)}
+        onBack={onBack}
       />
 
       {loading ? (

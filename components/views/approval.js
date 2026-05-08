@@ -217,7 +217,7 @@ const ApprovalView = ({ t = (key) => key, setActiveTab }) => {
     <div className="animate-fade-in-up w-full">
       <PageHeader
         title="스킬 승단 심사"
-        onBack={() => setActiveTab('home')}
+        onBack={onBack}
       />
 
       {promoError && (

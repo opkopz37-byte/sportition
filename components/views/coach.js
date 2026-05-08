@@ -546,7 +546,7 @@ const NEW_MEMBER_FORM_INITIAL = {
 };
 
 /** 체육관 신규 회원 등록 — 전체 페이지 */
-const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
+const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const { profile } = useAuth();
   const [registeringMember, setRegisteringMember] = useState(false);
   const [newMemberForm, setNewMemberForm] = useState(NEW_MEMBER_FORM_INITIAL);
@@ -629,7 +629,7 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
   const cancelRegistration = () => {
     setNewMemberForm({ ...NEW_MEMBER_FORM_INITIAL });
     setEmailCheckStatus('idle');
-    setActiveTab('players');
+    if (onBack) onBack();
   };
 
   return (
@@ -870,7 +870,7 @@ const GymNewMemberRegisterView = ({ t = (key) => key, setActiveTab }) => {
 };
 
 // 회원 관리 페이지 (코치)
-const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
+const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const { profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // all | active | inactive | athlete
@@ -2018,7 +2018,7 @@ function clearActiveMatchSnapshot() {
 }
 
 // 매칭 룸 페이지 (코치)
-const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
+const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const { profile } = useAuth();
   // Phase: 'lobby' | 'matching' | 'fighting' | 'rest' | 'finish'
   const [phase, setPhase] = useState('lobby');
@@ -2478,7 +2478,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab }) => {
     <div className="animate-fade-in-up">
       <PageHeader
         title={t('matchRoomTitle')}
-        onBack={() => setActiveTab('home')}
+        onBack={onBack}
       />
 
       {/* Phase 0: Lobby - 회원 선택 */}

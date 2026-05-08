@@ -33,6 +33,7 @@ const TierBoardView = ({
   publicMode = false,
   onPlayerClick,
   initialSearchQuery = '',
+  onBack,
 }) => {
   const { profile, user } = useAuth();
   const isGymAccount = profile?.role === 'gym' || profile?.role === 'admin';
@@ -184,7 +185,7 @@ const TierBoardView = ({
     <div className="animate-fade-in-up w-full">
       <PageHeader
         title={publicMode ? t('publicTierBoardTitle') : t('tierBoard')}
-        onBack={!publicMode && setActiveTab ? () => setActiveTab('home') : undefined}
+        onBack={!publicMode && onBack ? onBack : undefined}
       />
 
       {/* 검색 바 */}

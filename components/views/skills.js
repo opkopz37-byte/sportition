@@ -1643,7 +1643,7 @@ function SkillTree({
 }
 
 /** 메인 뷰 */
-const ActiveSkillsView = ({ setActiveTab }) => {
+const ActiveSkillsView = ({ setActiveTab, onBack }) => {
   const { user, loading: authLoading } = useAuth();
   const [dataLoading, setDataLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -2307,10 +2307,10 @@ const ActiveSkillsView = ({ setActiveTab }) => {
       {/* 페이지 타이틀 + 요약 버튼 */}
       <div className="px-3 sm:px-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 sm:gap-3">
-          {setActiveTab && (
+          {setActiveTab && onBack && (
             <button
               type="button"
-              onClick={() => setActiveTab('home')}
+              onClick={onBack}
               aria-label="뒤로가기"
               className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center group"
             >

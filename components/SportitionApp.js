@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BackgroundGrid, THEME_ATHLETE, THEME_COACH, THEME_GYM } from '@/components/ui';
+import { BackgroundGrid, PageHeader, THEME_ATHLETE, THEME_COACH, THEME_GYM } from '@/components/ui';
 import { Navbar } from '@/components/navigation';
 import { LoginModal, SignupPage, LandingPage } from '@/components/views/landing';
 import { ActiveSkillsView } from '@/components/views/skills';
@@ -283,22 +283,22 @@ export default function SportitionApp() {
   const renderPlayerMainRoutes = () => {
     if (activeTab.startsWith('opponent-match-history-')) {
       const opponentId = activeTab.replace('opponent-match-history-', '');
-      return <OpponentMatchHistoryView setActiveTab={navigateToTab} t={t} opponentId={opponentId} />;
+      return <OpponentMatchHistoryView setActiveTab={navigateToTab} t={t} opponentId={opponentId} onBack={handleGlobalBack} />;
     }
     if (activeTab.startsWith('opponent-profile-')) {
       const opponentId = activeTab.replace('opponent-profile-', '');
-      return <OpponentProfileView setActiveTab={navigateToTab} t={t} opponentId={opponentId} />;
+      return <OpponentProfileView setActiveTab={navigateToTab} t={t} opponentId={opponentId} onBack={handleGlobalBack} />;
     }
     switch (activeTab) {
       case 'skills':
       case 'roadmap-active-skills':
       case 'roadmap-skill-tree':
-        return <ActiveSkillsView t={t} setActiveTab={navigateToTab} addSkillRequest={addSkillRequest} />;
+        return <ActiveSkillsView t={t} setActiveTab={navigateToTab} addSkillRequest={addSkillRequest} onBack={handleGlobalBack} />;
       case 'ranking':
       case 'ranking-tier-board':
       case 'ranking-style':
       case 'ranking-regional':
-        return <TierBoardView t={t} setActiveTab={navigateToTab} />;
+        return <TierBoardView t={t} setActiveTab={navigateToTab} onBack={handleGlobalBack} />;
       default:
         return null;
     }
@@ -306,21 +306,20 @@ export default function SportitionApp() {
 
   const renderMyPageRoutes = () => {
     switch(activeTab) {
-      case 'mypage': return <MyPageView setActiveTab={navigateToTab} t={t} />;
-      case 'settings': return <SettingsView setActiveTab={navigateToTab} t={t} />;
-      case 'mypage-edit-profile': return <EditProfileView setActiveTab={navigateToTab} t={t} />;
-      case 'mypage-privacy': return <PrivacySettingsView setActiveTab={navigateToTab} t={t} />;
-      case 'mypage-terms': return <TermsOfServiceInlineView setActiveTab={navigateToTab} backTab="mypage" />;
-      case 'mypage-activity': return <ActivityHistoryView setActiveTab={navigateToTab} t={t} />;
-      case 'mypage-match-history': return <MatchHistoryView setActiveTab={navigateToTab} t={t} />;
+      case 'mypage': return <MyPageView setActiveTab={navigateToTab} t={t} onBack={handleGlobalBack} canGoBack={tabHistory.length > 0} />;
+      case 'settings': return <SettingsView setActiveTab={navigateToTab} t={t} onBack={handleGlobalBack} />;
+      case 'mypage-edit-profile': return <EditProfileView setActiveTab={navigateToTab} t={t} onBack={handleGlobalBack} />;
+      case 'mypage-privacy': return <PrivacySettingsView setActiveTab={navigateToTab} t={t} onBack={handleGlobalBack} />;
+      case 'mypage-terms': return <TermsOfServiceInlineView setActiveTab={navigateToTab} backTab="mypage" onBack={handleGlobalBack} />;
+      case 'mypage-activity': return <ActivityHistoryView setActiveTab={navigateToTab} t={t} onBack={handleGlobalBack} />;
+      case 'mypage-match-history': return <MatchHistoryView setActiveTab={navigateToTab} t={t} onBack={handleGlobalBack} />;
       case 'mypage-attendance': return (
         <div className="animate-fade-in-up max-w-md mx-auto">
-          <div className="mb-4 flex items-center gap-3">
-            <div>
-              <h2 className="text-xl font-bold text-white">{t('attendance')}</h2>
-              <p className="text-xs text-gray-500 mt-0.5">{t('dailyCheckIn')}</p>
-            </div>
-          </div>
+          <PageHeader
+            title={t('attendance')}
+            description={t('dailyCheckIn')}
+            onBack={handleGlobalBack}
+          />
           <DashboardAttendanceInline t={t} setActiveTab={navigateToTab} />
         </div>
       );
@@ -330,10 +329,10 @@ export default function SportitionApp() {
 
   const renderCoachRoutes = () => {
     switch(activeTab) {
-      case 'approval': return <ApprovalView setActiveTab={navigateToTab} t={t} />;
-      case 'players': return <PlayersManagementView t={t} setActiveTab={navigateToTab} />;
-      case 'gym-register-member': return <GymNewMemberRegisterView t={t} setActiveTab={navigateToTab} />;
-      case 'match': return <MatchRoomView t={t} setActiveTab={navigateToTab} />;
+      case 'approval': return <ApprovalView setActiveTab={navigateToTab} t={t} onBack={handleGlobalBack} />;
+      case 'players': return <PlayersManagementView t={t} setActiveTab={navigateToTab} onBack={handleGlobalBack} />;
+      case 'gym-register-member': return <GymNewMemberRegisterView t={t} setActiveTab={navigateToTab} onBack={handleGlobalBack} />;
+      case 'match': return <MatchRoomView t={t} setActiveTab={navigateToTab} onBack={handleGlobalBack} />;
       default: return null;
     }
   };
