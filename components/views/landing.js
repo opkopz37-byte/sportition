@@ -45,6 +45,65 @@ function formatKoreanPhone(raw) {
   return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
 }
 
+/**
+ * 생년월일 전용 커스텀 드롭다운.
+ * iOS 네이티브 <select> 는 "완료" 버튼을 요구해서 사용성이 나쁨 →
+ * 옵션 클릭 즉시 값 적용 + 패널 닫힘.
+ */
+function BirthSelect({ value, onChange, options, suffix = '', placeholder = '선택', disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white text-left focus:outline-none focus:border-blue-500 transition-all text-sm flex items-center justify-between disabled:opacity-60"
+      >
+        <span className={value ? 'text-white' : 'text-gray-500'}>
+          {value ? `${value}${suffix}` : placeholder}
+        </span>
+        <span className="text-gray-500 text-xs">▾</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-gray-900 border border-white/10 rounded-lg shadow-xl">
+          {options.map((opt) => {
+            const v = String(opt);
+            const selected = v === String(value);
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => { onChange(v); setOpen(false); }}
+                className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                  selected ? 'bg-blue-500/20 text-blue-400' : 'text-white hover:bg-white/10'
+                }`}
+              >
+                {opt}{suffix}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // 로그인 모달
 const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => key }) => {
   const [email, setEmail] = useState('');
@@ -338,9 +397,9 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   /** 체육관 코드 미리보기: { status: 'idle'|'checking'|'found'|'notfound'|'invalid'|'error', gymName: string|null } */
   const [gymCodePreview, setGymCodePreview] = useState({ status: 'idle', gymName: null });
 
-  // 체육관 코드 형식: 2글자 prefix + 4자리 숫자 (예: GG0001)
-  const GYM_CODE_REGEX = /^(SE|GG|GW|CC|JL|GS|JJ)\d{4}$/;
-  const normalizeGymCode = (raw) => String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  // 체육관 코드 형식: 2글자 prefix + 4자리 숫자 (예: gg0001)
+  const GYM_CODE_REGEX = /^(se|gg|gw|cc|jl|gs|jj)\d{4}$/;
+  const normalizeGymCode = (raw) => String(raw || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6);
 
   // 체육관 코드 입력 → 디바운스 후 lookup_gym_by_code RPC 호출
   useEffect(() => {
@@ -464,7 +523,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     if (formData.role === 'player_common' || formData.role === 'player_athlete') {
       if (formData.gymCode) {
         if (!GYM_CODE_REGEX.test(formData.gymCode)) {
-          setError('체육관 코드 형식이 올바르지 않습니다 (예: GG0001).');
+          setError('체육관 코드 형식이 올바르지 않습니다.');
           return false;
         }
         if (gymCodePreview.status === 'checking') {
@@ -995,51 +1054,33 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <label className="block text-[10px] text-gray-500 mb-1">연도</label>
-                <select
+                <BirthSelect
                   value={formData.birthYear}
-                  onChange={(e) => setFormData({ ...formData, birthYear: e.target.value })}
-                  className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all text-sm"
+                  onChange={(v) => setFormData({ ...formData, birthYear: v })}
+                  options={BIRTH_YEAR_OPTIONS}
+                  suffix="년"
                   disabled={loading}
-                >
-                  <option value="">선택</option>
-                  {BIRTH_YEAR_OPTIONS.map((y) => (
-                    <option key={y} value={String(y)}>
-                      {y}년
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div>
                 <label className="block text-[10px] text-gray-500 mb-1">월</label>
-                <select
+                <BirthSelect
                   value={formData.birthMonth}
-                  onChange={(e) => setFormData({ ...formData, birthMonth: e.target.value })}
-                  className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all text-sm"
+                  onChange={(v) => setFormData({ ...formData, birthMonth: v })}
+                  options={MONTH_OPTIONS}
+                  suffix="월"
                   disabled={loading}
-                >
-                  <option value="">선택</option>
-                  {MONTH_OPTIONS.map((mo) => (
-                    <option key={mo} value={String(mo)}>
-                      {mo}월
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div>
                 <label className="block text-[10px] text-gray-500 mb-1">일</label>
-                <select
+                <BirthSelect
                   value={formData.birthDay}
-                  onChange={(e) => setFormData({ ...formData, birthDay: e.target.value })}
-                  className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all text-sm"
+                  onChange={(v) => setFormData({ ...formData, birthDay: v })}
+                  options={BIRTH_DAY_OPTIONS}
+                  suffix="일"
                   disabled={loading}
-                >
-                  <option value="">선택</option>
-                  {BIRTH_DAY_OPTIONS.map((day) => (
-                    <option key={day} value={String(day)}>
-                      {day}일
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
           </div>
@@ -1132,9 +1173,9 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                   value={formData.gymCode}
                   onChange={(e) => setFormData({...formData, gymCode: normalizeGymCode(e.target.value)})}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all font-mono tracking-widest"
-                  placeholder="GG0001"
+                  placeholder=""
                   maxLength={6}
-                  autoCapitalize="characters"
+                  autoCapitalize="none"
                   disabled={loading}
                 />
                 {formData.gymCode && (
@@ -1148,7 +1189,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                     {gymCodePreview.status === 'checking' && '확인 중...'}
                     {gymCodePreview.status === 'found' && `✓ ${gymCodePreview.gymName}`}
                     {gymCodePreview.status === 'notfound' && '✗ 존재하지 않는 코드입니다'}
-                    {gymCodePreview.status === 'invalid' && '코드 형식: 지역 2글자 + 숫자 4자리 (예: GG0001)'}
+                    {gymCodePreview.status === 'invalid' && '코드 형식: 지역 2글자 + 숫자 4자리'}
                     {gymCodePreview.status === 'error' && '확인 중 오류가 발생했습니다'}
                   </p>
                 )}

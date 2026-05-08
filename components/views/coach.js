@@ -1540,6 +1540,18 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                     <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">기본 정보</h3>
                     <div className="space-y-2">
                       <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">닉네임</span>
+                        <span className="text-sm text-white font-medium truncate text-right">
+                          {selectedMember.nicknameRaw || '—'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">실제 이름</span>
+                        <span className="text-sm text-white font-medium truncate text-right">
+                          {selectedMember.nameRaw || '—'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
                         <span className="text-sm text-gray-400 whitespace-nowrap">이메일</span>
                         <span className="text-sm text-white font-medium truncate text-right">
                           {selectedMember.email}
