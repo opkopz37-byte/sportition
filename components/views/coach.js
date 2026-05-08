@@ -1444,8 +1444,8 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                       <h2 className="text-lg sm:text-2xl font-bold text-white truncate">
                         {selectedMember.nicknameRaw || selectedMember.nameRaw || selectedMember.name}
                       </h2>
-                      {selectedMember.nameRaw &&
-                        selectedMember.nameRaw !== (selectedMember.nicknameRaw || selectedMember.nameRaw || selectedMember.name) && (
+                      {selectedMember.nicknameRaw && selectedMember.nameRaw && 
+                        selectedMember.nicknameRaw !== selectedMember.nameRaw && (
                           <span className="text-xs sm:text-sm text-gray-400 truncate">
                             ({selectedMember.nameRaw})
                           </span>
