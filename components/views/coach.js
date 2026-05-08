@@ -1443,7 +1443,15 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab }) => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h2 className="text-lg sm:text-2xl font-bold text-white truncate">{selectedMember.name}</h2>
+                      <h2 className="text-lg sm:text-2xl font-bold text-white truncate">
+                        {selectedMember.nicknameRaw || selectedMember.nameRaw || selectedMember.name}
+                      </h2>
+                      {selectedMember.nameRaw &&
+                        selectedMember.nameRaw !== (selectedMember.nicknameRaw || selectedMember.nameRaw || selectedMember.name) && (
+                          <span className="text-xs sm:text-sm text-gray-400 truncate">
+                            ({selectedMember.nameRaw})
+                          </span>
+                        )}
                       <span
                         className={`px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-bold whitespace-nowrap ${
                           selectedMember.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'

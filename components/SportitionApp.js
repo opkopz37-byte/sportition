@@ -25,6 +25,7 @@ export default function SportitionApp() {
   const [currentPage, setCurrentPage] = useState('landing');
   const [role, setRole] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
+  const [tabHistory, setTabHistory] = useState([]);
 
   // profile.role을 항상 우선 신뢰 (role state가 아직 null이어도 렌더링 가능)
   const effectiveRole = profile?.role || role;
@@ -52,6 +53,31 @@ export default function SportitionApp() {
     };
     setSkillRequests([...skillRequests, newRequest]);
   };
+
+  const navigateToTab = (nextTab, options = {}) => {
+    const { replace = false } = options;
+    setActiveTab((prevTab) => {
+      if (!nextTab || prevTab === nextTab) return prevTab;
+      if (!replace) {
+        setTabHistory((prev) => [...prev, prevTab].slice(-100));
+      }
+      return nextTab;
+    });
+  };
+
+  const canGoBack = currentPage === 'app' && activeTab !== 'home';
+  const handleGlobalBack = () => {
+    setTabHistory((prev) => {
+      if (prev.length === 0) {
+        setActiveTab('home');
+        return prev;
+      }
+      const next = [...prev];
+      const last = next.pop();
+      setActiveTab(last || 'home');
+      return next;
+    });
+  };
   
   // 인증 상태 변화 감지 및 자동 화면 전환 (세션만 있으면 앱으로 — 프로필은 비동기로 늦을 수 있음)
   useEffect(() => {
@@ -78,6 +104,7 @@ export default function SportitionApp() {
           r === 'admin'
         ) {
           setActiveTab('home');
+          setTabHistory([]);
         }
       }
     } else if (!isAuthenticated) {
@@ -108,6 +135,7 @@ export default function SportitionApp() {
       role === 'admin'
     ) {
       setActiveTab('home');
+      setTabHistory([]);
     }
   }, [role]);
 
@@ -255,22 +283,22 @@ export default function SportitionApp() {
   const renderPlayerMainRoutes = () => {
     if (activeTab.startsWith('opponent-match-history-')) {
       const opponentId = activeTab.replace('opponent-match-history-', '');
-      return <OpponentMatchHistoryView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
+      return <OpponentMatchHistoryView setActiveTab={navigateToTab} t={t} opponentId={opponentId} />;
     }
     if (activeTab.startsWith('opponent-profile-')) {
       const opponentId = activeTab.replace('opponent-profile-', '');
-      return <OpponentProfileView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
+      return <OpponentProfileView setActiveTab={navigateToTab} t={t} opponentId={opponentId} />;
     }
     switch (activeTab) {
       case 'skills':
       case 'roadmap-active-skills':
       case 'roadmap-skill-tree':
-        return <ActiveSkillsView t={t} setActiveTab={setActiveTab} addSkillRequest={addSkillRequest} />;
+        return <ActiveSkillsView t={t} setActiveTab={navigateToTab} addSkillRequest={addSkillRequest} />;
       case 'ranking':
       case 'ranking-tier-board':
       case 'ranking-style':
       case 'ranking-regional':
-        return <TierBoardView t={t} setActiveTab={setActiveTab} />;
+        return <TierBoardView t={t} setActiveTab={navigateToTab} />;
       default:
         return null;
     }
@@ -278,29 +306,22 @@ export default function SportitionApp() {
 
   const renderMyPageRoutes = () => {
     switch(activeTab) {
-      case 'mypage': return <MyPageView setActiveTab={setActiveTab} t={t} />;
-      case 'settings': return <SettingsView setActiveTab={setActiveTab} t={t} />;
-      case 'mypage-edit-profile': return <EditProfileView setActiveTab={setActiveTab} t={t} />;
-      case 'mypage-privacy': return <PrivacySettingsView setActiveTab={setActiveTab} t={t} />;
-      case 'mypage-terms': return <TermsOfServiceInlineView setActiveTab={setActiveTab} backTab="mypage" />;
-      case 'mypage-activity': return <ActivityHistoryView setActiveTab={setActiveTab} t={t} />;
-      case 'mypage-match-history': return <MatchHistoryView setActiveTab={setActiveTab} t={t} />;
+      case 'mypage': return <MyPageView setActiveTab={navigateToTab} t={t} />;
+      case 'settings': return <SettingsView setActiveTab={navigateToTab} t={t} />;
+      case 'mypage-edit-profile': return <EditProfileView setActiveTab={navigateToTab} t={t} />;
+      case 'mypage-privacy': return <PrivacySettingsView setActiveTab={navigateToTab} t={t} />;
+      case 'mypage-terms': return <TermsOfServiceInlineView setActiveTab={navigateToTab} backTab="mypage" />;
+      case 'mypage-activity': return <ActivityHistoryView setActiveTab={navigateToTab} t={t} />;
+      case 'mypage-match-history': return <MatchHistoryView setActiveTab={navigateToTab} t={t} />;
       case 'mypage-attendance': return (
         <div className="animate-fade-in-up max-w-md mx-auto">
           <div className="mb-4 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setActiveTab('home')}
-              className="w-8 h-8 flex-shrink-0 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-            </button>
             <div>
               <h2 className="text-xl font-bold text-white">{t('attendance')}</h2>
               <p className="text-xs text-gray-500 mt-0.5">{t('dailyCheckIn')}</p>
             </div>
           </div>
-          <DashboardAttendanceInline t={t} setActiveTab={setActiveTab} />
+          <DashboardAttendanceInline t={t} setActiveTab={navigateToTab} />
         </div>
       );
       default: return null;
@@ -309,10 +330,10 @@ export default function SportitionApp() {
 
   const renderCoachRoutes = () => {
     switch(activeTab) {
-      case 'approval': return <ApprovalView setActiveTab={setActiveTab} t={t} />;
-      case 'players': return <PlayersManagementView t={t} setActiveTab={setActiveTab} />;
-      case 'gym-register-member': return <GymNewMemberRegisterView t={t} setActiveTab={setActiveTab} />;
-      case 'match': return <MatchRoomView t={t} setActiveTab={setActiveTab} />;
+      case 'approval': return <ApprovalView setActiveTab={navigateToTab} t={t} />;
+      case 'players': return <PlayersManagementView t={t} setActiveTab={navigateToTab} />;
+      case 'gym-register-member': return <GymNewMemberRegisterView t={t} setActiveTab={navigateToTab} />;
+      case 'match': return <MatchRoomView t={t} setActiveTab={navigateToTab} />;
       default: return null;
     }
   };
@@ -320,11 +341,11 @@ export default function SportitionApp() {
   const renderView = () => {
     if (activeTab.startsWith('opponent-match-history-')) {
       const opponentId = activeTab.replace('opponent-match-history-', '');
-      return <OpponentMatchHistoryView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
+      return <OpponentMatchHistoryView setActiveTab={navigateToTab} t={t} opponentId={opponentId} />;
     }
     if (activeTab.startsWith('opponent-profile-')) {
       const opponentId = activeTab.replace('opponent-profile-', '');
-      return <OpponentProfileView setActiveTab={setActiveTab} t={t} opponentId={opponentId} />;
+      return <OpponentProfileView setActiveTab={navigateToTab} t={t} opponentId={opponentId} />;
     }
     if (
       activeTab === 'home' &&
@@ -335,7 +356,7 @@ export default function SportitionApp() {
     ) {
       return (
         <AppHomeView
-          setActiveTab={setActiveTab}
+          setActiveTab={navigateToTab}
           t={t}
           role={effectiveRole === 'admin' ? 'gym' : effectiveRole}
         />
@@ -370,7 +391,7 @@ export default function SportitionApp() {
       <Navbar
         role={effectiveRole}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={navigateToTab}
         onLogout={handleLogout}
         language={language}
         setLanguage={setLanguage}
@@ -393,6 +414,20 @@ export default function SportitionApp() {
           minHeight: '100vh',
         }}
       >
+        {canGoBack && (
+          <button
+            type="button"
+            onClick={handleGlobalBack}
+            aria-label="뒤로가기"
+            className="fixed left-3 sm:left-4 z-40 w-9 h-9 rounded-full bg-black/65 backdrop-blur border border-white/20 hover:bg-black/80 transition-all flex items-center justify-center"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + clamp(3.9rem, 8.2vw, 6.2rem))' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-100">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+          </button>
+        )}
         {renderView()}
       </main>
     </div>
