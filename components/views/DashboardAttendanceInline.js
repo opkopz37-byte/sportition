@@ -97,6 +97,7 @@ export default function DashboardAttendanceInline({ t = (k) => k, setActiveTab }
 
       // 카드 visual 동기화
       const wasFirstToday = data.already_checked === false;
+      if (wasFirstToday && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(80);
       setTodayChecked(true);
       setWeekAttended((prev) => new Set([...prev, todayYmd]));
       setStats((prev) => ({

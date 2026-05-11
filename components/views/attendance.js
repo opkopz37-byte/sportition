@@ -127,6 +127,7 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
         return;
       }
 
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(80);
       setTodayChecked(true);
       if (typeof result.currentStreak === 'number') {
         setStats((prev) => ({ ...prev, currentStreak: result.currentStreak }));

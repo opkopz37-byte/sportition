@@ -129,6 +129,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
   const [matchResetTickets, setMatchResetTickets] = useState(0);
   const [matchResetBusy, setMatchResetBusy] = useState(false);
   const [pendingAvatarFile, setPendingAvatarFile] = useState(null); // 크롭 모달 열림 트리거
+  const [dataLoading, setDataLoading] = useState(true);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -334,6 +335,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           setSkillProgressWithNodes([]);
         }
       }
+      setDataLoading(false);
     };
 
     loadUserData();
@@ -657,6 +659,45 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
         </div>
       </div>
     ) : null;
+
+  // ── 데이터 로딩 중 스켈레톤 ──
+  if (dataLoading && user?.id) {
+    return (
+      <div className="animate-pulse space-y-3 xs:space-y-4 sm:space-y-6">
+        {/* 프로필 카드 스켈레톤 */}
+        <div className="rounded-2xl bg-white/[0.03] border border-white/8 p-3 xs:p-4 sm:p-6">
+          <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6 pb-3 sm:pb-4 border-b border-white/5">
+            <div className="w-14 h-14 xs:w-16 xs:h-16 sm:w-20 sm:h-20 rounded-full bg-white/10 flex-shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-5 bg-white/10 rounded w-32 sm:w-48" />
+              <div className="h-3 bg-white/8 rounded w-24 sm:w-36" />
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/8 overflow-hidden mb-3">
+            <div className="flex divide-x divide-white/8">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex-1 py-2.5 px-2 text-center">
+                  <div className="h-4 bg-white/10 rounded mx-auto w-8 mb-1.5" />
+                  <div className="h-2.5 bg-white/8 rounded mx-auto w-10" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* 출석/랭킹 카드 스켈레톤 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 xs:gap-4 sm:gap-6">
+          <div className="lg:col-span-2 h-28 sm:h-36 rounded-2xl bg-white/[0.03] border border-white/8" />
+          <div className="h-28 sm:h-36 rounded-2xl bg-white/[0.03] border border-white/8" />
+        </div>
+        {/* 하단 카드 스켈레톤 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 xs:gap-4 sm:gap-6">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-40 sm:h-48 rounded-2xl bg-white/[0.03] border border-white/8" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // ── 체육관 전용 대시보드 (마이페이지에 임베드 — 출석·인사이트·캘린더·관리 메뉴 제외) ──
   const isGymRole = (r) => r === 'gym' || r === 'admin';

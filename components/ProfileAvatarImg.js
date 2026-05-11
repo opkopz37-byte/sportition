@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 
 /**
@@ -27,14 +28,13 @@ export default function ProfileAvatarImg({
       className={`relative overflow-hidden flex items-center justify-center shrink-0 ${showImg ? '' : `${gradientClassName} ${textClassName}`} ${className}`}
     >
       {showImg ? (
-        <img
+        <Image
           src={avatarUrl}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-          referrerPolicy="no-referrer"
-          loading="lazy"
-          decoding="async"
+          fill
+          className="object-cover"
           onError={() => setErrored(true)}
+          sizes="128px"
         />
       ) : gymFallback != null ? (
         <span className={`relative z-0 ${gymFallbackClassName}`} aria-hidden>

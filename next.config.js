@@ -9,6 +9,12 @@ const nextConfig = {
         hostname: 'images.unsplash.com',
         pathname: '/**',
       },
+      {
+        // Supabase Storage — 프로젝트별 서브도메인 (*.supabase.co)
+        protocol: 'https',
+        hostname: '*.supabase.co',
+        pathname: '/storage/**',
+      },
     ],
   },
 

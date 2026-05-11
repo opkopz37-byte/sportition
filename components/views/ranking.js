@@ -344,7 +344,24 @@ const TierBoardView = ({
       {/* 랭킹 리스트 */}
       <div className="divide-y divide-white/5">
         {loading && (
-          <div className="py-16 text-center text-gray-400 text-base">랭킹을 불러오는 중입니다...</div>
+          <div className="animate-pulse divide-y divide-white/5">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <div key={i} className="py-3 sm:py-3.5 px-2 sm:px-3">
+                <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_5.5rem_7rem] sm:grid-cols-[2rem_minmax(0,1fr)_7rem_12rem] gap-2 sm:gap-4 items-center">
+                  <div className="h-4 w-4 bg-white/10 rounded" />
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/10 flex-shrink-0" />
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-3 bg-white/10 rounded w-24 sm:w-32" />
+                      <div className="h-2.5 bg-white/8 rounded w-16 sm:w-20" />
+                    </div>
+                  </div>
+                  <div className="h-5 bg-white/10 rounded-full w-16 sm:w-20" />
+                  <div className="h-2 bg-white/8 rounded w-full" />
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
         {!loading && paginatedPlayers.length === 0 && (

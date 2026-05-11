@@ -1981,6 +1981,7 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
         const others = prev.filter((r) => r.node_id !== nodeId);
         return [...others, { node_id: nodeId, exp_level: newExp, updated_at: new Date().toISOString() }];
       });
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([40, 20, 60]);
       setBurstNodeId(nodeId);
       setBurstKey((k) => k + 1);
       if (burstTimerRef.current) clearTimeout(burstTimerRef.current);

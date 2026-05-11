@@ -22,7 +22,7 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab }) => (
       title={`📊 ${t('insightsDashboard')}`}
       description={t('gymOperationOverview')}
     >
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm transition-all">
           {t('today')}
         </button>

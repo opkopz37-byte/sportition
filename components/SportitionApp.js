@@ -61,12 +61,14 @@ export default function SportitionApp() {
       if (!replace) {
         setTabHistory((prev) => [...prev, prevTab].slice(-100));
       }
+      window.scrollTo({ top: 0, behavior: 'instant' });
       return nextTab;
     });
   };
 
   const canGoBack = currentPage === 'app' && activeTab !== 'home';
   const handleGlobalBack = () => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
     setTabHistory((prev) => {
       if (prev.length === 0) {
         setActiveTab('home');

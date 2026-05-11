@@ -104,6 +104,65 @@ function BirthSelect({ value, onChange, options, suffix = '', placeholder = '선
   );
 }
 
+/**
+ * 레이블·값이 다른 선택 항목을 다크 테마 커스텀 드롭다운으로 표시.
+ * options: string[] (값=레이블) 또는 { value, label }[] 혼용 가능
+ */
+function CustomSelect({ value, onChange, options = [], placeholder = '선택', disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  const normalized = options.map((opt) =>
+    typeof opt === 'string' ? { value: opt, label: opt } : opt
+  );
+  const selectedLabel = normalized.find((o) => o.value === value)?.label ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        className="w-full px-2 sm:px-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white text-left focus:outline-none focus:border-blue-500 transition-all text-sm flex items-center justify-between disabled:opacity-60"
+      >
+        <span className={selectedLabel ? 'text-white' : 'text-gray-500'}>
+          {selectedLabel ?? placeholder}
+        </span>
+        <span className="text-gray-500 text-xs">▾</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-gray-900 border border-white/10 rounded-lg shadow-xl">
+          {normalized.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                opt.value === value ? 'bg-blue-500/20 text-blue-400' : 'text-white hover:bg-white/10'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // 로그인 모달
 const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => key }) => {
   const [email, setEmail] = useState('');
@@ -650,19 +709,23 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   };
 
   return (
-<div className="relative z-10 min-h-screen flex items-center justify-center p-6">
+<div className="relative z-10 min-h-screen flex items-start md:items-center justify-center px-4 py-20 md:py-8">
   <BackgroundGrid theme={{ accent: 'blue' }} />
   
   <button
     onClick={step === 1 ? onBack : () => setStep(1)}
-    className="fixed top-6 left-6 z-50 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2"
+    className="fixed z-50 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2"
+    style={{
+      top: 'max(env(safe-area-inset-top), 24px)',
+      left: 'max(env(safe-area-inset-left), 24px)',
+    }}
   >
     <Icon type="arrowRight" size={16} className="rotate-180" />
     {step === 1 ? t('back') : '이전'}
   </button>
 
   <div className="w-full max-w-lg">
-    <SpotlightCard className="p-8">
+    <SpotlightCard className="p-5 xs:p-6 sm:p-8">
       {/* 진행 표시 바 */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
@@ -1147,19 +1210,13 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">복싱 스타일</label>
-                    <select
+                    <CustomSelect
                       value={formData.boxingStyle}
-                      onChange={(e) => setFormData({...formData, boxingStyle: e.target.value})}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all"
+                      onChange={(v) => setFormData({ ...formData, boxingStyle: v })}
+                      options={['아웃복서', '인파이터', '스워머', '펀처', '카운터 펀처']}
+                      placeholder="선택하세요"
                       disabled={loading}
-                    >
-                      <option value="">선택하세요</option>
-                      <option value="아웃복서">아웃복서</option>
-                      <option value="인파이터">인파이터</option>
-                      <option value="스워머">스워머</option>
-                      <option value="펀처">펀처</option>
-                      <option value="카운터 펀처">카운터 펀처</option>
-                    </select>
+                    />
                   </div>
                 </>
               )}
@@ -1214,21 +1271,21 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
 
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">지역 *</label>
-                <select
+                <CustomSelect
                   value={formData.region}
-                  onChange={(e) => setFormData({...formData, region: e.target.value})}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                  onChange={(v) => setFormData({ ...formData, region: v })}
+                  options={[
+                    { value: 'seoul',       label: '서울' },
+                    { value: 'gyeonggi',    label: '경기' },
+                    { value: 'gangwon',     label: '강원' },
+                    { value: 'chungcheong', label: '충청' },
+                    { value: 'jeolla',      label: '전라' },
+                    { value: 'gyeongsang',  label: '경상' },
+                    { value: 'jeju',        label: '제주' },
+                  ]}
+                  placeholder="선택하세요"
                   disabled={loading}
-                >
-                  <option value="">선택하세요</option>
-                  <option value="seoul">서울</option>
-                  <option value="gyeonggi">경기</option>
-                  <option value="gangwon">강원</option>
-                  <option value="chungcheong">충청</option>
-                  <option value="jeolla">전라</option>
-                  <option value="gyeongsang">경상</option>
-                  <option value="jeju">제주</option>
-                </select>
+                />
                 <p className="mt-1.5 text-xs text-gray-500">
                   지역에 따라 가입 직후 고유 체육관 코드가 자동 발급됩니다 (예: 경기 → GG0002).
                 </p>
