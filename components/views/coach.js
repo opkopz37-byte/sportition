@@ -525,6 +525,7 @@ function mapGymMemberRow(row) {
     draws,
     totalMatches,
     winRate: winRatePct,
+    skillPoints: row.skill_points != null ? Number(row.skill_points) : 0,
     recentRecords: [],
     skills: [],
   };
@@ -892,6 +893,9 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [deleteEmailInput, setDeleteEmailInput] = useState('');
   const [deletingMember, setDeletingMember] = useState(false);
   const [actionMessage, setActionMessage] = useState(null);
+  const [showSpModal, setShowSpModal] = useState(false);
+  const [spAmount, setSpAmount] = useState('');
+  const [spSaving, setSpSaving] = useState(false);
 
   const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
 
@@ -1094,6 +1098,51 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     }
   };
 
+  const runGrantSkillPoints = async () => {
+    if (!selectedMember?.id) return;
+    const parsed = parseInt(spAmount, 10);
+    if (Number.isNaN(parsed) || parsed === 0) {
+      setActionMessage({ type: 'err', text: '0이 아닌 정수를 입력해 주세요.' });
+      return;
+    }
+    setSpSaving(true);
+    setActionMessage(null);
+    try {
+      const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
+      if (typeof isSupabaseConfigured === 'function' && !isSupabaseConfigured()) {
+        setActionMessage({ type: 'err', text: 'Supabase가 설정되지 않았습니다.' });
+        return;
+      }
+      const supa = getSupabase();
+      const { data: sessionData } = await supa.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        setActionMessage({ type: 'err', text: '로그인이 필요합니다.' });
+        return;
+      }
+      const res = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}/skill-points`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: parsed }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: json.error || 'SP 지급에 실패했습니다.' });
+        return;
+      }
+      setShowSpModal(false);
+      setSpAmount('');
+      const label = parsed > 0 ? `+${parsed}` : String(parsed);
+      setActionMessage({ type: 'ok', text: `스킬 포인트 ${label} SP 지급 완료 (잔여: ${json.skill_points} SP)` });
+      setSelectedMember((prev) => (prev ? { ...prev, skillPoints: json.skill_points } : prev));
+      await loadMembers();
+    } catch (e) {
+      setActionMessage({ type: 'err', text: e.message || 'SP 지급에 실패했습니다.' });
+    } finally {
+      setSpSaving(false);
+    }
+  };
+
   const closeMemberModal = () => {
     setSelectedMember(null);
     setMemberDetailMode('info');
@@ -1103,6 +1152,8 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     setActionMessage(null);
     setAttendanceRows([]);
     setShowResetPw(false);
+    setShowSpModal(false);
+    setSpAmount('');
   };
 
   const loadMembers = useCallback(async () => {
@@ -1476,7 +1527,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
             {/* 액션 버튼 — 상단 배치 (info 모드) */}
             {memberDetailMode === 'info' && (
               <div className="px-4 sm:px-5 pt-3 sm:pt-4 flex-shrink-0">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -1496,6 +1547,17 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                     className="py-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/20 hover:border-white/30 text-white rounded-lg font-semibold text-sm transition-all"
                   >
                     출석 기록
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionMessage(null);
+                      setSpAmount('');
+                      setShowSpModal(true);
+                    }}
+                    className="py-2.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 hover:border-purple-500/50 text-purple-300 rounded-lg font-semibold text-sm transition-all"
+                  >
+                    SP 지급
                   </button>
                   <button
                     type="button"
@@ -1601,6 +1663,12 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                         <span className="text-sm text-gray-400 whitespace-nowrap">신장</span>
                         <span className="text-sm text-white font-medium whitespace-nowrap tabular-nums">
                           {selectedMember.height != null ? `${selectedMember.height}cm` : '—'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
+                        <span className="text-sm text-gray-400 whitespace-nowrap">스킬 포인트</span>
+                        <span className="text-sm font-bold whitespace-nowrap tabular-nums text-purple-300">
+                          {selectedMember.skillPoints ?? 0} SP
                         </span>
                       </div>
                       <div className="flex justify-between py-2 gap-3">
@@ -1831,6 +1899,62 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                       className="flex-1 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold disabled:opacity-50"
                     >
                       {resettingPw ? '초기화 중…' : '123456으로 초기화'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 스킬 포인트 지급 모달 */}
+            {showSpModal && (
+              <div className="absolute inset-0 z-40 flex items-center justify-center p-3 sm:p-6 rounded-2xl bg-black/80 backdrop-blur-sm">
+                <div
+                  className="w-full max-w-sm rounded-2xl border border-purple-500/40 bg-[#111] p-5 sm:p-6 shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className="text-lg font-bold text-purple-300 mb-1">스킬 포인트 지급</h3>
+                  <p className="text-sm text-gray-400 mb-1">
+                    <strong className="text-white">{selectedMember.name}</strong> 회원
+                  </p>
+                  <p className="text-xs text-gray-500 mb-4">
+                    현재 보유: <span className="text-purple-300 font-bold">{selectedMember.skillPoints ?? 0} SP</span>
+                    &nbsp;·&nbsp;양수 입력 시 지급, 음수 입력 시 차감됩니다.
+                  </p>
+                  <input
+                    type="number"
+                    value={spAmount}
+                    onChange={(e) => setSpAmount(e.target.value)}
+                    placeholder="예: 5 또는 -2"
+                    className="w-full rounded-lg border border-purple-500/30 bg-white/5 px-3 py-2.5 text-sm text-white mb-1 focus:outline-none focus:border-purple-400"
+                    inputMode="numeric"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') runGrantSkillPoints();
+                    }}
+                  />
+                  {actionMessage?.type === 'err' && actionMessage.text && (
+                    <p className="text-red-300 text-xs mb-3 break-words">{actionMessage.text}</p>
+                  )}
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSpModal(false);
+                        setSpAmount('');
+                        setActionMessage(null);
+                      }}
+                      disabled={spSaving}
+                      className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold disabled:opacity-50"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={runGrantSkillPoints}
+                      disabled={spSaving || !spAmount.trim()}
+                      className="flex-1 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold disabled:opacity-50"
+                    >
+                      {spSaving ? '처리 중…' : '확인'}
                     </button>
                   </div>
                 </div>

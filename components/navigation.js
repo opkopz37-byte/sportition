@@ -7,6 +7,13 @@ import { useAuth } from '@/lib/AuthContext';
 import { searchPublicPlayerProfiles } from '@/lib/supabase';
 import { getTierColor } from '@/lib/tierLadder';
 
+// 테마별 활성 스타일 (JIT 누락 방지를 위해 literal 클래스 사용)
+const ACCENT_ACTIVE = {
+  blue:    { bg: 'bg-blue-500/15 ring-1 ring-blue-500/30',    text: 'text-blue-300',    icon: 'text-blue-400'    },
+  emerald: { bg: 'bg-emerald-500/15 ring-1 ring-emerald-500/30', text: 'text-emerald-300', icon: 'text-emerald-400' },
+  purple:  { bg: 'bg-purple-500/15 ring-1 ring-purple-500/30',  text: 'text-purple-300',  icon: 'text-purple-400'  },
+};
+
 // 네비게이션 메뉴 아이템
 const navItemIsActive = (item, activeTab) => {
   if (activeTab === item.id) return true;
@@ -47,15 +54,24 @@ return () => {
   onMouseEnter={handleMouseEnter}
   onMouseLeave={handleMouseLeave}
 >
-  <button
+    <button
     type="button"
     onClick={() => !hasSubmenus && setActiveTab(item.id)}
-    className={`shrink-0 whitespace-nowrap px-[clamp(0.5rem,1.5vw,1rem)] py-[clamp(0.375rem,1vw,0.5rem)] rounded-lg text-[clamp(0.75rem,calc(0.9vw+0.4rem),0.875rem)] font-medium transition-all duration-200 flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] relative ${
-      itemActive ? 'text-white bg-white/5' : 'text-gray-500 hover:text-gray-300'
+    className={`shrink-0 whitespace-nowrap px-[clamp(0.5rem,1.5vw,1rem)] py-[clamp(0.375rem,1vw,0.5rem)] rounded-lg text-[clamp(0.75rem,calc(0.9vw+0.4rem),0.875rem)] font-semibold transition-all duration-200 flex items-center gap-[clamp(0.25rem,1vw,0.5rem)] relative ${
+      itemActive
+        ? ACCENT_ACTIVE[theme.accent]?.bg || 'bg-white/10'
+        : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.05]'
     }`}
   >
-    <Icon type={item.icon} className={`w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0 ${itemActive ? `text-${theme.accent}-400` : ''}`} />
-    <span className="whitespace-nowrap">{t(item.labelKey)}</span>
+    <Icon
+      type={item.icon}
+      className={`w-[clamp(0.875rem,2.2vw,1rem)] h-[clamp(0.875rem,2.2vw,1rem)] shrink-0 ${
+        itemActive ? (ACCENT_ACTIVE[theme.accent]?.icon || 'text-white') : ''
+      }`}
+    />
+    <span className={`whitespace-nowrap ${
+      itemActive ? (ACCENT_ACTIVE[theme.accent]?.text || 'text-white') : ''
+    }`}>{t(item.labelKey)}</span>
     {item.alert && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full" />}
   </button>
 
@@ -195,7 +211,7 @@ return (
   return (
 <>
   <header
-    className="fixed top-0 inset-x-0 z-50 min-h-[clamp(2.75rem,7vw,4rem)] border-b border-white/5 bg-black/50 backdrop-blur-xl flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-[clamp(0.375rem,2vw,1.5rem)] py-2 min-w-0 overflow-visible"
+    className="fixed top-0 inset-x-0 z-50 min-h-[clamp(2.75rem,7vw,4rem)] border-b border-white/10 bg-[#0A0A0A] flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-[clamp(0.375rem,2vw,1.5rem)] py-2 min-w-0 overflow-visible"
     style={{
       // iOS 노치 아래로 안 가도록 — safe-area-inset-top 만큼 위쪽 padding
       paddingTop: 'max(env(safe-area-inset-top), 8px)',
@@ -458,15 +474,6 @@ return (
       <div className="fixed top-0 left-0 h-full w-64 sm:w-72 bg-[#0A0A0A] border-r border-white/10 z-50 xl:hidden overflow-y-auto animate-fade-in-up">
         <div className="flex items-center justify-between p-3 border-b border-white/10">
           <div className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-              theme.accent === 'blue' 
-                ? 'bg-blue-500/20 text-blue-500' 
-                : theme.accent === 'emerald'
-                ? 'bg-emerald-500/20 text-emerald-500'
-                : 'bg-purple-500/20 text-purple-500'
-            }`}>
-              {role === 'player_common' ? <Icon type="zap" size={16} fill="currentColor" /> : role === 'player_athlete' ? <Icon type="target" size={16} /> : <Icon type="home" size={16} />}
-            </div>
             <span className="font-bold text-white text-sm">Menu</span>
           </div>
           <button 

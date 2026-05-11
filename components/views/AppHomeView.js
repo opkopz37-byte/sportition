@@ -193,9 +193,22 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
             </div>
           )}
           {showResults && searchQuery.trim() && searchResults.length === 0 && (
-            <p className="absolute left-0 right-0 top-full mt-2 text-sm text-gray-500 text-center">
-              {t('noSearchResults')}
-            </p>
+            <div className="absolute left-0 right-0 top-full mt-2 rounded-2xl border border-white/[0.08] bg-[#121212] shadow-xl z-20 px-4 py-8 text-center">
+              <svg className="mx-auto mb-2 w-8 h-8 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <p className="text-gray-400 text-sm font-medium mb-1">&ldquo;{searchQuery}&rdquo; 검색 결과가 없어요</p>
+              <p className="text-gray-600 text-xs">
+                {t('noSearchResults') || '이름을 정확히 입력했는지 확인해보세요'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('ranking')}
+                className="mt-4 text-xs px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.10] text-gray-400 hover:text-gray-200 transition-colors border border-white/10"
+              >
+                전체 랭킹 보기 →
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -204,51 +217,58 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
       <div className="mt-10 sm:mt-14 flex flex-col gap-3 w-full max-w-6xl mx-auto">
         {!isGym ? (
           <>
+            {/* 주요 액션 — 에메랄드 강조 */}
             <button
               type="button"
               onClick={() => setActiveTab('mypage-attendance')}
-              className="w-full py-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold text-base sm:text-lg transition-colors"
+              className="w-full py-4 rounded-xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold text-base sm:text-lg transition-colors shadow-[0_0_20px_rgba(16,185,129,0.08)]"
             >
               {t('attendance')}
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('mypage')}
-              className="w-full py-4 rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] text-white font-bold text-base sm:text-lg transition-colors"
-            >
-              {t('myPage')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('skills')}
-              className="w-full py-4 rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] text-white font-bold text-base sm:text-lg transition-colors"
-            >
-              {t('skillsNav')}
-            </button>
+            {/* 보조 액션 — 2열 그리드 */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab('mypage')}
+                className="py-4 rounded-xl border border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 font-semibold text-base sm:text-lg transition-colors"
+              >
+                {t('myPage')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('skills')}
+                className="py-4 rounded-xl border border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 font-semibold text-base sm:text-lg transition-colors"
+              >
+                {t('skillsNav')}
+              </button>
+            </div>
           </>
         ) : (
           <>
+            {/* 체육관 주요 액션 — 스파링 강조 */}
             <button
               type="button"
               onClick={() => setActiveTab('match')}
-              className="w-full py-4 rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] text-white font-bold text-base sm:text-lg transition-colors"
+              className="w-full py-4 rounded-xl border border-purple-500/40 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 font-bold text-base sm:text-lg transition-colors shadow-[0_0_20px_rgba(168,85,247,0.08)]"
             >
               {t('homeSparring')}
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('approval')}
-              className="w-full py-4 rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] text-white font-bold text-base sm:text-lg transition-colors"
-            >
-              {t('homeSkillApproval')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('players')}
-              className="w-full py-4 rounded-xl border border-white/[0.12] bg-[#121212] hover:bg-white/[0.06] text-white font-bold text-base sm:text-lg transition-colors"
-            >
-              {t('homeMemberList')}
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab('approval')}
+                className="py-4 rounded-xl border border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 font-semibold text-base sm:text-lg transition-colors"
+              >
+                {t('homeSkillApproval')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('players')}
+                className="py-4 rounded-xl border border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 font-semibold text-base sm:text-lg transition-colors"
+              >
+                {t('homeMemberList')}
+              </button>
+            </div>
           </>
         )}
       </div>

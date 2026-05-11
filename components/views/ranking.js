@@ -365,11 +365,34 @@ const TierBoardView = ({
         )}
 
         {!loading && paginatedPlayers.length === 0 && (
-          <div className="py-16 text-center text-gray-400 text-base">표시할 선수가 없습니다.</div>
+          <div className="py-16 text-center">
+            <svg className="mx-auto mb-3 w-10 h-10 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <p className="text-gray-400 font-medium mb-1">
+              {playerSearch.trim() ? `"${playerSearch}" 검색 결과가 없어요` : '표시할 선수가 없습니다'}
+            </p>
+            {playerSearch.trim() && (
+              <p className="text-gray-600 text-sm mb-4">이름·소속·스타일을 다시 확인해보세요</p>
+            )}
+            {(playerSearch.trim() || selectedTier !== 'All') && (
+              <button
+                type="button"
+                onClick={() => { setPlayerSearch(''); setSelectedTier('All'); setCurrentPage(1); }}
+                className="text-sm px-4 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.10] text-gray-300 transition-colors border border-white/10"
+              >
+                필터 초기화
+              </button>
+            )}
+          </div>
         )}
 
         {paginatedPlayers.map((player) => {
           const rank = player.rank_label || player.match_rank || '-';
+          const rankNum = Number(player.match_rank) || Number(player.rank_label);
+          const isTop1 = rankNum === 1;
+          const isTop2 = rankNum === 2;
+          const isTop3 = rankNum === 3;
           const isHighlight = Boolean(searchQ && matchesNameQuery(player, searchQ));
           const isFirstTarget = isHighlight && !firstHighlightAssigned;
           if (isFirstTarget) firstHighlightAssigned = true;
@@ -379,24 +402,39 @@ const TierBoardView = ({
           const winPct = total > 0 ? (wins / total) * 100 : 50;
           const displayWinRate = Number(player.win_rate) || (total > 0 ? Math.round((wins / total) * 100) : 0);
 
+          const topRowClass = isTop1
+            ? 'bg-amber-500/[0.07] border border-amber-500/25 rounded-lg'
+            : isTop2
+            ? 'bg-slate-400/[0.06] border border-slate-400/20 rounded-lg'
+            : isTop3
+            ? 'bg-amber-700/[0.08] border border-amber-700/20 rounded-lg'
+            : '';
+
           return (
             <button
               key={player.id}
               type="button"
               id={isFirstTarget ? 'tier-board-search-target' : undefined}
               onClick={() => goPlayer(player.id)}
-              className={`w-full py-3 sm:py-3.5 px-2 sm:px-3 hover:bg-white/[0.04] transition-all text-left group ${isHighlight ? 'ring-2 ring-cyan-400/45 rounded-lg' : ''}`}
+              className={`w-full py-3 sm:py-3.5 px-2 sm:px-3 hover:bg-white/[0.04] transition-all text-left group ${topRowClass} ${isHighlight ? 'ring-2 ring-cyan-400/45 rounded-lg' : ''}`}
             >
               <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_5.5rem_7rem] sm:grid-cols-[2rem_minmax(0,1fr)_7rem_12rem] gap-2 sm:gap-4 items-center">
                 {/* 순위 */}
-                <div className="text-sm sm:text-lg font-bold text-gray-500 tabular-nums">{rank}</div>
+                <div className={`text-sm sm:text-lg font-bold tabular-nums ${
+                  isTop1 ? 'text-amber-400' : isTop2 ? 'text-slate-300' : isTop3 ? 'text-amber-600' : 'text-gray-500'
+                }`}>{rank}</div>
 
                 {/* 선수 */}
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                   <ProfileAvatarImg
                     avatarUrl={player.avatar_url}
                     name={player.display_name}
-                    className="w-8 h-8 sm:w-11 sm:h-11 rounded-full text-xs sm:text-base"
+                    className={`w-8 h-8 sm:w-11 sm:h-11 rounded-full text-xs sm:text-base ${
+                      isTop1 ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-[#0c1024]' :
+                      isTop2 ? 'ring-2 ring-slate-300 ring-offset-1 ring-offset-[#0c1024]' :
+                      isTop3 ? 'ring-2 ring-amber-600 ring-offset-1 ring-offset-[#0c1024]' :
+                      ''
+                    }`}
                     gradientClassName="bg-gradient-to-br from-blue-500/80 to-purple-600/80"
                   />
                   <h3 className="text-lg sm:text-xl font-bold text-white truncate leading-tight">
@@ -445,32 +483,52 @@ const TierBoardView = ({
 
       {totalPages > 1 && (
         <div className="mt-6 pt-5 border-t border-white/10">
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+            {/* 이전 버튼 */}
             <button
               onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
               disabled={currentPage === 1}
-              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all"
+              className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all text-sm"
             >
               ←
             </button>
 
-            {[...Array(Math.min(5, totalPages))].map((_, i) => {
-              const pageNum = i + 1;
-              return (
+            {/* 첫 페이지 + 앞 줄임표 */}
+            {currentPage > 3 && (
+              <>
+                <button onClick={() => setCurrentPage(1)} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-bold transition-all">1</button>
+                {currentPage > 4 && <span className="text-gray-600 px-1">…</span>}
+              </>
+            )}
+
+            {/* 현재 페이지 중심 ±2 범위 */}
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p >= currentPage - 2 && p <= currentPage + 2)
+              .map((pageNum) => (
                 <button
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
-                  className={`w-10 h-10 rounded-lg font-bold transition-all ${currentPage === pageNum ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10 text-gray-400'}`}
+                  className={`w-9 h-9 rounded-lg font-bold transition-all text-sm ${
+                    currentPage === pageNum ? 'bg-white text-black' : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                  }`}
                 >
                   {pageNum}
                 </button>
-              );
-            })}
+              ))}
 
+            {/* 뒤 줄임표 + 마지막 페이지 */}
+            {currentPage < totalPages - 2 && (
+              <>
+                {currentPage < totalPages - 3 && <span className="text-gray-600 px-1">…</span>}
+                <button onClick={() => setCurrentPage(totalPages)} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-bold transition-all">{totalPages}</button>
+              </>
+            )}
+
+            {/* 다음 버튼 */}
             <button
               onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
               disabled={currentPage === totalPages}
-              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all"
+              className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all text-sm"
             >
               →
             </button>

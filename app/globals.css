@@ -9,6 +9,22 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 버튼 프레스 피드백 — 눌렸을 때 살짝 줄어드는 효과 */
+@layer base {
+  button {
+    transition-property: transform;
+    transition-duration: 80ms;
+    transition-timing-function: ease;
+  }
+}
+button:not([disabled]):active {
+  transform: scale(0.96);
+}
+/* 스킬 페이지 — 프레스 애니메이션 제외 (카드 자체 애니메이션과 충돌 방지) */
+.no-press-animation button:not([disabled]):active {
+  transform: none;
+}
+
 /* 챌린저 티어 — 가장 화려한 글로우 + 골드↔사이안 색상 펄스 */
 @keyframes tier-challenger-glow {
   0%, 100% {

@@ -2206,7 +2206,7 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
   const currentTabReady = isTabAdvanced(currentTab.key);
 
   return (
-    <div className="animate-fade-in-up space-y-3 sm:space-y-4">
+    <div className="animate-fade-in-up space-y-3 sm:space-y-4 no-press-animation">
       {/* 탭 해금 축하 오버레이 */}
       <UnlockCelebration tab={celebrationTab} onDone={() => setCelebrationTab(null)} />
 

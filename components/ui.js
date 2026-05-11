@@ -81,7 +81,7 @@ const THEME_COACH = THEME_PLAYER_ATHLETE;
 // 페이지 헤더 컴포넌트 (뒤로가기 버튼 포함)
 const PageHeader = ({ title, description, onBack, children }) => (
   <div className="mb-3 sm:mb-6">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
       <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
         {onBack && (
           <button
@@ -104,7 +104,7 @@ const PageHeader = ({ title, description, onBack, children }) => (
         </div>
       </div>
       {children && (
-        <div className="w-full sm:w-auto flex-shrink-0 flex flex-wrap gap-2 sm:justify-end">{children}</div>
+        <div className="flex-shrink-0 flex flex-wrap gap-2 justify-end">{children}</div>
       )}
     </div>
   </div>
