@@ -30,6 +30,12 @@
   animation: tier-challenger-glow 2.0s ease-in-out infinite;
 }
 
+/* 프로필 로딩 인디케이터 바 (방식 A — 왕복 슬라이드) */
+@keyframes loading-slide {
+  0% { transform: translateX(-200%); }
+  100% { transform: translateX(450%); }
+}
+
 html, body {
   width: 100%;
   /* 정적 100vh — 모바일 toolbar 토글 시 전체 reflow 방지.

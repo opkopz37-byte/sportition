@@ -461,6 +461,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   const normalizeGymCode = (raw) => String(raw || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6);
 
   // 체육관 코드 입력 → 디바운스 후 lookup_gym_by_code RPC 호출
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- GYM_CODE_REGEX는 컴포넌트 외부 상수와 동일하게 불변
   useEffect(() => {
     const isMember = formData.role === 'player_common' || formData.role === 'player_athlete';
     if (!isMember) {

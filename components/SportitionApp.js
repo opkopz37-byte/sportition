@@ -21,7 +21,7 @@ const devLog = (...args) => {
 };
 
 export default function SportitionApp() {
-  const { user, profile, isAuthenticated, loading, profileLoadError, refreshProfile } = useAuth();
+  const { user, profile, isAuthenticated, loading, profileLoading, isOnline, profileLoadError, refreshProfile } = useAuth();
   const [currentPage, setCurrentPage] = useState('landing');
   const [role, setRole] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
@@ -32,6 +32,16 @@ export default function SportitionApp() {
   const [signupInitialRole, setSignupInitialRole] = useState('player_common');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [language, setLanguage] = useState('ko');
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    try {
+      await refreshProfile();
+    } finally {
+      setIsRetrying(false);
+    }
+  };
   
   const [skillRequests, setSkillRequests] = useState([
     { id: 1, playerName: '김철수', skillName: '기본 펀치', skillType: 'active', status: 'pending', requestDate: '2024-02-07 14:30', tier: 'Master I' },
@@ -192,17 +202,28 @@ export default function SportitionApp() {
   };
 
   // 로딩 중일 때
-  if (loading) {
+  // 통합 로딩 화면: 세션 확인 중 OR 로그인된 사용자의 프로필 로딩 중
+  // currentPage에 의존하지 않아 타이밍 공백으로 인한 랜딩 페이지 노출 방지
+  const isProfileLoading = user && !profile && profileLoading;
+  if (loading || isProfileLoading) {
+    const loadingText = isProfileLoading ? '프로필을 불러오는 중입니다' : '접속 확인 중입니다';
     return (
-      <div className="relative min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="relative min-h-screen bg-black text-white flex flex-col items-center justify-center px-4">
         <BackgroundGrid theme={{ accent: 'blue' }} />
-        <div className="relative z-10 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/20 text-blue-400 mb-4 animate-pulse">
+        <div className="relative z-10 text-center max-w-sm w-full">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/20 text-blue-400 mb-5 animate-pulse">
             <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
               <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />
             </svg>
           </div>
-          <p className="text-gray-400">로딩 중...</p>
+          <p className="text-white font-medium mb-1">{loadingText}</p>
+          <p className="text-gray-500 text-sm mb-6">잠시만 기다려 주세요...</p>
+          <div className="w-full bg-white/5 rounded-full h-1 overflow-hidden mx-auto max-w-xs">
+            <div
+              className="h-full w-1/3 bg-blue-500 rounded-full"
+              style={{ animation: 'loading-slide 1.2s ease-in-out infinite' }}
+            />
+          </div>
         </div>
       </div>
     );
@@ -244,27 +265,69 @@ export default function SportitionApp() {
     );
   }
 
-  // 세션은 있는데 users 행이 없거나 로드 실패 시 (RLS 등) — 랜딩에 붙지 않도록 별도 안내
-  if (currentPage === 'app' && isAuthenticated && user && !profile && !loading) {
+  // 네트워크 끊김 — 로그인 후 프로필 로드 중 연결 단절
+  if (!isOnline && user && !profile) {
     return (
       <div className="relative min-h-screen bg-black text-white flex flex-col items-center justify-center px-4">
         <BackgroundGrid theme={{ accent: 'blue' }} />
-        <div className="relative z-10 text-center max-w-md">
-          <p className="text-gray-200 mb-2 font-medium">프로필을 불러오지 못했습니다.</p>
-          <p className="text-gray-500 text-sm mb-3">네트워크·DB 권한을 확인하거나 잠시 후 다시 시도해 주세요.</p>
-          {profileLoadError ? (
-            <p className="text-amber-200/90 text-xs text-left mb-6 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 break-words font-mono leading-relaxed">
+        <div className="relative z-10 text-center max-w-sm">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 mb-5">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M8.111 8.111A8.5 8.5 0 0112 7c1.88 0 3.621.61 5.04 1.64M5.5 10.5a9.48 9.48 0 012.61-2.39M12 19.5a2 2 0 100-4 2 2 0 000 4z" />
+            </svg>
+          </div>
+          <p className="text-white font-semibold text-lg mb-2">인터넷 연결이 끊겼습니다</p>
+          <p className="text-gray-400 text-sm leading-relaxed">
+            Wi-Fi 또는 모바일 데이터를 확인하고<br />다시 시도해 주세요.
+          </p>
+          <p className="text-gray-600 text-xs mt-4">연결이 복구되면 자동으로 계속됩니다.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 세션은 있는데 프로필 로드 실패 — 진짜 에러 (5초 초과 or Supabase/RLS 오류)
+  if (currentPage === 'app' && isAuthenticated && user && !profile && !loading && !profileLoading) {
+    const isNetworkError =
+      profileLoadError?.includes('fetch') ||
+      profileLoadError?.includes('network') ||
+      profileLoadError?.includes('시간이 초과');
+
+    return (
+      <div className="relative min-h-screen bg-black text-white flex flex-col items-center justify-center px-4">
+        <BackgroundGrid theme={{ accent: 'blue' }} />
+        <div className="relative z-10 text-center max-w-md w-full">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/20 text-red-400 mb-5">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          </div>
+          <p className="text-white font-semibold text-lg mb-2">계정 정보를 불러오지 못했습니다</p>
+          <p className="text-gray-400 text-sm mb-4 leading-relaxed">
+            {isNetworkError
+              ? '서버 응답이 너무 오래 걸립니다.\n네트워크 상태를 확인하고 다시 시도해 주세요.'
+              : '계정 데이터를 불러오는 중 오류가 발생했습니다.\n잠시 후 다시 시도해 주세요.'}
+          </p>
+          {profileLoadError && (
+            <p className="text-amber-200/80 text-xs text-left mb-5 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 break-words font-mono leading-relaxed">
               {profileLoadError}
             </p>
-          ) : (
-            <p className="text-gray-600 text-xs mb-6">상세 오류가 없습니다. Network 탭에서 <span className="text-gray-400">supabase.co</span> 요청의 실패 응답을 확인해 주세요.</p>
           )}
           <button
             type="button"
-            onClick={() => refreshProfile()}
-            className="px-5 py-2.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-200 font-bold text-sm"
+            onClick={handleRetry}
+            disabled={isRetrying}
+            className="px-6 py-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-200 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
           >
-            다시 시도
+            {isRetrying ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                다시 시도 중...
+              </>
+            ) : '다시 시도'}
           </button>
         </div>
       </div>

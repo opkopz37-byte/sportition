@@ -350,6 +350,7 @@ export default function AvatarCropModal({ file, onCancel, onCropped }) {
           >
             {ready ? (
               <>
+                {/* eslint-disable-next-line @next/next/no-img-element -- blob: URL 크롭 프리뷰, next/image는 blob 미지원 */}
                 <img
                   ref={imgElRef}
                   src={imgUrl}
