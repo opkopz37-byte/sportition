@@ -1227,12 +1227,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     };
     start();
 
-    const poll = setInterval(() => {
-      if (!cancelled && typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        loadMembers();
-      }
-    }, 20000);
-
     const onVis = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') loadMembers();
     };
@@ -1240,7 +1234,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
 
     return () => {
       cancelled = true;
-      clearInterval(poll);
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis);
       import('@/lib/supabase').then(({ getSupabase }) => {
         if (channel) getSupabase().removeChannel(channel);

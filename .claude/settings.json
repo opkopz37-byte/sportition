@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('components/views/mypage.js', 'utf8'\\), { sourceType: 'module', plugins: ['jsx'] }\\); console.log\\('✅ mypage.js 문법 OK'\\);\")",
+      "Bash(npx eslint *)",
+      "Bash(git submodule *)",
+      "Bash(git ls-tree *)",
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)",
+      "Bash(xargs cat *)",
+      "Bash(grep -E \"\\\\.js$|\\\\.jsx$|\\\\.tsx$\")",
+      "Bash(grep -E \"\\\\.js$\")"
+    ]
+  }
+}
