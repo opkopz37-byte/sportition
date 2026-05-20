@@ -25,13 +25,14 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
     currentStreak: 0,
     longestStreak: 0,
     thisMonth: 0,
-    skillPointsEarned: 0
   });
   const [modalState, setModalState] = useState({
     open: false,
     alreadyClaimed: false,
     pendingPromotion: null,
   });
+  // 출석 차단 안내 (활성 스킬 없을 때 등) — alert 대신 카드로 표시
+  const [checkInBlocked, setCheckInBlocked] = useState(null);
 
   const loadAttendanceData = useCallback(async () => {
     if (!user?.id) return;
@@ -51,7 +52,6 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
         todayResult,
         recentResult,
         statsResult,
-        userRowResult,
         monthCountResult,
       ] = await Promise.all([
         supabase
@@ -66,7 +66,6 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
           .select('total_attendance, current_streak, longest_streak')
           .eq('user_id', user.id)
           .maybeSingle(),
-        supabase.from('users').select('skill_points').eq('id', user.id).maybeSingle(),
         supabase
           .from('attendance')
           .select('*', { count: 'exact', head: true })
@@ -76,31 +75,18 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
 
       const recentRows = recentResult?.data || [];
 
-      console.log('[Attendance] 데이터 로딩 완료:', {
-        todayChecked: !!todayResult?.data,
-        recentCount: recentRows.length,
-        stats: statsResult?.data,
-        skillPoints: userRowResult?.data?.skill_points,
-        monthCount: monthCountResult?.count,
-      });
-
       setTodayChecked(!!todayResult?.data);
       setAttendanceData(todayResult?.data);
       setRecentAttendance(recentRows);
 
       const s = statsResult?.data;
       const monthCnt = typeof monthCountResult?.count === 'number' ? monthCountResult.count : 0;
-      const skillPts =
-        userRowResult?.data?.skill_points != null
-          ? Number(userRowResult.data.skill_points)
-          : 0;
 
       setStats({
         totalDays: s?.total_attendance != null ? Number(s.total_attendance) : 0,
         currentStreak: s?.current_streak != null ? Number(s.current_streak) : 0,
         longestStreak: s?.longest_streak != null ? Number(s.longest_streak) : 0,
         thisMonth: monthCnt,
-        skillPointsEarned: skillPts,
       });
     } catch (error) {
       console.error('[Attendance] 출석 데이터 로드 에러:', error);
@@ -116,6 +102,7 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
   const handleCheckAttendance = async () => {
     if (isChecking || !user?.id) return;
     setIsChecking(true);
+    setCheckInBlocked(null);
 
     try {
       // checkAttendance 는 멱등 — 이미 출석한 경우엔 sp_claimed 상태만 다시 받아옴
@@ -123,6 +110,15 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
       const result = await checkAttendance();
 
       if (result.error) {
+        // 활성 스킬 없음 — 친절한 안내 카드로 표시 (alert 사용 X)
+        if (result.error.code === 'no_active_skill') {
+          setCheckInBlocked({
+            title: '아직 출석할 수 없어요',
+            message: result.error.message || '진행 중인 활성 스킬이 없습니다.',
+            hint: '관장님께 다음 스킬 해금을 요청하거나, 마스터한 스킬의 승단 심사 신청을 진행해 주세요.',
+          });
+          return;
+        }
         alert(`${t('checkInFailed')}: ${result.error.message || result.message || ''}`);
         return;
       }
@@ -192,6 +188,22 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
         title={t('attendance')}
         description={t('checkInDescription')}
       />
+
+      {/* 활성 스킬 없음 — 출석 차단 안내 */}
+      {!todayChecked && checkInBlocked && (
+        <SpotlightCard className="p-4 sm:p-5 border border-amber-400/40 bg-amber-500/[0.08]">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-amber-400/20 border border-amber-300/40 flex items-center justify-center">
+              <span className="text-amber-200 text-base font-black">!</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm sm:text-base font-bold text-amber-100 mb-1">{checkInBlocked.title}</p>
+              <p className="text-xs sm:text-sm text-amber-100/85 mb-2 whitespace-pre-line">{checkInBlocked.message}</p>
+              <p className="text-[11px] sm:text-xs text-amber-200/70 leading-relaxed">{checkInBlocked.hint}</p>
+            </div>
+          </div>
+        </SpotlightCard>
+      )}
 
       {/* 출석 체크 버튼 */}
       <SpotlightCard className="p-6 xs:p-8 sm:p-10 text-center">

@@ -1916,7 +1916,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                         )}
                                         {promotion && promotion !== 'none' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300">
-                                            승단 {promotion === 'pending' ? '대기' : promotion === 'reviewing' ? '심사' : promotion === 'passed' ? '완료' : promotion}
+                                            승단 {promotion === 'pending' ? '대기' : promotion === 'reviewing' ? '심사' : promotion === 'approved' ? '승인' : promotion}
                                           </span>
                                         )}
                                         {req && req.status === 'rejected' && (

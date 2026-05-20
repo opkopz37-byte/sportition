@@ -160,15 +160,7 @@ function computeDepths(nodes) {
  *     → 단순히 부모가 5/5 마스터해도 부족. 체육관 승인이 떨어져야 다음 스킬 가능.
  *     거절되면 거절된 스킬까지만 열려 있고, 자식은 잠금 상태.
  */
-function isUnlocked(node, nodeByNumber, promotionByNodeId) {
-  const parents = getParentNumbers(node);
-  if (!parents.length) return true;
-  return parents.some((pNum) => {
-    const p = nodeByNumber.get(pNum);
-    if (!p) return false;
-    return promotionByNodeId?.[p.id]?.status === 'approved';
-  });
-}
+// isUnlocked 함수는 새 모델로 전환되며 제거됨 — unlocked 판단은 user_skill_unlocks 행 존재 여부 (SkillTree 의 unlockedSet 사용)
 
 /** parent_nodes 의 각 값이 string 으로 들어왔을 수 있어서 number 로 강제 변환 */
 function getParentNumbers(node) {
@@ -1211,12 +1203,8 @@ function InlineExpPanel({
   globalLockName = '',           // 심사 대기 중인 스킬 이름
 }) {
   const mastered = exp >= MAX_EXP;
-  const cost = Math.max(1, Number(node?.point_cost ?? 1) || 1); // 최소 1 SP 강제
-  const canAfford = sp >= cost;
   const fillPct = Math.min(100, (exp / MAX_EXP) * 100);
   const expGradient = getExpGradient(exp, theme.expBar);
-  // 활성(찍을 수 있는) 상태일 때만 펄스 — "찍어주세요" 신호
-  const canAdd = unlocked && !busy && !mastered && canAfford && !blockedByOther && !globallyLocked;
 
   // 마스터 후 승단 심사 버튼 — 상태별 분기
   const isPending = promotionStatus === 'pending' || promotionStatus === 'reviewing';
@@ -1766,11 +1754,19 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // 페이지가 다시 활성화되면 데이터 동기화 (체육관에서 거절·승인 처리한 결과 즉시 반영)
+  // 페이지가 다시 활성화되면 데이터 동기화 — 단, 짧은 시간 내 중복 호출은 throttle (페이지 전환 시 잔잔한 fetch 폭주 방지)
+  const lastReloadAtRef = useRef(0);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    const onFocus = () => { loadData(); };
-    const onVis = () => { if (document.visibilityState === 'visible') loadData(); };
+    const THROTTLE_MS = 10 * 1000; // 10초
+    const maybeReload = () => {
+      const now = Date.now();
+      if (now - lastReloadAtRef.current < THROTTLE_MS) return;
+      lastReloadAtRef.current = now;
+      loadData();
+    };
+    const onFocus = () => { maybeReload(); };
+    const onVis = () => { if (document.visibilityState === 'visible') maybeReload(); };
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVis);
     return () => {
@@ -2299,7 +2295,7 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
           <div className="min-w-0 flex-1">
             {activeNode ? (
               <>
-                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-300/70 mb-1">🎯 지금 키우는 스킬</p>
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-300/70 mb-1">지금 키우는 스킬</p>
                 <p className="text-sm sm:text-base font-extrabold text-white truncate mb-1.5">{activeNode.name || `#${activeNode.node_number}`}</p>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">

@@ -427,7 +427,8 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
   const modalSkills = useMemo(() => {
     if (!calendarModalKey) return [];
     return (skillProgressWithNodes || []).filter((row) => {
-      if (!row.investment_count || row.investment_count < 1) return false;
+      // sql/33 이후 investment_count 컬럼 제거됨 → exp_level 사용
+      if (!row.exp_level || row.exp_level < 1) return false;
       return localYmdFromIso(row.updated_at) === calendarModalKey;
     });
   }, [skillProgressWithNodes, calendarModalKey]);
@@ -578,7 +579,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                       <li key={String(row.node_id)} className="text-sm text-gray-200 flex justify-between gap-2">
                         <span className="text-left">{label}</span>
                         <span className="text-gray-500 tabular-nums flex-shrink-0">
-                          {t('calendarSkillInvestCount')} {row.investment_count}
+                          {t('calendarSkillInvestCount')} {row.exp_level}
                         </span>
                       </li>
                     );

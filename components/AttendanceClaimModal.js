@@ -83,10 +83,7 @@ export default function AttendanceClaimModal({
               <h3 className="text-2xl font-black text-white mb-1 leading-tight">
                 레벨업 이동
               </h3>
-              <div className="mx-auto w-12 h-12 rounded-full bg-cyan-400/20 border border-cyan-300/50 flex items-center justify-center mb-3 mt-3">
-                <span className="text-2xl text-cyan-300">⚡</span>
-              </div>
-              <p className="text-base text-white font-bold mb-1 leading-snug">
+              <p className="text-base text-white font-bold mb-1 mt-3 leading-snug">
                 <span className="text-cyan-200 font-extrabold">{skillName}</span> 의<br />
                 승단 심사 페이지로 이동할까요?
               </p>
@@ -119,10 +116,7 @@ export default function AttendanceClaimModal({
                 출석 완료
               </h3>
 
-              <div className="mx-auto w-14 h-14 rounded-full bg-emerald-400/25 border-2 border-emerald-300/60 flex items-center justify-center mb-3 mt-3 shadow-[0_0_24px_rgba(16,185,129,0.45)]">
-                <span className="text-3xl">✓</span>
-              </div>
-              <p className="text-base text-white font-bold mb-2">
+              <p className="text-base text-white font-bold mb-2 mt-3">
                 오늘 출석 완료!
               </p>
               <p className="text-sm text-emerald-200/90 leading-relaxed mb-5">
@@ -145,7 +139,7 @@ export default function AttendanceClaimModal({
                     onClick={() => setView('confirm-levelup')}
                     className="w-full py-3 rounded-xl font-extrabold text-sm bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white border border-cyan-300/60 shadow-[0_0_20px_rgba(34,211,238,0.35)] active:scale-[0.98] transition-all"
                   >
-                    ⚡ 승단 심사 신청하러 가기
+                    승단 심사 신청하러 가기
                   </button>
                 ) : null}
 
