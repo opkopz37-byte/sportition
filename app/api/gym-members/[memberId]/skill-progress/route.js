@@ -64,7 +64,7 @@ export async function GET(request, ctx) {
       .single(),
     admin
       .from('skill_tree_nodes')
-      .select('id, node_number, name, parent_nodes, is_fork, fork_branch_node_numbers, point_cost')
+      .select('id, node_number, name, parent_nodes, is_fork, fork_branch_node_numbers, point_cost, zone')
       .order('node_number', { ascending: true }),
     admin
       .from('user_skill_unlocks')

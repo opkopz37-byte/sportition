@@ -88,12 +88,12 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab }) => (
 
     {/* 빠른 액션 버튼 */}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-      <button 
+      <button
         onClick={() => setActiveTab('players')}
         className="p-2 sm:p-3 bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/30 hover:border-blue-500/50 rounded-xl transition-all hover:scale-105 group"
       >
         <div className="text-xl sm:text-2xl mb-1 group-hover:scale-110 transition-transform">👥</div>
-        <div className="text-[11px] sm:text-xs font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{t('memberManagement')}</div>
+        <div className="text-[11px] sm:text-xs font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">회원 관리/스킬 관리</div>
       </button>
       <button 
         onClick={() => setActiveTab('match')}
@@ -1610,7 +1610,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                       setDeleteEmailInput('');
                       setDeleteStep(1);
                     }}
-                    className="py-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/20 hover:border-white/30 text-white rounded-lg font-semibold text-sm transition-all"
+                    className="py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/40 hover:border-red-500/60 text-red-300 hover:text-red-200 rounded-lg font-semibold text-sm transition-all"
                   >
                     회원 삭제
                   </button>
@@ -1904,6 +1904,9 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                                         <span className="text-sm font-semibold text-white truncate">{n.name || `#${n.node_number}`}</span>
+                                        {n.zone && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-gray-300">{n.zone}</span>
+                                        )}
                                         <span className="text-[10px] text-gray-500 tabular-nums">#{n.node_number}</span>
                                         {n.is_fork && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">포크</span>
@@ -1964,8 +1967,11 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                 const disabled = !unlockableData.can_unlock || !!skillActionBusy;
                                 return (
                                   <li key={n.id} className="px-3 py-2 flex items-center gap-2">
-                                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
                                       <span className="text-sm text-white truncate">{n.name || `#${n.node_number}`}</span>
+                                      {n.zone && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-gray-300">{n.zone}</span>
+                                      )}
                                       <span className="text-[10px] text-gray-500 tabular-nums">#{n.node_number}</span>
                                       {n.is_fork && (
                                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">포크</span>
