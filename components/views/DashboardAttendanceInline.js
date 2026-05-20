@@ -127,30 +127,7 @@ export default function DashboardAttendanceInline({ t = (k) => k, setActiveTab }
     }
   };
 
-  // 모달 [스킬 포인트 적립] 클릭 → SP +1 (출석은 이미 기록됨)
-  const handleClaimSkillPoint = useCallback(async () => {
-    // 프론트 방어선 #1 — 처리 안 된 마스터 있으면 절대 적립 불가
-    if (modalState.pendingPromotion) {
-      return {
-        ok: false,
-        message: '마스터한 스킬의 승단 심사가 필요합니다. 먼저 승인 받으세요.',
-      };
-    }
-    try {
-      const { claimDailySkillPoint } = await import('@/lib/supabase');
-      const r = await claimDailySkillPoint();
-      if (r.error) return { ok: false, message: r.error.message };
-      if (typeof r.skillPoints === 'number') {
-        setStats((prev) => ({ ...prev, skillPointsEarned: r.skillPoints }));
-      }
-      refreshProfile();
-      setModalState((prev) => ({ ...prev, alreadyClaimed: true }));
-      return { ok: true, skillPoints: r.skillPoints };
-    } catch (e) {
-      console.error(e);
-      return { ok: false, message: '스킬 포인트 적립 실패' };
-    }
-  }, [refreshProfile, modalState.pendingPromotion]);
+  // handleClaimSkillPoint 는 폐지됨 (출석 시 활성 스킬 EXP 자동 적립으로 대체).
 
   // 모달 [레벨업 신청] 클릭 → 스킬 페이지 이동 (출석은 이미 기록됨)
   const handleGoToLevelUp = useCallback((nodeId) => {
@@ -175,8 +152,6 @@ export default function DashboardAttendanceInline({ t = (k) => k, setActiveTab }
         open={modalState.open}
         onClose={() => setModalState((prev) => ({ ...prev, open: false }))}
         pendingPromotion={modalState.pendingPromotion}
-        alreadyClaimed={modalState.alreadyClaimed}
-        onClaimSkillPoint={handleClaimSkillPoint}
         onGoToLevelUp={handleGoToLevelUp}
       />
       <div className="relative flex flex-col gap-3">

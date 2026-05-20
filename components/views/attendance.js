@@ -168,22 +168,8 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
     }
   };
 
-  const handleClaimSkillPoint = useCallback(async () => {
-    try {
-      const { claimDailySkillPoint } = await import('@/lib/supabase');
-      const r = await claimDailySkillPoint();
-      if (r.error) return { ok: false, message: r.error.message };
-      if (typeof r.skillPoints === 'number') {
-        setStats((prev) => ({ ...prev, skillPointsEarned: r.skillPoints }));
-      }
-      refreshProfile();
-      setModalState((prev) => ({ ...prev, alreadyClaimed: true }));
-      return { ok: true, skillPoints: r.skillPoints };
-    } catch (e) {
-      console.error(e);
-      return { ok: false, message: '스킬 포인트 적립 실패' };
-    }
-  }, [refreshProfile]);
+  // handleClaimSkillPoint 는 폐지됨 (출석 시 활성 스킬 EXP 자동 적립으로 대체).
+  // claim_daily_skill_point RPC 는 sql/71 에서 no-op 으로 교체됨.
 
   const handleGoToLevelUp = useCallback((nodeId) => {
     if (typeof window !== 'undefined' && nodeId != null) {
@@ -200,8 +186,6 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
         open={modalState.open}
         onClose={() => setModalState((prev) => ({ ...prev, open: false }))}
         pendingPromotion={modalState.pendingPromotion}
-        alreadyClaimed={modalState.alreadyClaimed}
-        onClaimSkillPoint={handleClaimSkillPoint}
         onGoToLevelUp={handleGoToLevelUp}
       />
       <PageHeader
@@ -258,7 +242,7 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
       </SpotlightCard>
 
       {/* 출석 통계 */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 xs:gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 xs:gap-4">
         <SpotlightCard className="p-4 xs:p-5">
           <div className="text-center">
             <div className="w-10 h-10 xs:w-12 xs:h-12 mx-auto mb-2 xs:mb-3 rounded-lg bg-blue-500/20 flex items-center justify-center">
@@ -299,15 +283,6 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
           </div>
         </SpotlightCard>
 
-        <SpotlightCard className="p-4 xs:p-5">
-          <div className="text-center">
-            <div className="w-10 h-10 xs:w-12 xs:h-12 mx-auto mb-2 xs:mb-3 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-              <Icon type="star" size={24} className="text-cyan-400" />
-            </div>
-            <div className="text-xs xs:text-sm text-gray-400 mb-1">{t('earnedPoints')}</div>
-            <div className="text-xl xs:text-2xl font-bold text-white">{stats.skillPointsEarned}</div>
-          </div>
-        </SpotlightCard>
       </div>
 
       {/* 최근 출석 기록 */}
