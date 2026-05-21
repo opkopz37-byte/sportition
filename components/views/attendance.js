@@ -110,16 +110,25 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
       const result = await checkAttendance();
 
       if (result.error) {
-        // 활성 스킬 없음 — 친절한 안내 카드로 표시 (alert 사용 X)
+        // 모든 출석 실패는 모달로 안내
         if (result.error.code === 'no_active_skill') {
           setCheckInBlocked({
-            title: '아직 출석할 수 없어요',
+            title: '오늘 출석할 수 없어요',
             message: result.error.message || '진행 중인 활성 스킬이 없습니다.',
-            hint: '관장님께 다음 스킬 해금을 요청하거나, 마스터한 스킬의 승단 심사 신청을 진행해 주세요.',
+            hint:
+              '활성 스킬은 관장님이 해금해주신 진행 중 스킬 1개를 의미합니다.\n\n' +
+              '• 마스터한 스킬(5/5)이 있다면 먼저 승단 심사 신청을 해주세요.\n' +
+              '• 그렇지 않다면 관장님께 다음 스킬 해금을 요청해 주세요.',
+            goSkills: true,
           });
           return;
         }
-        alert(`${t('checkInFailed')}: ${result.error.message || result.message || ''}`);
+        setCheckInBlocked({
+          title: '출석 체크에 실패했어요',
+          message: result.error.message || result.message || '알 수 없는 오류가 발생했습니다.',
+          hint: '잠시 후 다시 시도해 주세요. 문제가 계속되면 관장님께 문의해 주세요.',
+          goSkills: false,
+        });
         return;
       }
 
@@ -158,7 +167,12 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
       Promise.all([refreshProfile(), loadAttendanceData()]);
     } catch (error) {
       console.error('[Attendance] 출석 체크 에러:', error);
-      alert(t('checkInError'));
+      setCheckInBlocked({
+        title: '출석 체크 중 오류',
+        message: error?.message || '네트워크 또는 시스템 오류가 발생했습니다.',
+        hint: '인터넷 연결을 확인하고 다시 시도해 주세요. 문제가 계속되면 관장님께 문의해 주세요.',
+        goSkills: false,
+      });
     } finally {
       setIsChecking(false);
     }
@@ -189,20 +203,57 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
         description={t('checkInDescription')}
       />
 
-      {/* 활성 스킬 없음 — 출석 차단 안내 */}
-      {!todayChecked && checkInBlocked && (
-        <SpotlightCard className="p-4 sm:p-5 border border-amber-400/40 bg-amber-500/[0.08]">
-          <div className="flex items-start gap-3">
-            <div className="shrink-0 w-8 h-8 rounded-full bg-amber-400/20 border border-amber-300/40 flex items-center justify-center">
-              <span className="text-amber-200 text-base font-black">!</span>
+      {/* 출석 실패 가이드 모달 (활성 스킬 없음 / 네트워크 오류 / 기타) */}
+      {checkInBlocked && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          onClick={() => setCheckInBlocked(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border-2 border-amber-400/50 bg-[#0f1525] p-5 sm:p-6 shadow-[0_0_40px_rgba(251,191,36,0.25)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-3">
+              <div className="shrink-0 w-9 h-9 rounded-full bg-amber-400/20 border border-amber-300/50 flex items-center justify-center">
+                <span className="text-amber-200 text-lg font-black">!</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-extrabold text-amber-100 leading-snug pt-1">
+                {checkInBlocked.title}
+              </h3>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm sm:text-base font-bold text-amber-100 mb-1">{checkInBlocked.title}</p>
-              <p className="text-xs sm:text-sm text-amber-100/85 mb-2 whitespace-pre-line">{checkInBlocked.message}</p>
-              <p className="text-[11px] sm:text-xs text-amber-200/70 leading-relaxed">{checkInBlocked.hint}</p>
+            <p className="text-sm text-white/90 mb-3 leading-relaxed whitespace-pre-line">
+              {checkInBlocked.message}
+            </p>
+            {checkInBlocked.hint && (
+              <div className="rounded-xl bg-amber-500/[0.08] border border-amber-400/20 px-3 py-2.5 mb-4">
+                <p className="text-xs sm:text-[13px] text-amber-100/85 leading-relaxed whitespace-pre-line">
+                  {checkInBlocked.hint}
+                </p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              {checkInBlocked.goSkills && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab?.('skills');
+                    setCheckInBlocked(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white text-sm font-extrabold border border-cyan-300/50 active:scale-[0.98] transition-all"
+                >
+                  스킬 화면으로
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setCheckInBlocked(null)}
+                className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold transition-colors"
+              >
+                확인
+              </button>
             </div>
           </div>
-        </SpotlightCard>
+        </div>
       )}
 
       {/* 출석 체크 버튼 */}
