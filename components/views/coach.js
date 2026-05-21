@@ -1913,11 +1913,21 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                             <div className="px-3 py-6 text-center text-gray-500 text-sm">진행 중인 스킬이 없습니다.</div>
                           ) : (() => {
                             const PUNCH_TABS = [
-                              { key: 'straight', label: '스트레이트', match: ['common', 'common_straight', 'straight'] },
-                              { key: 'hook',     label: '훅',         match: ['common_hook', 'hook'] },
-                              { key: 'upper',    label: '어퍼',       match: ['common_upper', 'upper'] },
-                              { key: 'advanced', label: '심화',       match: ['common_advanced', 'advanced'] },
+                              { key: 'straight', label: '스트레이트', accent: 'cyan',   match: ['common', 'common_straight', 'straight'] },
+                              { key: 'hook',     label: '훅',         accent: 'orange', match: ['common_hook', 'hook'] },
+                              { key: 'upper',    label: '어퍼',       accent: 'violet', match: ['common_upper', 'upper'] },
+                              { key: 'advanced', label: '심화',       accent: 'rose',   match: ['common_advanced', 'advanced'] },
                             ];
+                            const ACCENT_HEAD = {
+                              cyan:   'bg-cyan-500/20 border-cyan-400/40 text-cyan-100',
+                              orange: 'bg-orange-500/20 border-orange-400/40 text-orange-100',
+                              violet: 'bg-violet-500/20 border-violet-400/40 text-violet-100',
+                              rose:   'bg-rose-500/20 border-rose-400/40 text-rose-100',
+                              gray:   'bg-white/[0.08] border-white/20 text-gray-200',
+                            };
+                            const ACCENT_DOT = {
+                              cyan: 'bg-cyan-400', orange: 'bg-orange-400', violet: 'bg-violet-400', rose: 'bg-rose-400', gray: 'bg-gray-400',
+                            };
                             const tabOf = (n) => {
                               const pt = (n.punch_type || '').toLowerCase();
                               const t = PUNCH_TABS.find((tab) => tab.match.includes(pt));
@@ -1926,14 +1936,17 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                             const groups = PUNCH_TABS.map((t) => ({
                               key: t.key,
                               label: t.label,
+                              accent: t.accent,
                               nodes: interestingNodes.filter((n) => tabOf(n) === t.key),
                             })).filter((g) => g.nodes.length > 0);
                             const orphans = interestingNodes.filter((n) => tabOf(n) === 'other');
-                            if (orphans.length > 0) groups.push({ key: 'other', label: '기타', nodes: orphans });
+                            if (orphans.length > 0) groups.push({ key: 'other', label: '기타', accent: 'gray', nodes: orphans });
                             return groups.map((group) => (
-                              <div key={group.key}>
-                                <div className="px-3 py-1.5 bg-white/[0.04] border-t border-white/5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                  {group.label}
+                              <div key={group.key} className="mb-2 last:mb-0">
+                                <div className={`px-3 py-2 border-y flex items-center gap-2 ${ACCENT_HEAD[group.accent] || ACCENT_HEAD.gray}`}>
+                                  <span className={`w-1 h-4 rounded-full ${ACCENT_DOT[group.accent] || ACCENT_DOT.gray}`} aria-hidden />
+                                  <span className="text-sm font-extrabold tracking-wide">{group.label}</span>
+                                  <span className="text-[11px] font-bold opacity-70 ml-auto tabular-nums">{group.nodes.length}</span>
                                 </div>
                                 <ul className="divide-y divide-white/5">
                                   {group.nodes.map((n) => {
@@ -2007,11 +2020,21 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                           )}
                           {unlockableData && unlockableData.candidate_nodes && unlockableData.candidate_nodes.length > 0 && (() => {
                             const PUNCH_TABS = [
-                              { key: 'straight', label: '스트레이트', match: ['common', 'common_straight', 'straight'] },
-                              { key: 'hook',     label: '훅',         match: ['common_hook', 'hook'] },
-                              { key: 'upper',    label: '어퍼',       match: ['common_upper', 'upper'] },
-                              { key: 'advanced', label: '심화',       match: ['common_advanced', 'advanced'] },
+                              { key: 'straight', label: '스트레이트', accent: 'cyan',   match: ['common', 'common_straight', 'straight'] },
+                              { key: 'hook',     label: '훅',         accent: 'orange', match: ['common_hook', 'hook'] },
+                              { key: 'upper',    label: '어퍼',       accent: 'violet', match: ['common_upper', 'upper'] },
+                              { key: 'advanced', label: '심화',       accent: 'rose',   match: ['common_advanced', 'advanced'] },
                             ];
+                            const ACCENT_HEAD = {
+                              cyan:   'bg-cyan-500/20 border-cyan-400/40 text-cyan-100',
+                              orange: 'bg-orange-500/20 border-orange-400/40 text-orange-100',
+                              violet: 'bg-violet-500/20 border-violet-400/40 text-violet-100',
+                              rose:   'bg-rose-500/20 border-rose-400/40 text-rose-100',
+                              gray:   'bg-white/[0.08] border-white/20 text-gray-200',
+                            };
+                            const ACCENT_DOT = {
+                              cyan: 'bg-cyan-400', orange: 'bg-orange-400', violet: 'bg-violet-400', rose: 'bg-rose-400', gray: 'bg-gray-400',
+                            };
                             const tabOf = (n) => {
                               const pt = (n.punch_type || '').toLowerCase();
                               const t = PUNCH_TABS.find((tab) => tab.match.includes(pt));
@@ -2021,16 +2044,19 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                             const groups = PUNCH_TABS.map((t) => ({
                               key: t.key,
                               label: t.label,
+                              accent: t.accent,
                               nodes: cands.filter((n) => tabOf(n) === t.key),
                             })).filter((g) => g.nodes.length > 0);
                             const orphans = cands.filter((n) => tabOf(n) === 'other');
-                            if (orphans.length > 0) groups.push({ key: 'other', label: '기타', nodes: orphans });
+                            if (orphans.length > 0) groups.push({ key: 'other', label: '기타', accent: 'gray', nodes: orphans });
                             return (
                               <div className="max-h-72 overflow-y-auto">
                                 {groups.map((group) => (
-                                  <div key={group.key}>
-                                    <div className="px-3 py-1.5 bg-white/[0.04] border-t border-white/5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                      {group.label}
+                                  <div key={group.key} className="mb-2 last:mb-0">
+                                    <div className={`px-3 py-2 border-y flex items-center gap-2 ${ACCENT_HEAD[group.accent] || ACCENT_HEAD.gray}`}>
+                                      <span className={`w-1 h-4 rounded-full ${ACCENT_DOT[group.accent] || ACCENT_DOT.gray}`} aria-hidden />
+                                      <span className="text-sm font-extrabold tracking-wide">{group.label}</span>
+                                      <span className="text-[11px] font-bold opacity-70 ml-auto tabular-nums">{group.nodes.length}</span>
                                     </div>
                                     <ul className="divide-y divide-white/5">
                                       {group.nodes.map((n) => {
