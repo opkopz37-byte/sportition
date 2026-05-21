@@ -1885,28 +1885,12 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                         latestRequestByNodeId.set(r.fork_node_id, r);
                       }
                     }
-                    const masteredCount = progress.filter((p) => (p.exp_level ?? 0) >= 5).length;
                     const interestingNodes = nodes
                       .filter((n) => unlockedNodeIds.has(n.id) || progressByNodeId.has(n.id))
                       .sort((a, b) => Number(a.node_number) - Number(b.node_number));
 
                     return (
                       <>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3">
-                            <div className="text-[11px] text-gray-400 mb-1">현재 SP</div>
-                            <div className="text-lg font-bold text-purple-300 tabular-nums">{member?.skill_points ?? 0}</div>
-                          </div>
-                          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3">
-                            <div className="text-[11px] text-gray-400 mb-1">해금/진행</div>
-                            <div className="text-lg font-bold text-emerald-300 tabular-nums">{interestingNodes.length}</div>
-                          </div>
-                          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3">
-                            <div className="text-[11px] text-gray-400 mb-1">마스터</div>
-                            <div className="text-lg font-bold text-amber-300 tabular-nums">{masteredCount}</div>
-                          </div>
-                        </div>
-
                         <div className="rounded-xl border border-white/10 overflow-hidden">
                           <div className="px-3 py-2 bg-white/5 text-xs font-bold text-gray-300">스킬 진행</div>
                           {interestingNodes.length === 0 ? (
@@ -1966,9 +1950,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                         )}
                                         {n.is_fork && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">포크</span>
-                                        )}
-                                        {isMastered && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">마스터</span>
                                         )}
                                         {!isMastered && isUnlocked && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">해금</span>
