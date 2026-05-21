@@ -890,6 +890,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [skillProgressError, setSkillProgressError] = useState(null);
   const [unlockableData, setUnlockableData] = useState(null);
   const [skillActionBusy, setSkillActionBusy] = useState(null);
+  const [skillConfirm, setSkillConfirm] = useState(null); // { action, nodeId, nodeName } | null
   const [memberEditSaving, setMemberEditSaving] = useState(false);
   const [memberEditForm, setMemberEditForm] = useState(null);
   const [deleteStep, setDeleteStep] = useState(0);
@@ -1011,6 +1012,21 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     }
   };
 
+  // 회원 모달의 [해금]/[스킵] 클릭 → 재확인 모달 띄움
+  const requestSkillAction = (action, nodeId, nodeName) => {
+    if (skillActionBusy) return;
+    setActionMessage(null);
+    setSkillConfirm({ action, nodeId, nodeName });
+  };
+
+  // 재확인 모달에서 [확인] 누르면 호출
+  const confirmSkillAction = async () => {
+    if (!skillConfirm) return;
+    const { action, nodeId } = skillConfirm;
+    setSkillConfirm(null);
+    await handleSkillAction(action, nodeId);
+  };
+
   const handleSkillAction = async (action, nodeId) => {
     if (!selectedMember?.id || skillActionBusy) return;
     setActionMessage(null);
@@ -1040,6 +1056,10 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
         return;
       }
       setActionMessage({ type: 'ok', text: action === 'unlock' ? '해금이 완료되었습니다.' : '스킵 처리되었습니다.' });
+      // 해금 성공 시 햅틱 진동 (모바일)
+      if (action === 'unlock' && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        try { navigator.vibrate([60, 30, 80]); } catch { /* ignore */ }
+      }
       await openSkillManagementPanel(selectedMember);
     } catch (e) {
       setActionMessage({ type: 'err', text: e.message || '처리에 실패했습니다.' });
@@ -1195,6 +1215,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     setSkillProgressError(null);
     setUnlockableData(null);
     setSkillActionBusy(null);
+    setSkillConfirm(null);
     setShowResetPw(false);
   };
 
@@ -1890,9 +1911,32 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                           <div className="px-3 py-2 bg-white/5 text-xs font-bold text-gray-300">스킬 진행</div>
                           {interestingNodes.length === 0 ? (
                             <div className="px-3 py-6 text-center text-gray-500 text-sm">진행 중인 스킬이 없습니다.</div>
-                          ) : (
-                            <ul className="divide-y divide-white/5">
-                              {interestingNodes.map((n) => {
+                          ) : (() => {
+                            const PUNCH_TABS = [
+                              { key: 'straight', label: '스트레이트', match: ['common', 'common_straight', 'straight'] },
+                              { key: 'hook',     label: '훅',         match: ['common_hook', 'hook'] },
+                              { key: 'upper',    label: '어퍼',       match: ['common_upper', 'upper'] },
+                              { key: 'advanced', label: '심화',       match: ['common_advanced', 'advanced'] },
+                            ];
+                            const tabOf = (n) => {
+                              const pt = (n.punch_type || '').toLowerCase();
+                              const t = PUNCH_TABS.find((tab) => tab.match.includes(pt));
+                              return t ? t.key : 'other';
+                            };
+                            const groups = PUNCH_TABS.map((t) => ({
+                              key: t.key,
+                              label: t.label,
+                              nodes: interestingNodes.filter((n) => tabOf(n) === t.key),
+                            })).filter((g) => g.nodes.length > 0);
+                            const orphans = interestingNodes.filter((n) => tabOf(n) === 'other');
+                            if (orphans.length > 0) groups.push({ key: 'other', label: '기타', nodes: orphans });
+                            return groups.map((group) => (
+                              <div key={group.key}>
+                                <div className="px-3 py-1.5 bg-white/[0.04] border-t border-white/5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                  {group.label}
+                                </div>
+                                <ul className="divide-y divide-white/5">
+                                  {group.nodes.map((n) => {
                                 const p = progressByNodeId.get(n.id);
                                 const exp = Math.max(0, Math.min(5, Number(p?.exp_level ?? 0)));
                                 const isUnlocked = unlockedNodeIds.has(n.id);
@@ -1903,11 +1947,10 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                   <li key={n.id} className="px-3 py-2.5 flex items-center gap-3">
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <span className="text-sm font-semibold text-white truncate">{n.name || `#${n.node_number}`}</span>
+                                        <span className="text-sm font-semibold text-white truncate">{n.name || `노드 ${n.node_number}`}</span>
                                         {n.zone && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-gray-300">{n.zone}</span>
                                         )}
-                                        <span className="text-[10px] text-gray-500 tabular-nums">#{n.node_number}</span>
                                         {n.is_fork && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">포크</span>
                                         )}
@@ -1936,8 +1979,10 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                   </li>
                                 );
                               })}
-                            </ul>
-                          )}
+                                </ul>
+                              </div>
+                            ));
+                          })()}
                         </div>
 
                         <div className="rounded-xl border border-white/10 overflow-hidden">
@@ -1960,19 +2005,45 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                           {unlockableData && unlockableData.candidate_nodes && unlockableData.candidate_nodes.length === 0 && (
                             <div className="px-3 py-6 text-center text-gray-500 text-sm">미해금 노드가 없습니다.</div>
                           )}
-                          {unlockableData && unlockableData.candidate_nodes && unlockableData.candidate_nodes.length > 0 && (
-                            <ul className="divide-y divide-white/5 max-h-72 overflow-y-auto">
-                              {unlockableData.candidate_nodes.map((n) => {
+                          {unlockableData && unlockableData.candidate_nodes && unlockableData.candidate_nodes.length > 0 && (() => {
+                            const PUNCH_TABS = [
+                              { key: 'straight', label: '스트레이트', match: ['common', 'common_straight', 'straight'] },
+                              { key: 'hook',     label: '훅',         match: ['common_hook', 'hook'] },
+                              { key: 'upper',    label: '어퍼',       match: ['common_upper', 'upper'] },
+                              { key: 'advanced', label: '심화',       match: ['common_advanced', 'advanced'] },
+                            ];
+                            const tabOf = (n) => {
+                              const pt = (n.punch_type || '').toLowerCase();
+                              const t = PUNCH_TABS.find((tab) => tab.match.includes(pt));
+                              return t ? t.key : 'other';
+                            };
+                            const cands = unlockableData.candidate_nodes;
+                            const groups = PUNCH_TABS.map((t) => ({
+                              key: t.key,
+                              label: t.label,
+                              nodes: cands.filter((n) => tabOf(n) === t.key),
+                            })).filter((g) => g.nodes.length > 0);
+                            const orphans = cands.filter((n) => tabOf(n) === 'other');
+                            if (orphans.length > 0) groups.push({ key: 'other', label: '기타', nodes: orphans });
+                            return (
+                              <div className="max-h-72 overflow-y-auto">
+                                {groups.map((group) => (
+                                  <div key={group.key}>
+                                    <div className="px-3 py-1.5 bg-white/[0.04] border-t border-white/5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                      {group.label}
+                                    </div>
+                                    <ul className="divide-y divide-white/5">
+                                      {group.nodes.map((n) => {
                                 const isBusy = skillActionBusy?.nodeId === n.id;
                                 const disabled = !unlockableData.can_unlock || !!skillActionBusy;
+                                const displayName = n.name || `노드 ${n.node_number}`;
                                 return (
                                   <li key={n.id} className="px-3 py-2 flex items-center gap-2">
                                     <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                                      <span className="text-sm text-white truncate">{n.name || `#${n.node_number}`}</span>
+                                      <span className="text-sm text-white truncate">{displayName}</span>
                                       {n.zone && (
                                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-gray-300">{n.zone}</span>
                                       )}
-                                      <span className="text-[10px] text-gray-500 tabular-nums">#{n.node_number}</span>
                                       {n.is_fork && (
                                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">포크</span>
                                       )}
@@ -1980,7 +2051,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                     <button
                                       type="button"
                                       disabled={disabled}
-                                      onClick={() => handleSkillAction('unlock', n.id)}
+                                      onClick={() => requestSkillAction('unlock', n.id, displayName)}
                                       className="px-2.5 py-1 text-xs rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
                                     >
                                       {isBusy && skillActionBusy?.action === 'unlock' ? '…' : '해금'}
@@ -1988,7 +2059,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                     <button
                                       type="button"
                                       disabled={disabled}
-                                      onClick={() => handleSkillAction('skip', n.id)}
+                                      onClick={() => requestSkillAction('skip', n.id, displayName)}
                                       className="px-2.5 py-1 text-xs rounded bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
                                     >
                                       {isBusy && skillActionBusy?.action === 'skip' ? '…' : '스킵'}
@@ -1996,8 +2067,12 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                                   </li>
                                 );
                               })}
-                            </ul>
-                          )}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         {promotion_requests.length > 0 && (
@@ -2143,6 +2218,56 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                       className="flex-1 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold disabled:opacity-50"
                     >
                       {resettingPw ? '초기화 중…' : '123456으로 초기화'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 스킬 해금/스킵 재확인 모달 */}
+            {skillConfirm && (
+              <div className="absolute inset-0 z-40 flex items-center justify-center p-3 sm:p-6 rounded-2xl bg-black/80 backdrop-blur-sm">
+                <div
+                  className={`w-full max-w-sm rounded-2xl border bg-[#111] p-5 sm:p-6 shadow-2xl ${
+                    skillConfirm.action === 'unlock' ? 'border-emerald-500/40' : 'border-amber-500/40'
+                  }`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className={`text-lg font-bold mb-2 ${skillConfirm.action === 'unlock' ? 'text-emerald-300' : 'text-amber-300'}`}>
+                    {skillConfirm.action === 'unlock' ? '스킬 해금 확인' : '스킬 스킵 확인'}
+                  </h3>
+                  <p className="text-sm text-gray-300 mb-3 leading-relaxed">
+                    <strong className="text-white">{selectedMember?.name}</strong> 회원에게{' '}
+                    <strong className={skillConfirm.action === 'unlock' ? 'text-emerald-200' : 'text-amber-200'}>
+                      {skillConfirm.nodeName}
+                    </strong>{' '}
+                    노드를 {skillConfirm.action === 'unlock' ? '해금' : '즉시 마스터(스킵)'}하시겠습니까?
+                  </p>
+                  {skillConfirm.action === 'skip' && (
+                    <p className="text-[11px] text-amber-300/80 mb-4">
+                      스킵은 EXP 5/5 로 즉시 마스터 처리합니다. 되돌릴 수 없습니다.
+                    </p>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSkillConfirm(null)}
+                      disabled={!!skillActionBusy}
+                      className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold disabled:opacity-50"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmSkillAction}
+                      disabled={!!skillActionBusy}
+                      className={`flex-1 py-2.5 rounded-lg text-white text-sm font-bold disabled:opacity-50 ${
+                        skillConfirm.action === 'unlock'
+                          ? 'bg-emerald-600 hover:bg-emerald-500'
+                          : 'bg-amber-600 hover:bg-amber-500'
+                      }`}
+                    >
+                      {skillActionBusy ? '처리 중…' : (skillConfirm.action === 'unlock' ? '해금 확정' : '스킵 확정')}
                     </button>
                   </div>
                 </div>

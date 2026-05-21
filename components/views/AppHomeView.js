@@ -266,7 +266,7 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
                 onClick={() => setActiveTab('players')}
                 className="py-4 rounded-xl border border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 font-semibold text-base sm:text-lg transition-colors"
               >
-                {t('homeMemberList')}
+                회원 관리/스킬 관리
               </button>
             </div>
           </>

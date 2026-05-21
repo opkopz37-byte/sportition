@@ -61,7 +61,7 @@ export async function GET(request, ctx) {
   const [nodesRes, unlocksRes, progressRes, requestsRes] = await Promise.all([
     admin
       .from('skill_tree_nodes')
-      .select('id, node_number, name, parent_nodes, is_fork, fork_branch_node_numbers, point_cost, zone')
+      .select('id, node_number, name, parent_nodes, is_fork, fork_branch_node_numbers, point_cost, zone, punch_type')
       .order('node_number', { ascending: true }),
     admin
       .from('user_skill_unlocks')
