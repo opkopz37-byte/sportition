@@ -259,14 +259,15 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           getMatchResetTickets,
         } = supabaseModule;
 
+        // 캘린더는 최근 6개월 범위 안에서 표시 — 더 과거 조회 시 lazy fetch 로 확장
         const lookback = new Date();
-        lookback.setDate(lookback.getDate() - 400);
+        lookback.setDate(lookback.getDate() - 180);
 
         const [statsResult, attendanceResult, lbResult, matchesResult, skillProgressResult, ticketsResult] = await Promise.all([
           getUserStatistics(user.id),
           getUserAttendance(user.id, lookback.toISOString()),
           getMatchLeaderboard(5),
-          getUserMatches(user.id), // limit 없음 — 타일은 전체 전적 기반으로 계산
+          getUserMatches(user.id, 200),
           getUserSkillNodeProgressWithNodes(user.id),
           getMatchResetTickets(user.id),
         ]);
@@ -532,10 +533,12 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
               <button
                 type="button"
                 onClick={() => setShowCalendarModal(false)}
-                className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
+                className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all flex-shrink-0"
                 aria-label={t('calendarClose')}
               >
-                <span className="text-xl">✕</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 6l12 12M18 6l-12 12" />
+                </svg>
               </button>
             </div>
           </div>
@@ -781,46 +784,6 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
           </div>
         </SpotlightCard>
 
-        <div>
-          <h3 className="text-sm xs:text-base font-bold text-white mb-2 xs:mb-3">{t('quickActions')}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 xs:gap-3">
-            <button
-              type="button"
-              onClick={() => setActiveTab('approval')}
-              className="p-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center justify-between group"
-            >
-              <div className="min-w-0">
-                <div className="text-sm sm:text-base font-semibold text-white truncate">{t('approval')}</div>
-                <div className="text-xs text-gray-500 mt-0.5 truncate">{t('homeSkillApproval')}</div>
-              </div>
-              <Icon type="chevronRight" size={18} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('players')}
-              className="p-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center justify-between group"
-            >
-              <div className="min-w-0">
-                <div className="text-sm sm:text-base font-semibold text-white truncate">{t('members')}</div>
-                <div className="text-xs text-gray-500 mt-0.5 truncate">{t('homeMemberList')}</div>
-              </div>
-              <Icon type="chevronRight" size={18} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('match')}
-              className="p-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all text-left flex items-center justify-between group"
-            >
-              <div className="min-w-0">
-                <div className="text-sm sm:text-base font-semibold text-white truncate">{t('matchRoom')}</div>
-                <div className="text-xs text-gray-500 mt-0.5 truncate">{t('homeSparring')}</div>
-              </div>
-              <Icon type="chevronRight" size={18} className="text-gray-600 group-hover:text-gray-300 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-            </button>
-          </div>
-        </div>
       </div>
     );
   }

@@ -316,33 +316,29 @@ const MyPageView = ({ setActiveTab, t, onBack, canGoBack }) => {
   const isGym = profile?.role === 'gym' || profile?.role === 'admin';
   const embedDashboard = isPlayer || isGym;
 
+  const settingItems = [
+    { id: 'edit-profile', label: t('editProfile') || '프로필 편집' },
+    { id: 'privacy', label: t('privacySettings') || '개인정보 설정' },
+    { id: 'terms', label: t('termsOfService') || '이용약관' },
+  ];
+
   return (
   <div className="animate-fade-in-up">
-    <div className="mb-6 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2 sm:gap-3">
-        {canGoBack && onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            aria-label="뒤로가기"
-            className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center group"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-white transition-colors">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-          </button>
-        )}
-        <h2 className="text-2xl sm:text-3xl font-bold text-white">{t('myPage')}</h2>
-      </div>
-      <button
-        type="button"
-        onClick={() => setActiveTab('mypage-edit-profile')}
-        className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-semibold text-gray-300 hover:text-white transition-colors"
-      >
-        <Icon type="edit" size={14} />
-        프로필 편집
-      </button>
+    <div className="mb-6 flex items-center gap-3">
+      {canGoBack && onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="뒤로가기"
+          className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center group"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-white transition-colors">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
+      )}
+      <h2 className="text-2xl sm:text-3xl font-bold text-white">{t('myPage')}</h2>
     </div>
 
     {embedDashboard ? (
@@ -353,6 +349,23 @@ const MyPageView = ({ setActiveTab, t, onBack, canGoBack }) => {
         embeddedInMyPage
       />
     ) : null}
+
+    {/* 설정 항목 — 프로필 카드 아래 배치 */}
+    <SpotlightCard className="p-5 sm:p-6 mt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {settingItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setActiveTab(`mypage-${item.id}`)}
+            className="w-full p-3.5 rounded-lg bg-white/5 hover:bg-white/10 text-left text-white text-sm transition-colors flex items-center justify-between group"
+          >
+            <span>{item.label}</span>
+            <Icon type="chevronRight" size={16} className="text-gray-500 group-hover:text-white transition-colors" />
+          </button>
+        ))}
+      </div>
+    </SpotlightCard>
   </div>
 );
 };
