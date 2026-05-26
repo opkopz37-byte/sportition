@@ -1,27 +1,25 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/lib/AuthContext';
 import { searchPublicPlayerProfiles } from '@/lib/supabase';
+import AttendanceCheckModal from '@/components/AttendanceCheckModal';
 
 /**
  * 로그인 후 홈 — 다크 톤. 회원: 랭킹 바 + 검색 + 마이페이지·스킬. 체육관·관리자: 랭킹/티어 없이 검색 + 스파링·승인·회원.
  */
 export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player_common' }) {
-  const { user, profile } = useAuth();
   const [leaderboardRows, setLeaderboardRows] = useState([]);
-  const [myRankLine, setMyRankLine] = useState(null);
   const [tick, setTick] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showResults, setShowResults] = useState(false);
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
 
   const isGym = role === 'gym' || role === 'admin';
 
   useEffect(() => {
     if (isGym) {
       setLeaderboardRows([]);
-      setMyRankLine(null);
       return undefined;
     }
     let cancelled = false;
@@ -34,27 +32,6 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
           return;
         }
         setLeaderboardRows(data);
-        if (user?.id) {
-          const idx = data.findIndex((p) => p.id === user.id);
-          const row = idx >= 0 ? data[idx] : null;
-          setMyRankLine(
-            row
-              ? {
-                  rank: row.rank_label || String(idx + 1),
-                  name: row.display_name || profile?.nickname || profile?.name || '—',
-                  tier: row.tier || profile?.tier || '—',
-                  rankNum: idx + 1,
-                }
-              : {
-                  rank: '—',
-                  name: profile?.nickname || profile?.name || profile?.gym_name || '—',
-                  tier: profile?.tier || '—',
-                  rankNum: null,
-                }
-          );
-        } else {
-          setMyRankLine(null);
-        }
       } catch {
         if (!cancelled) setLeaderboardRows([]);
       }
@@ -62,7 +39,7 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
     return () => {
       cancelled = true;
     };
-  }, [isGym, user?.id, profile?.nickname, profile?.name, profile?.tier, profile?.gym_name]);
+  }, [isGym]);
 
   const tickerLen = Math.min(12, leaderboardRows.length);
 
@@ -84,61 +61,42 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
     setShowResults(true);
   }, [searchQuery]);
 
-  const displayName = profile?.nickname || profile?.name || profile?.gym_name || user?.email?.split('@')[0] || '—';
-  const displayTier = myRankLine?.tier || profile?.tier || '—';
-  const displayRank = myRankLine?.rank ?? '—';
-
   return (
     <div className="animate-fade-in-up w-full max-w-6xl mx-auto px-4 sm:px-6 pb-16 flex flex-col min-h-[calc(100dvh-6rem)]">
-      {/* 체육관·관리자 계정은 랭킹/티어 미표시 */}
-      {!isGym && (
+      <AttendanceCheckModal
+        open={attendanceModalOpen}
+        onClose={() => setAttendanceModalOpen(false)}
+        onGoToSkills={() => setActiveTab?.('skills')}
+      />
+      {/* 체육관·관리자 계정은 랭킹/티어 미표시 — 본인 정보 빼고 순위 슬라이드만 표시 */}
+      {!isGym && leaderboardRows.length > 0 && (
         <div className="w-full rounded-2xl border border-white/[0.1] bg-[#121212] overflow-hidden mb-8 sm:mb-10 shadow-sm">
-          <div className="flex items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3 text-sm sm:text-base">
-            <span className="font-bold text-blue-400 shrink-0 tracking-wide text-xs sm:text-sm">
-              {t('rankLabelShort')}
-            </span>
-            <div className="flex-1 min-w-0 flex items-center justify-center gap-2 sm:gap-3 text-white font-medium truncate px-1">
-              <span className="truncate">{displayName}</span>
-              <span className="text-gray-500 hidden xs:inline">·</span>
-              <span className="text-violet-300 font-semibold shrink-0">{displayTier}</span>
-            </div>
-            <div className="flex items-center gap-0.5 text-blue-300 font-bold tabular-nums shrink-0">
-              <span>{myRankLine?.rankNum != null ? `${myRankLine.rankNum}` : displayRank}</span>
-              <span className="text-emerald-400 text-xs" aria-hidden>
-                ▲
-              </span>
-            </div>
-          </div>
-          {leaderboardRows.length > 0 && (
-            <div className="border-t border-white/[0.06] bg-black/30 px-3 py-0 text-xs sm:text-sm text-gray-400 overflow-hidden h-9 flex items-center">
-              <div className="relative w-full h-7 overflow-hidden">
-                <div
-                  className="transition-transform duration-700 ease-in-out"
-                  style={{
-                    transform: `translateY(-${tick * 1.75}rem)`,
-                  }}
-                >
-                  {leaderboardRows.slice(0, 12).map((row, i) => (
-                    <button
-                      key={row.id || i}
-                      type="button"
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (row.id) setActiveTab(`opponent-profile-${row.id}`);
-                      }}
-                      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-                      className="h-7 flex items-center justify-center gap-2 w-full select-none active:bg-white/5 cursor-pointer"
-                    >
-                      <span className="text-amber-400/90 font-bold">#{row.rank_label || i + 1}</span>
-                      <span className="text-gray-200 truncate">{row.display_name || row.name}</span>
-                      <span className="text-gray-500">{row.tier}</span>
-                    </button>
-                  ))}
-                </div>
+          <div className="bg-black/30 px-3 sm:px-4 overflow-hidden h-14 flex items-center">
+            <div className="relative w-full h-12 overflow-hidden">
+              <div
+                className="transition-transform duration-700 ease-in-out"
+                style={{ transform: `translateY(-${tick * 3}rem)` }}
+              >
+                {leaderboardRows.slice(0, 12).map((row, i) => (
+                  <button
+                    key={row.id || i}
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (row.id) setActiveTab(`opponent-profile-${row.id}`);
+                    }}
+                    style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                    className="h-12 flex items-center justify-center gap-2 sm:gap-3 w-full select-none active:bg-white/5 cursor-pointer"
+                  >
+                    <span className="text-amber-400 font-extrabold text-base sm:text-lg tabular-nums">#{row.rank_label || i + 1}</span>
+                    <span className="text-white font-bold text-base sm:text-lg truncate">{row.display_name || row.name}</span>
+                    <span className="text-violet-300 font-semibold text-sm sm:text-base">{row.tier}</span>
+                  </button>
+                ))}
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -220,7 +178,7 @@ export default function AppHomeView({ setActiveTab, t = (k) => k, role = 'player
             {/* 주요 액션 — 에메랄드 강조 */}
             <button
               type="button"
-              onClick={() => setActiveTab('mypage-attendance')}
+              onClick={() => setAttendanceModalOpen(true)}
               className="w-full py-4 rounded-xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold text-base sm:text-lg transition-colors shadow-[0_0_20px_rgba(16,185,129,0.08)]"
             >
               {t('attendance')}
