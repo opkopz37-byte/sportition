@@ -1,20 +1,44 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { BackgroundGrid, PageHeader, THEME_ATHLETE, THEME_COACH, THEME_GYM } from '@/components/ui';
 import { Navbar } from '@/components/navigation';
 import { LoginModal, SignupPage, LandingPage } from '@/components/views/landing';
-import { ActiveSkillsView } from '@/components/views/skills';
-import { TierBoardView } from '@/components/views/ranking';
 import { MyPageView, SettingsView, EditProfileView, PrivacySettingsView, ActivityHistoryView, OpponentProfileView, MatchHistoryView, OpponentMatchHistoryView } from '@/components/views/mypage';
 import TermsOfServiceInlineView from '@/components/legal/TermsOfServiceInlineView';
-import { PlayersManagementView, MatchRoomView, GymNewMemberRegisterView } from '@/components/views/coach';
 import { ApprovalView } from '@/components/views/approval';
 import { ComingSoonView } from '@/components/views/comingsoon';
 import AppHomeView from '@/components/views/AppHomeView';
 import DashboardAttendanceInline from '@/components/views/DashboardAttendanceInline';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
+
+// 무거운 뷰 — 역할별로만 필요하므로 동적 import 로 코드 분할.
+// 로딩 동안 동일 톤의 단순 스피너만 표시 (별도 컴포넌트 추가 없이 인라인).
+const LazyFallback = () => (
+  <div className="min-h-[200px] flex items-center justify-center text-white/40 text-sm">불러오는 중…</div>
+);
+const ActiveSkillsView = dynamic(
+  () => import('@/components/views/skills').then((m) => m.ActiveSkillsView),
+  { loading: LazyFallback }
+);
+const TierBoardView = dynamic(
+  () => import('@/components/views/ranking').then((m) => m.TierBoardView),
+  { loading: LazyFallback }
+);
+const PlayersManagementView = dynamic(
+  () => import('@/components/views/coach').then((m) => m.PlayersManagementView),
+  { loading: LazyFallback }
+);
+const MatchRoomView = dynamic(
+  () => import('@/components/views/coach').then((m) => m.MatchRoomView),
+  { loading: LazyFallback }
+);
+const GymNewMemberRegisterView = dynamic(
+  () => import('@/components/views/coach').then((m) => m.GymNewMemberRegisterView),
+  { loading: LazyFallback }
+);
 
 const devLog = (...args) => {
   if (process.env.NODE_ENV === 'development') console.log(...args);
