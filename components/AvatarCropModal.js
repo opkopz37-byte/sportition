@@ -320,10 +320,12 @@ export default function AvatarCropModal({ file, onCancel, onCropped }) {
           <button
             type="button"
             onClick={onCancel}
-            className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-lg leading-none"
+            className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center"
             aria-label="닫기"
           >
-            ✕
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 6l12 12M18 6l-12 12" />
+            </svg>
           </button>
         </div>
 

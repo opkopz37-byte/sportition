@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
+import Modal, { ModalFooter, ModalButton } from '@/components/Modal';
 import { useAuth } from '@/lib/AuthContext';
 
 // 카드뽑기 (가챠) 뷰
@@ -283,23 +284,19 @@ const GachaView = ({ t = (key) => key, setActiveTab }) => {
       </SpotlightCard>
 
       {/* 뽑기 결과 모달 */}
-      {showResults && pullResults && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">🎉 뽑기 결과</h2>
-              <button
-                onClick={() => {
-                  setShowResults(false);
-                  setPullResults(null);
-                }}
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
-              >
-                <Icon type="x" size={20} className="text-gray-400" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
+      <Modal
+        open={showResults && !!pullResults}
+        onClose={() => {
+          setShowResults(false);
+          setPullResults(null);
+        }}
+        title="뽑기 결과"
+        size="xl"
+        containerClassName="max-h-[80vh] overflow-y-auto"
+      >
+        {pullResults && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {pullResults.map((result, index) => {
                 const badge = getRarityBadge(result.rarity);
                 return (
@@ -334,27 +331,14 @@ const GachaView = ({ t = (key) => key, setActiveTab }) => {
                 );
               })}
             </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setActiveTab('inventory')}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-xl text-white font-bold transition-all"
-              >
+            <ModalFooter>
+              <ModalButton variant="info" onClick={() => setActiveTab('inventory')}>
                 보관함 확인
-              </button>
-              <button
-                onClick={() => {
-                  setShowResults(false);
-                  setPullResults(null);
-                }}
-                className="flex-1 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-bold transition-all"
-              >
-                계속 뽑기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </ModalButton>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
 
       {/* 테스트용 코인 지급 버튼 */}
       {process.env.NODE_ENV === 'development' && (

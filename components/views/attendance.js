@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 import AttendanceClaimModal from '@/components/AttendanceClaimModal';
+import Modal, { ModalFooter, ModalButton } from '@/components/Modal';
 
 // 로컬 타임존 기준 YYYY-MM-DD — toISOString() UTC 버그 회피 (KST 새벽 시간이 어제로 들어가는 문제)
 function localYmd(d = new Date()) {
@@ -203,58 +204,45 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
         description={t('checkInDescription')}
       />
 
-      {/* 출석 실패 가이드 모달 (활성 스킬 없음 / 네트워크 오류 / 기타) */}
-      {checkInBlocked && (
-        <div
-          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
-          onClick={() => setCheckInBlocked(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border-2 border-amber-400/50 bg-[#0f1525] p-5 sm:p-6 shadow-[0_0_40px_rgba(251,191,36,0.25)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3 mb-3">
-              <div className="shrink-0 w-9 h-9 rounded-full bg-amber-400/20 border border-amber-300/50 flex items-center justify-center">
-                <span className="text-amber-200 text-lg font-black">!</span>
-              </div>
-              <h3 className="text-base sm:text-lg font-extrabold text-amber-100 leading-snug pt-1">
-                {checkInBlocked.title}
-              </h3>
-            </div>
+      {/* 출석 실패 가이드 모달 */}
+      <Modal
+        open={!!checkInBlocked}
+        onClose={() => setCheckInBlocked(null)}
+        title={checkInBlocked?.title}
+        variant="warning"
+        zIndexClass="z-[300]"
+      >
+        {checkInBlocked && (
+          <>
             <p className="text-sm text-white/90 mb-3 leading-relaxed whitespace-pre-line">
               {checkInBlocked.message}
             </p>
             {checkInBlocked.hint && (
-              <div className="rounded-xl bg-amber-500/[0.08] border border-amber-400/20 px-3 py-2.5 mb-4">
+              <div className="rounded-xl bg-amber-500/[0.08] border border-amber-400/20 px-3 py-2.5">
                 <p className="text-xs sm:text-[13px] text-amber-100/85 leading-relaxed whitespace-pre-line">
                   {checkInBlocked.hint}
                 </p>
               </div>
             )}
-            <div className="flex gap-2">
+            <ModalFooter>
               {checkInBlocked.goSkills && (
-                <button
-                  type="button"
+                <ModalButton
+                  variant="info"
                   onClick={() => {
                     setActiveTab?.('skills');
                     setCheckInBlocked(null);
                   }}
-                  className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white text-sm font-extrabold border border-cyan-300/50 active:scale-[0.98] transition-all"
                 >
                   스킬 화면으로
-                </button>
+                </ModalButton>
               )}
-              <button
-                type="button"
-                onClick={() => setCheckInBlocked(null)}
-                className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold transition-colors"
-              >
+              <ModalButton variant="ghost" onClick={() => setCheckInBlocked(null)}>
                 확인
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </ModalButton>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
 
       {/* 출석 체크 버튼 */}
       <SpotlightCard className="p-6 xs:p-8 sm:p-10 text-center">
