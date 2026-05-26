@@ -2,6 +2,7 @@
 
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SpotlightCard } from '@/components/ui';
+import Modal, { ModalFooter, ModalButton } from '@/components/Modal';
 import { useAuth } from '@/lib/AuthContext';
 
 /**
@@ -464,13 +465,14 @@ const CARD_ZONE_LABEL = {
 };
 
 /** 노드 카드 — 트렌디 디자인 (그라디언트 보더 + 메시 배경 + 도트 텍스처) */
-const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked }) {
+const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked, pickableLocked }) {
   const mastered = exp >= MAX_EXP;
   const inProgress = exp > 0 && exp < MAX_EXP;
   const isCommon = typeof node?.punch_type === 'string' && node.punch_type.startsWith('common');
   // 다른 스킬 진행 중 차단 — 마스터/진행중 본인은 예외
   const isSoftLocked = softLocked && !mastered && !inProgress;
-  const clickable = unlocked && !isSoftLocked;
+  // 잠금 상태지만 다음 진행 가능한 노드 — 회원이 직접 눌러서 해금
+  const clickable = (unlocked || pickableLocked) && !isSoftLocked;
 
   const zonePalette = CARD_ZONE_PALETTE[node?.zone];
   const palette = zonePalette || CARD_TAB_PALETTE[themeAccent] || CARD_TAB_PALETTE.cyan;
@@ -1220,7 +1222,7 @@ function InlineExpPanel({
     >
       <div className={`absolute -inset-1 bg-gradient-to-br ${theme.panelGlow} via-transparent to-transparent pointer-events-none`} aria-hidden />
 
-      {/* 위: 마스터된 경우 → 승단 심사 버튼, 아니면 스킬 추가 버튼 */}
+      {/* 위: 마스터 → 승단 심사 / 잠김 → 진행하기 / 그 외 → EXP 게이지 */}
       {mastered ? (
         <button
           type="button"
@@ -1251,8 +1253,18 @@ function InlineExpPanel({
                     ? '신청 중...'
                     : '★ 승단 심사 신청'}
         </button>
+      ) : !unlocked ? (
+        /* 잠긴 노드 — 회원이 직접 눌러서 해금/활성화 */
+        <button
+          type="button"
+          onClick={busy ? undefined : onAddSkill}
+          disabled={busy}
+          className="relative w-full px-1.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold transition-all bg-gradient-to-r from-cyan-400 to-emerald-400 text-black shadow active:scale-[0.98] skill-add-pulse disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {busy ? '진행 중...' : '▶ 진행하기'}
+        </button>
       ) : (
-        /* 비마스터: EXP 게이지만 크게 표시 (회원 직접 적립 불가, 안내 박스 제거) */
+        /* 비마스터 + 해금된 상태: EXP 게이지만 크게 표시 */
         <div className="relative flex-1 flex flex-col justify-center">
           <div className="flex items-baseline justify-between mb-1.5">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-white/50">EXP</span>
@@ -1309,6 +1321,10 @@ function SkillTree({
   promotionByNodeId, onSubmitPromotion,
   pendingPromotionNodeId, pendingPromotionName,
   unlockedNodeIds,
+  /* 코치 모드 등에서 선택 노드 옆 InlineExpPanel 을 숨김 */
+  hideInlinePanel = false,
+  /* 노드 카드의 잠금 노드 선택 가능 여부 (코치 모드용) */
+  allLockedPickable = false,
 }) {
   const unlockedSet = unlockedNodeIds instanceof Set ? unlockedNodeIds : new Set();
   // 카드/간격 (모바일·데스크톱 분리)
@@ -1467,6 +1483,27 @@ function SkillTree({
           const sibLocked = siblingLockSet.has(node.id);
           const unlocked = !sibLocked && unlockedSet.has(node.id);
           const isSelected = node.id === selectedId;
+          const cardSoftLocked = !allLockedPickable && (
+            (Boolean(inProgressNodeId) && inProgressNodeId !== node.id)
+            || (Boolean(pendingPromotionNodeId) && pendingPromotionNodeId !== node.id)
+          );
+          /* 다음 해금 가능한 잠긴 노드 — 회원이 직접 눌러서 해금하는 진입점.
+             코치 모드(allLockedPickable)에서는 모든 잠긴 노드를 자유 선택 가능. */
+          let pickableLocked = false;
+          if (allLockedPickable) {
+            pickableLocked = !unlocked && !sibLocked;
+          } else if (!unlocked && !sibLocked && !cardSoftLocked && !inProgressNodeId && !pendingPromotionNodeId) {
+            const parentNums = getParentNumbers(node);
+            if (parentNums.length === 0) {
+              pickableLocked = true;
+            } else {
+              pickableLocked = parentNums.every((pn) => {
+                const parent = nodeByNumber.get(pn);
+                if (!parent) return false;
+                return (expByNodeId.get(parent.id) || 0) >= MAX_EXP;
+              });
+            }
+          }
           return (
             <div
               key={node.id}
@@ -1490,10 +1527,8 @@ function SkillTree({
                 onSelect={onSelectNode}
                 themeAccent={themeAccent}
                 /* 다른 스킬 진행 중 OR 다른 스킬 심사 중 → 이 카드는 잠김 */
-                softLocked={
-                  (Boolean(inProgressNodeId) && inProgressNodeId !== node.id)
-                  || (Boolean(pendingPromotionNodeId) && pendingPromotionNodeId !== node.id)
-                }
+                softLocked={cardSoftLocked}
+                pickableLocked={pickableLocked}
               />
             </div>
           );
@@ -1580,8 +1615,8 @@ function SkillTree({
           );
         })() : null}
 
-        {/* 선택 노드 옆 EXP 패널 */}
-        {selectedId && positions.has(selectedId) ? (() => {
+        {/* 선택 노드 옆 EXP 패널 — 코치 모드에서는 숨김 */}
+        {!hideInlinePanel && selectedId && positions.has(selectedId) ? (() => {
           const sel = nodes.find((n) => n.id === selectedId);
           const pos = positions.get(selectedId);
           if (!sel || !pos) return null;
@@ -1636,6 +1671,8 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
   const [promotionByNodeId, setPromotionByNodeId] = useState({});
   // 승단 신청 확인 모달 — 표시할 노드 (null = 닫힘)
   const [promotionConfirmNode, setPromotionConfirmNode] = useState(null);
+  // 진행하기(해금) 확인 모달 — 표시할 잠긴 노드 (null = 닫힘)
+  const [unlockConfirmNode, setUnlockConfirmNode] = useState(null);
   // 신청 완료 토스트 메시지 (3초 후 자동 사라짐)
   const [promotionResultMessage, setPromotionResultMessage] = useState('');
   const [selectedTab, setSelectedTab] = useState('straight');
@@ -1939,11 +1976,37 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
     }
   })();
 
-  const handleAddSkill = useCallback(async () => {
-    // 회원의 직접 해금/투자는 폐지됨 — 관장이 해금/스킵 처리
-    // 출석 시 활성 스킬의 EXP 가 자동으로 +1 됨
-    alert('스킬 해금은 관장이 진행합니다.\n도장에서 관장님께 문의해주세요.\n\n출석하면 현재 진행 중인 스킬의 EXP 가 자동으로 올라갑니다.');
-  }, []);
+  // 잠긴 노드 [진행하기] 클릭 → 확인 모달 띄움. 실제 해금은 confirmUnlock 에서.
+  const handleAddSkill = useCallback((nodeId) => {
+    if (busyRef.current) return;
+    const node = treeNodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    setUnlockConfirmNode(node);
+  }, [treeNodes]);
+
+  // 모달에서 [네, 진행] 확인 시 → RPC 호출하여 해금 + 활성화
+  const confirmUnlock = useCallback(async () => {
+    const node = unlockConfirmNode;
+    if (!node || busyRef.current) return;
+    setUnlockConfirmNode(null);
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const { playerUnlockSkillNodeRpc } = await import('@/lib/supabase');
+      const { error } = await playerUnlockSkillNodeRpc(node.id);
+      if (error) {
+        alert(error.message || '스킬을 진행할 수 없습니다.');
+        return;
+      }
+      await loadData();
+    } catch (e) {
+      console.error('[confirmUnlock]', e);
+      alert(e?.message || '스킬 진행 중 오류가 발생했습니다.');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [unlockConfirmNode, loadData]);
 
   // 마스터 스킬 → 승단 심사 신청 — 커스텀 모달로 확인 받음
   // 모달 트리거: handleSubmitPromotion(nodeId) → setPromotionConfirmNode(node)
@@ -2159,53 +2222,60 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
       <UnlockCelebration tab={celebrationTab} onDone={() => setCelebrationTab(null)} />
 
       {/* ⭐ 승단 심사 신청 확인 모달 */}
-      {promotionConfirmNode ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(12,16,36,0.92)' }}
-          onClick={() => setPromotionConfirmNode(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border-2 border-amber-300/60 overflow-hidden shadow-[0_0_40px_rgba(251,191,36,0.35)]"
-            style={{
-              background: 'linear-gradient(135deg, rgba(251,191,36,0.18) 0%, rgba(15,23,42,0.95) 60%)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6 text-center">
-              <p className="text-[10px] font-black tracking-[0.4em] uppercase text-amber-300 mb-2">Master Promotion</p>
-              <h3 className="text-2xl font-black text-white mb-1 leading-tight">승단 심사 신청</h3>
-              <div className="my-4 px-4 py-3 rounded-xl bg-black/30 border border-white/10">
-                <p className="text-[10px] tracking-[0.2em] uppercase text-amber-300/80 mb-1">Skill</p>
-                <p className="text-base sm:text-lg font-bold text-white">{nodeDisplayTitle(promotionConfirmNode)}</p>
-                <p className="text-[11px] text-emerald-300/80 mt-1">5/5 마스터 완료</p>
-              </div>
-              <p className="text-sm text-white/70 leading-relaxed">
-                이 스킬에 대한 승단 심사를<br />소속 체육관에 신청하시겠어요?
-              </p>
-              <p className="text-[11px] text-amber-200/60 mt-2">
-                심사가 진행되는 동안엔 다시 신청할 수 없습니다.
-              </p>
+      <Modal
+        open={!!promotionConfirmNode}
+        onClose={() => setPromotionConfirmNode(null)}
+        title="승단 심사 신청"
+        variant="warning"
+        zIndexClass="z-[200]"
+      >
+        {promotionConfirmNode && (
+          <>
+            <div className="px-4 py-3 rounded-xl bg-black/30 border border-white/10 mb-3">
+              <p className="text-[10px] tracking-[0.2em] uppercase text-amber-300/80 mb-1">Skill</p>
+              <p className="text-base sm:text-lg font-bold text-white">{nodeDisplayTitle(promotionConfirmNode)}</p>
+              <p className="text-[11px] text-emerald-300/80 mt-1">5/5 마스터 완료</p>
             </div>
-            <div className="grid grid-cols-2 gap-2 p-3 bg-black/40">
-              <button
-                type="button"
-                onClick={() => setPromotionConfirmNode(null)}
-                className="py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white/80 font-semibold transition-colors"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={confirmSubmitPromotion}
-                className="py-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-extrabold transition-all active:scale-[0.98]"
-              >
+            <p className="text-sm text-white/85 leading-relaxed">
+              이 스킬에 대한 승단 심사를 소속 체육관에 신청하시겠어요?
+            </p>
+            <p className="text-[11px] text-amber-200/70 mt-2">
+              심사가 진행되는 동안엔 다시 신청할 수 없습니다.
+            </p>
+            <ModalFooter>
+              <ModalButton variant="warning" onClick={confirmSubmitPromotion}>
                 신청하기
-              </button>
+              </ModalButton>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
+
+      {/* ▶ 진행하기(해금) 확인 모달 */}
+      <Modal
+        open={!!unlockConfirmNode}
+        onClose={() => setUnlockConfirmNode(null)}
+        title="스킬 진행"
+        variant="success"
+        zIndexClass="z-[200]"
+      >
+        {unlockConfirmNode && (
+          <>
+            <div className="px-4 py-3 rounded-xl bg-black/30 border border-white/10 mb-3">
+              <p className="text-[10px] tracking-[0.2em] uppercase text-emerald-300/80 mb-1">Skill</p>
+              <p className="text-base sm:text-lg font-bold text-white">{nodeDisplayTitle(unlockConfirmNode)}</p>
             </div>
-          </div>
-        </div>
-      ) : null}
+            <p className="text-sm text-white/85 leading-relaxed">
+              이 스킬을 진행하시겠습니까? 출석할 때마다 EXP 가 자동으로 올라갑니다.
+            </p>
+            <ModalFooter>
+              <ModalButton variant="success" onClick={confirmUnlock}>
+                네, 진행
+              </ModalButton>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
 
       {/* 신청 완료 토스트 */}
       {promotionResultMessage ? (
@@ -2455,4 +2525,17 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
   );
 };
 
-export { ActiveSkillsView };
+export {
+  ActiveSkillsView,
+  PUNCH_TABS,
+  ACCENT_THEME,
+  MAX_EXP,
+  SkillTree,
+  SkillNodeCard,
+  ConnectorPath,
+  computeTreeLayout,
+  buildChildrenMap,
+  getParentNumbers,
+  nodeDisplayTitle,
+  getExpGradient,
+};

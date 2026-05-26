@@ -10,17 +10,15 @@ function isUuid(s) {
 }
 
 /**
- * POST /api/gym-members/[memberId]/skill-skip
+ * POST /api/gym-members/[memberId]/promotion-request
  * Body: { node_id: number }
- * 응답 (성공): { ok: true, node_id, action: 'skip' }
- * 응답 (실패): { ok: false, error, message? }
  *
- * 권한: gym (자기 회원) 또는 admin
- * 비즈니스 로직: RPC public.gym_skip_skill_node — 노드를 즉시 마스터 처리
+ * 관장이 회원 대신 특정 5/5 마스터 노드의 승단 신청(pending)을 생성.
+ * RPC: public.gym_submit_promotion_request_for_member
  */
 export async function POST(request, ctx) {
   const ip = getClientIp(request);
-  const rl = checkRateLimit(`${ip}:gym-skill-skip`, { limit: 30, windowMs: 60_000 });
+  const rl = checkRateLimit(`${ip}:gym-promotion-request`, { limit: 30, windowMs: 60_000 });
   if (!rl.ok) {
     return NextResponse.json(
       { error: 'rate_limited' },
@@ -66,8 +64,6 @@ export async function POST(request, ctx) {
   if (!Number.isInteger(nodeId) || nodeId <= 0) {
     return NextResponse.json({ error: 'invalid_node_id' }, { status: 400 });
   }
-  // 명시적으로 false 면 승단 신청 미생성. 미지정/true 면 기본값(자동 승인 등록).
-  const createPromotion = body.create_promotion !== false;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
@@ -79,10 +75,9 @@ export async function POST(request, ctx) {
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
 
-  const { data, error } = await supabase.rpc('gym_skip_skill_node', {
+  const { data, error } = await supabase.rpc('gym_submit_promotion_request_for_member', {
     p_member_id: memberId,
     p_node_id: nodeId,
-    p_create_promotion: createPromotion,
   });
 
   if (error) {
