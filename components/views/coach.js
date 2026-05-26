@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
+import Modal, { ModalFooter, ModalButton } from '@/components/Modal';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
 import {
@@ -14,6 +15,180 @@ import {
   birthPartsToIso,
 } from '@/lib/birthDate';
 import { checkEmailAvailable } from '@/lib/emailAvailability';
+import {
+  SkillTree as SkillTreeView,
+  PUNCH_TABS as SKILL_PUNCH_TABS,
+  ACCENT_THEME as SKILL_ACCENT_THEME,
+} from '@/components/views/skills';
+
+// 모듈 레벨 상수 — 매 렌더마다 새 참조 안 만들기 위해
+const EMPTY_ARR = Object.freeze([]);
+const NOOP = () => {};
+
+/** 관장 화면 — 회원의 스킬트리를 회원 본인 페이지와 동일한 디자인으로 표시.
+ *  - 탭 네비게이션 (스트레이트/훅/어퍼/심화)
+ *  - 트리 레이아웃 + 부모/자식 연결선
+ *  - 노드 클릭 시 onNodeClick(nodeId) — 호출 측에서 해금/스킵 분기
+ *  - 회원 측 [진행하기] / [승단 신청] 패널(InlineExpPanel) 은 hideInlinePanel 로 숨김 */
+const MemberSkillBoard = memo(function MemberSkillBoard({ skillProgressData, onNodeClick }) {
+  const [selectedTabKey, setSelectedTabKey] = useState('straight');
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+
+  const nodes = skillProgressData?.nodes || EMPTY_ARR;
+  const unlocks = skillProgressData?.unlocks || EMPTY_ARR;
+  const progress = skillProgressData?.progress || EMPTY_ARR;
+  const promotion_requests = skillProgressData?.promotion_requests || EMPTY_ARR;
+
+  // 데이터 의존 계산 — skillProgressData 가 안 바뀌면 재계산 안 됨
+  const unlockedSet = useMemo(
+    () => new Set(unlocks.map((u) => u.node_id)),
+    [unlocks]
+  );
+  const expByNodeId = useMemo(
+    () => new Map(
+      progress.map((p) => [p.node_id, Math.max(0, Math.min(5, Number(p.exp_level || 0)))])
+    ),
+    [progress]
+  );
+  const nodeByNumber = useMemo(
+    () => new Map(nodes.map((n) => [Number(n.node_number), n])),
+    [nodes]
+  );
+  const promotionByNodeId = useMemo(() => {
+    const m = {};
+    for (const r of promotion_requests) {
+      const cur = m[r.fork_node_id];
+      if (!cur || new Date(r.requested_at) > new Date(cur.requestedAt)) {
+        m[r.fork_node_id] = { id: r.id, status: r.status, requestedAt: r.requested_at };
+      }
+    }
+    return m;
+  }, [promotion_requests]);
+
+  const inProgressNode = useMemo(() => {
+    for (const n of nodes) {
+      if (!unlockedSet.has(n.id)) continue;
+      const e = expByNodeId.get(n.id) || 0;
+      if (e > 0 && e < 5) return n;
+    }
+    return null;
+  }, [nodes, unlockedSet, expByNodeId]);
+
+  const pendingPromotionNode = useMemo(() => {
+    for (const n of nodes) {
+      const e = expByNodeId.get(n.id) || 0;
+      if (e < 5) continue;
+      const pr = promotionByNodeId[n.id];
+      if (!pr || pr.status !== 'approved') return n;
+    }
+    return null;
+  }, [nodes, expByNodeId, promotionByNodeId]);
+
+  const currentTab = useMemo(
+    () => SKILL_PUNCH_TABS.find((t) => t.key === selectedTabKey) || SKILL_PUNCH_TABS[0],
+    [selectedTabKey]
+  );
+  const tabNodes = useMemo(() => (
+    nodes
+      .filter((n) => {
+        const pt = (n.punch_type || '').toLowerCase();
+        return pt === currentTab.common || pt === currentTab.specific;
+      })
+      .sort((a, b) => Number(a.node_number) - Number(b.node_number))
+  ), [nodes, currentTab]);
+
+  const theme = SKILL_ACCENT_THEME[currentTab.accent];
+
+  const handleSelect = useCallback((nid) => {
+    setSelectedNodeId(nid);
+    onNodeClick?.(nid);
+  }, [onNodeClick]);
+
+  const handleTabClick = useCallback((key) => {
+    setSelectedTabKey(key);
+    setSelectedNodeId(null);
+  }, []);
+
+  const inProgressNodeName = inProgressNode ? (inProgressNode.name || `노드 ${inProgressNode.node_number}`) : '';
+  const pendingPromotionName = pendingPromotionNode ? (pendingPromotionNode.name || `노드 ${pendingPromotionNode.node_number}`) : '';
+
+  if (!skillProgressData) return null;
+
+  return (
+    <div className="space-y-3">
+      {/* 탭 네비게이션 — 회원 페이지와 동일 디자인 */}
+      <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto">
+        {SKILL_PUNCH_TABS.map((tab, idx) => {
+          const active = tab.key === selectedTabKey;
+          const tabTheme = SKILL_ACCENT_THEME[tab.accent];
+          const isLast = idx === SKILL_PUNCH_TABS.length - 1;
+          return (
+            <Fragment key={tab.key}>
+              <button
+                type="button"
+                onClick={() => handleTabClick(tab.key)}
+                className={`flex-1 min-w-0 px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all border-2 inline-flex items-center justify-center gap-1.5 ${
+                  active
+                    ? tabTheme.tabActive
+                    : 'bg-white/[0.03] border-white/10 text-white/60 hover:text-white/85 hover:border-white/20'
+                }`}
+              >
+                <span
+                  className={`shrink-0 inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded-full text-[9px] sm:text-[10px] font-black tabular-nums ${
+                    active ? 'bg-white/15 text-white' : 'bg-white/10 text-white/50'
+                  }`}
+                >
+                  {idx + 1}
+                </span>
+                <span className="truncate">{tab.label}</span>
+              </button>
+              {!isLast ? (
+                <span
+                  className="shrink-0 text-white/35 text-sm sm:text-base font-bold select-none"
+                  aria-hidden
+                >→</span>
+              ) : null}
+            </Fragment>
+          );
+        })}
+      </div>
+
+      {/* 트리 본문 */}
+      <div className="rounded-xl border border-white/12 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 p-3 sm:p-4 overflow-x-auto">
+        {tabNodes.length === 0 ? (
+          <div className="py-6 text-center text-gray-500 text-sm">표시할 노드가 없습니다.</div>
+        ) : (
+          <SkillTreeView
+            nodes={tabNodes}
+            expByNodeId={expByNodeId}
+            nodeByNumber={nodeByNumber}
+            selectedId={selectedNodeId}
+            burstNodeId={null}
+            burstKey={0}
+            theme={theme}
+            themeAccent={currentTab.accent}
+            onSelectNode={handleSelect}
+            onAddSkill={NOOP}
+            sp={0}
+            busy={false}
+            hasSelection={false}
+            nextTabCta={null}
+            inProgressNodeId={inProgressNode?.id ?? null}
+            inProgressNodeName={inProgressNodeName}
+            promotionByNodeId={promotionByNodeId}
+            onSubmitPromotion={NOOP}
+            pendingPromotionNodeId={pendingPromotionNode?.id ?? null}
+            pendingPromotionName={pendingPromotionName}
+            unlockedNodeIds={unlockedSet}
+            hideInlinePanel
+            allLockedPickable
+          />
+        )}
+      </div>
+    </div>
+  );
+});
+
 // 코치 뷰들
 
 const CoachInsightsView = ({ t = (key) => key, setActiveTab }) => (
@@ -84,35 +259,6 @@ const CoachInsightsView = ({ t = (key) => key, setActiveTab }) => (
         <div className="text-xs sm:text-sm text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{t('monthlyRevenue')}</div>
         <div className="mt-1 sm:mt-2 text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">{t('target')}: ₩10M (82%)</div>
       </SpotlightCard>
-    </div>
-
-    {/* 빠른 액션 버튼 */}
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-      <button
-        onClick={() => setActiveTab('players')}
-        className="p-2 sm:p-3 bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/30 hover:border-blue-500/50 rounded-xl transition-all hover:scale-105 group"
-      >
-        <div className="text-xl sm:text-2xl mb-1 group-hover:scale-110 transition-transform">👥</div>
-        <div className="text-[11px] sm:text-xs font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">회원 관리/스킬 관리</div>
-      </button>
-      <button 
-        onClick={() => setActiveTab('match')}
-        className="p-2 sm:p-3 bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/30 hover:border-red-500/50 rounded-xl transition-all hover:scale-105 group"
-      >
-        <div className="text-xl sm:text-2xl mb-1 group-hover:scale-110 transition-transform">🥊</div>
-        <div className="text-[11px] sm:text-xs font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{t('matchRoom')}</div>
-      </button>
-      <button 
-        onClick={() => setActiveTab('admin')}
-        className="p-2 sm:p-3 bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/30 hover:border-purple-500/50 rounded-xl transition-all hover:scale-105 group"
-      >
-        <div className="text-xl sm:text-2xl mb-1 group-hover:scale-110 transition-transform">⚙️</div>
-        <div className="text-[11px] sm:text-xs font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{t('facilityManagement')}</div>
-      </button>
-      <button className="p-2 sm:p-3 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30 hover:border-emerald-500/50 rounded-xl transition-all hover:scale-105 group">
-        <div className="text-xl sm:text-2xl mb-1 group-hover:scale-110 transition-transform">📊</div>
-        <div className="text-[11px] sm:text-xs font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">{t('detailedReport')}</div>
-      </button>
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -525,7 +671,6 @@ function mapGymMemberRow(row) {
     draws,
     totalMatches,
     winRate: winRatePct,
-    skillPoints: row.skill_points != null ? Number(row.skill_points) : 0,
     recentRecords: [],
     skills: [],
   };
@@ -880,6 +1025,8 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState(null);
+  // realtime 핸들러가 stale closure 안 보도록 최신 members id Set 유지
+  const memberIdsRef = useRef(new Set());
   /** 'info' | 'edit' | 'attendance' | 'skill-management' */
   const [memberDetailMode, setMemberDetailMode] = useState('info');
   const [attendanceRows, setAttendanceRows] = useState([]);
@@ -888,7 +1035,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [skillProgressData, setSkillProgressData] = useState(null);
   const [skillProgressLoading, setSkillProgressLoading] = useState(false);
   const [skillProgressError, setSkillProgressError] = useState(null);
-  const [unlockableData, setUnlockableData] = useState(null);
   const [skillActionBusy, setSkillActionBusy] = useState(null);
   const [skillConfirm, setSkillConfirm] = useState(null); // { action, nodeId, nodeName } | null
   const [memberEditSaving, setMemberEditSaving] = useState(false);
@@ -899,6 +1045,10 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [deleteEmailInput, setDeleteEmailInput] = useState('');
   const [deletingMember, setDeletingMember] = useState(false);
   const [actionMessage, setActionMessage] = useState(null);
+  // 해금/스킵 결과 모달 — 'success' | 'error' | 'promotion_required'
+  // 'promotion_required' 시 prevNode 정보로 자동 승단신청+재시도 버튼 노출.
+  const [skillActionResult, setSkillActionResult] = useState(null);
+  const [autoResolveBusy, setAutoResolveBusy] = useState(false);
 
   const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
 
@@ -987,23 +1137,14 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
         setSkillProgressLoading(false);
         return;
       }
-      const [progressRes, unlockableRes] = await Promise.all([
-        fetch(`/api/gym-members/${encodeURIComponent(m.id)}/skill-progress`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`/api/gym-members/${encodeURIComponent(m.id)}/unlockable-nodes`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
+      const progressRes = await fetch(`/api/gym-members/${encodeURIComponent(m.id)}/skill-progress`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const progressJson = await progressRes.json().catch(() => ({}));
-      const unlockableJson = await unlockableRes.json().catch(() => ({}));
       if (!progressRes.ok) {
         setSkillProgressError(progressJson.error || '스킬 진행을 불러오지 못했습니다.');
       } else {
         setSkillProgressData(progressJson);
-      }
-      if (unlockableRes.ok) {
-        setUnlockableData(unlockableJson);
       }
     } catch (e) {
       setSkillProgressError(e.message || '스킬 진행을 불러오지 못했습니다.');
@@ -1012,59 +1153,201 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     }
   };
 
+  // 액션 후 갱신 — 정적 nodes 는 재fetch 안 함, loading state 토글 안 함 (깜박임 제거)
+  // 한 번의 setState 로 회원 변경 데이터만 머지
+  const refreshUserSkillData = async (memberId) => {
+    if (!memberId) return;
+    try {
+      const { getSupabase } = await import('@/lib/supabase');
+      const supa = getSupabase();
+      const { data: sessionData } = await supa.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) return;
+      const res = await fetch(
+        `/api/gym-members/${encodeURIComponent(memberId)}/skill-progress?include=user`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) return;
+      const json = await res.json().catch(() => null);
+      if (!json?.ok) return;
+      setSkillProgressData((prev) => prev ? ({
+        ...prev,
+        member: json.member,
+        unlocks: json.unlocks,
+        progress: json.progress,
+        promotion_requests: json.promotion_requests,
+      }) : prev);
+    } catch {
+      // 실패해도 기존 화면 유지 — 사용자가 모달 닫고 재진입하면 자연 복구
+    }
+  };
+
   // 회원 모달의 [해금]/[스킵] 클릭 → 재확인 모달 띄움
-  const requestSkillAction = (action, nodeId, nodeName) => {
+  const requestSkillAction = useCallback((action, nodeId, nodeName) => {
     if (skillActionBusy) return;
     setActionMessage(null);
     setSkillConfirm({ action, nodeId, nodeName });
-  };
+  }, [skillActionBusy]);
+
+  // MemberSkillBoard 노드 클릭 — 잠긴/미마스터/마스터 분기. 메모이제이션 위해 stable.
+  const handleSkillBoardNodeClick = useCallback((nid) => {
+    if (!skillProgressData) return;
+    const node = skillProgressData.nodes.find((n) => n.id === nid);
+    if (!node) return;
+    const unlocked = skillProgressData.unlocks.some((u) => u.node_id === nid);
+    const pRow = skillProgressData.progress.find((p) => p.node_id === nid);
+    const exp = Math.max(0, Math.min(5, Number(pRow?.exp_level || 0)));
+    const name = node.name || `노드 ${node.node_number}`;
+    if (!unlocked) {
+      requestSkillAction('unlock', nid, name);
+    } else if (exp < 5) {
+      requestSkillAction('skip', nid, name);
+    }
+  }, [skillProgressData, requestSkillAction]);
 
   // 재확인 모달에서 [확인] 누르면 호출
-  const confirmSkillAction = async () => {
+  //   extras 예: { create_promotion: false } — 스킵 시 승단 신청 미생성 옵션
+  const confirmSkillAction = async (extras = null) => {
     if (!skillConfirm) return;
-    const { action, nodeId } = skillConfirm;
+    const { action, nodeId, nodeName } = skillConfirm;
     setSkillConfirm(null);
-    await handleSkillAction(action, nodeId);
+    await handleSkillAction(action, nodeId, nodeName, extras);
   };
 
-  const handleSkillAction = async (action, nodeId) => {
+  // 가장 최근 마스터됐는데 승단 미승인 노드 — promotion_required 자동 해결용
+  const findLatestUnapprovedMasteredNode = () => {
+    if (!skillProgressData) return null;
+    const { nodes = [], unlocks = [], progress = [], promotion_requests = [] } = skillProgressData;
+    const expMap = new Map(progress.map((p) => [p.node_id, Number(p.exp_level || 0)]));
+    const latestStatusByNode = new Map();
+    for (const r of promotion_requests) {
+      const cur = latestStatusByNode.get(r.fork_node_id);
+      if (!cur || new Date(r.requested_at) > new Date(cur.at)) {
+        latestStatusByNode.set(r.fork_node_id, { status: r.status, at: r.requested_at });
+      }
+    }
+    const candidates = unlocks
+      .filter((u) => (expMap.get(u.node_id) || 0) >= 5)
+      .filter((u) => {
+        const s = latestStatusByNode.get(u.node_id)?.status;
+        return s !== 'approved';
+      })
+      .sort((a, b) => new Date(b.unlocked_at || 0) - new Date(a.unlocked_at || 0));
+    const top = candidates[0];
+    if (!top) return null;
+    const node = nodes.find((n) => n.id === top.node_id);
+    return node ? { id: node.id, name: node.name || `노드 ${node.node_number}` } : null;
+  };
+
+  /** action: 'unlock' | 'skip', extras?: { create_promotion?: boolean } */
+  const handleSkillAction = async (action, nodeId, nodeName, extras = null) => {
     if (!selectedMember?.id || skillActionBusy) return;
     setActionMessage(null);
     setSkillActionBusy({ nodeId, action });
     try {
       const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
       if (typeof isSupabaseConfigured === 'function' && !isSupabaseConfigured()) {
-        setActionMessage({ type: 'err', text: 'Supabase가 설정되지 않았습니다.' });
+        setSkillActionResult({ kind: 'error', title: '설정 오류', message: 'Supabase가 설정되지 않았습니다.' });
         return;
       }
       const supa = getSupabase();
       const { data: sessionData } = await supa.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) {
-        setActionMessage({ type: 'err', text: '로그인이 필요합니다.' });
+        setSkillActionResult({ kind: 'error', title: '인증 필요', message: '로그인이 필요합니다.' });
         return;
       }
       const endpoint = action === 'unlock' ? 'skill-unlock' : 'skill-skip';
+      const body = { node_id: nodeId };
+      if (action === 'skip' && extras && typeof extras.create_promotion === 'boolean') {
+        body.create_promotion = extras.create_promotion;
+      }
       const res = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}/${endpoint}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ node_id: nodeId }),
+        body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json.ok === false) {
-        setActionMessage({ type: 'err', text: json.message || json.error || '처리에 실패했습니다.' });
+        const code = json.error;
+        if (action === 'unlock' && code === 'promotion_required') {
+          const prevNode = findLatestUnapprovedMasteredNode();
+          setSkillActionResult({
+            kind: 'promotion_required',
+            title: '승단 신청 필요',
+            message: prevNode
+              ? `'${prevNode.name}' 의 승단 신청이 먼저 필요합니다.`
+              : '이전 스킬의 승단 신청이 먼저 필요합니다.',
+            prevNodeId: prevNode?.id ?? null,
+            prevNodeName: prevNode?.name ?? '이전 스킬',
+            retryAction: action,
+            retryNodeId: nodeId,
+            retryNodeName: nodeName,
+          });
+          return;
+        }
+        setSkillActionResult({
+          kind: 'error',
+          title: action === 'unlock' ? '해금 실패' : '스킵 실패',
+          message: json.message || json.error || '처리에 실패했습니다.',
+        });
         return;
       }
-      setActionMessage({ type: 'ok', text: action === 'unlock' ? '해금이 완료되었습니다.' : '스킵 처리되었습니다.' });
-      // 해금 성공 시 햅틱 진동 (모바일)
       if (action === 'unlock' && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         try { navigator.vibrate([60, 30, 80]); } catch { /* ignore */ }
       }
-      await openSkillManagementPanel(selectedMember);
+      setSkillActionResult({
+        kind: 'success',
+        title: action === 'unlock' ? '해금 완료' : '스킵 완료',
+        message: nodeName ? `'${nodeName}'` : '',
+      });
+      await refreshUserSkillData(selectedMember.id);
     } catch (e) {
-      setActionMessage({ type: 'err', text: e.message || '처리에 실패했습니다.' });
+      setSkillActionResult({ kind: 'error', title: '처리 실패', message: e.message || '처리에 실패했습니다.' });
     } finally {
       setSkillActionBusy(null);
+    }
+  };
+
+  // promotion_required 모달에서 [네, 자동 진행] 시 → 승단 신청 INSERT + 원래 해금 재시도
+  const handleAutoResolvePromotion = async () => {
+    if (autoResolveBusy || !skillActionResult || skillActionResult.kind !== 'promotion_required') return;
+    const { prevNodeId, retryAction, retryNodeId, retryNodeName } = skillActionResult;
+    if (!prevNodeId || !selectedMember?.id) {
+      setSkillActionResult({ kind: 'error', title: '자동 진행 불가', message: '이전 노드 정보를 찾지 못했습니다. 수동 처리해 주세요.' });
+      return;
+    }
+    setAutoResolveBusy(true);
+    try {
+      const { getSupabase } = await import('@/lib/supabase');
+      const supa = getSupabase();
+      const { data: sessionData } = await supa.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        setSkillActionResult({ kind: 'error', title: '인증 필요', message: '로그인이 필요합니다.' });
+        return;
+      }
+      const promoRes = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}/promotion-request`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_id: prevNodeId }),
+      });
+      const promoJson = await promoRes.json().catch(() => ({}));
+      if (!promoRes.ok || promoJson.ok === false) {
+        setSkillActionResult({
+          kind: 'error',
+          title: '승단 신청 실패',
+          message: promoJson.message || promoJson.error || '승단 신청에 실패했습니다.',
+        });
+        return;
+      }
+      // 신청 성공 → 원래 해금 재시도
+      setSkillActionResult(null);
+      await handleSkillAction(retryAction, retryNodeId, retryNodeName);
+    } catch (e) {
+      setSkillActionResult({ kind: 'error', title: '자동 진행 실패', message: e.message || '오류가 발생했습니다.' });
+    } finally {
+      setAutoResolveBusy(false);
     }
   };
 
@@ -1213,7 +1496,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     setAttendanceRows([]);
     setSkillProgressData(null);
     setSkillProgressError(null);
-    setUnlockableData(null);
     setSkillActionBusy(null);
     setSkillConfirm(null);
     setShowResetPw(false);
@@ -1260,11 +1542,38 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     loadMembers();
   }, [loadMembers]);
 
-  /** 출석/통계 DB 변경 시 목록 즉시 반영 (키오스크 등 다른 창 포함) */
+  // members 변경 시 ref 동기화 — realtime 핸들러가 최신 id Set 참조 가능
+  useEffect(() => {
+    memberIdsRef.current = new Set(members.map((m) => m.id).filter(Boolean));
+  }, [members]);
+
+  /** 출석/통계 DB 변경 시 목록 즉시 반영 (키오스크 등 다른 창 포함)
+   *  최적화: ① 우리 체육관 회원의 변경만 처리 ② 500ms 디바운스로 버스트 코얼레싱 */
   useEffect(() => {
     if (!gymName) return;
     let channel;
     let cancelled = false;
+    let reloadTimer = null;
+
+    const scheduleReload = () => {
+      if (reloadTimer) return; // 이미 예약됨 — 코얼레싱
+      reloadTimer = setTimeout(() => {
+        reloadTimer = null;
+        loadMembers();
+      }, 500);
+    };
+
+    const handleChange = (payload) => {
+      const affected = payload?.new?.user_id || payload?.old?.user_id;
+      // payload에 user_id가 없으면 보수적으로 reload (예외 케이스)
+      if (!affected) {
+        scheduleReload();
+        return;
+      }
+      // 우리 체육관 회원이 아니면 무시 — 가장 큰 낭비 컷
+      if (!memberIdsRef.current.has(affected)) return;
+      scheduleReload();
+    };
 
     const start = async () => {
       try {
@@ -1276,12 +1585,12 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'attendance' },
-            () => loadMembers()
+            handleChange
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'statistics' },
-            () => loadMembers()
+            handleChange
           )
           .subscribe();
       } catch (e) {
@@ -1297,6 +1606,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
 
     return () => {
       cancelled = true;
+      if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis);
       import('@/lib/supabase').then(({ getSupabase }) => {
         if (channel) getSupabase().removeChannel(channel);
@@ -1322,14 +1632,17 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     });
   }, [members]);
 
-  const filteredMembers = members.filter((m) => {
-    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
-    let matchesFilter = true;
-    if (filterStatus === 'active') matchesFilter = m.status === 'active';
-    else if (filterStatus === 'inactive') matchesFilter = m.status === 'inactive';
-    else if (filterStatus === 'athlete') matchesFilter = m.userRole === 'player_athlete';
-    return matchesSearch && matchesFilter;
-  });
+  const filteredMembers = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return members.filter((m) => {
+      const matchesSearch = m.name.toLowerCase().includes(q);
+      let matchesFilter = true;
+      if (filterStatus === 'active') matchesFilter = m.status === 'active';
+      else if (filterStatus === 'inactive') matchesFilter = m.status === 'inactive';
+      else if (filterStatus === 'athlete') matchesFilter = m.userRole === 'player_athlete';
+      return matchesSearch && matchesFilter;
+    });
+  }, [members, searchQuery, filterStatus]);
 
   return (
     <div className="animate-fade-in-up">
@@ -1573,9 +1886,12 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                 <button
                   type="button"
                   onClick={closeMemberModal}
-                  className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
+                  aria-label="닫기"
+                  className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all flex-shrink-0"
                 >
-                  <span className="text-xl">✕</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 6l12 12M18 6l-12 12" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1718,12 +2034,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                         <span className="text-sm text-gray-400 whitespace-nowrap">신장</span>
                         <span className="text-sm text-white font-medium whitespace-nowrap tabular-nums">
                           {selectedMember.height != null ? `${selectedMember.height}cm` : '—'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b border-white/5 gap-3">
-                        <span className="text-sm text-gray-400 whitespace-nowrap">스킬 포인트</span>
-                        <span className="text-sm font-bold whitespace-nowrap tabular-nums text-purple-300">
-                          {selectedMember.skillPoints ?? 0} SP
                         </span>
                       </div>
                       <div className="flex justify-between py-2 gap-3">
@@ -1875,248 +2185,17 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                 <div className="space-y-4">
                   {skillProgressLoading && <div className="py-8 text-center text-gray-400">불러오는 중…</div>}
                   {skillProgressError && <div className="py-4 text-center text-red-400 text-sm">{skillProgressError}</div>}
-                  {!skillProgressLoading && !skillProgressError && skillProgressData && (() => {
-                    const { member, nodes = [], unlocks = [], progress = [], promotion_requests = [] } = skillProgressData;
-                    const unlockedNodeIds = new Set(unlocks.map((u) => u.node_id));
-                    const progressByNodeId = new Map(progress.map((p) => [p.node_id, p]));
-                    const latestRequestByNodeId = new Map();
-                    for (const r of promotion_requests) {
-                      if (!latestRequestByNodeId.has(r.fork_node_id)) {
-                        latestRequestByNodeId.set(r.fork_node_id, r);
-                      }
-                    }
-                    const interestingNodes = nodes
-                      .filter((n) => unlockedNodeIds.has(n.id) || progressByNodeId.has(n.id))
-                      .sort((a, b) => Number(a.node_number) - Number(b.node_number));
-
-                    return (
-                      <>
-                        <div className="rounded-xl border border-white/10 overflow-hidden">
-                          <div className="px-3 py-2 bg-white/5 text-xs font-bold text-gray-300">스킬 진행</div>
-                          {interestingNodes.length === 0 ? (
-                            <div className="px-3 py-6 text-center text-gray-500 text-sm">진행 중인 스킬이 없습니다.</div>
-                          ) : (() => {
-                            const PUNCH_TABS = [
-                              { key: 'straight', label: '스트레이트', accent: 'cyan',   match: ['common', 'common_straight', 'straight'] },
-                              { key: 'hook',     label: '훅',         accent: 'orange', match: ['common_hook', 'hook'] },
-                              { key: 'upper',    label: '어퍼',       accent: 'violet', match: ['common_upper', 'upper'] },
-                              { key: 'advanced', label: '심화',       accent: 'rose',   match: ['common_advanced', 'advanced'] },
-                            ];
-                            const ACCENT_HEAD = {
-                              cyan:   'bg-cyan-500/20 border-cyan-400/40 text-cyan-100',
-                              orange: 'bg-orange-500/20 border-orange-400/40 text-orange-100',
-                              violet: 'bg-violet-500/20 border-violet-400/40 text-violet-100',
-                              rose:   'bg-rose-500/20 border-rose-400/40 text-rose-100',
-                              gray:   'bg-white/[0.08] border-white/20 text-gray-200',
-                            };
-                            const ACCENT_DOT = {
-                              cyan: 'bg-cyan-400', orange: 'bg-orange-400', violet: 'bg-violet-400', rose: 'bg-rose-400', gray: 'bg-gray-400',
-                            };
-                            const tabOf = (n) => {
-                              const pt = (n.punch_type || '').toLowerCase();
-                              const t = PUNCH_TABS.find((tab) => tab.match.includes(pt));
-                              return t ? t.key : 'other';
-                            };
-                            const groups = PUNCH_TABS.map((t) => ({
-                              key: t.key,
-                              label: t.label,
-                              accent: t.accent,
-                              nodes: interestingNodes.filter((n) => tabOf(n) === t.key),
-                            })).filter((g) => g.nodes.length > 0);
-                            const orphans = interestingNodes.filter((n) => tabOf(n) === 'other');
-                            if (orphans.length > 0) groups.push({ key: 'other', label: '기타', accent: 'gray', nodes: orphans });
-                            return groups.map((group) => (
-                              <div key={group.key} className="mb-2 last:mb-0">
-                                <div className={`px-3 py-2 border-y flex items-center gap-2 ${ACCENT_HEAD[group.accent] || ACCENT_HEAD.gray}`}>
-                                  <span className={`w-1 h-4 rounded-full ${ACCENT_DOT[group.accent] || ACCENT_DOT.gray}`} aria-hidden />
-                                  <span className="text-sm font-extrabold tracking-wide">{group.label}</span>
-                                  <span className="text-[11px] font-bold opacity-70 ml-auto tabular-nums">{group.nodes.length}</span>
-                                </div>
-                                <ul className="divide-y divide-white/5">
-                                  {group.nodes.map((n) => {
-                                const p = progressByNodeId.get(n.id);
-                                const exp = Math.max(0, Math.min(5, Number(p?.exp_level ?? 0)));
-                                const isUnlocked = unlockedNodeIds.has(n.id);
-                                const isMastered = exp >= 5;
-                                const req = latestRequestByNodeId.get(n.id);
-                                const promotion = req?.status;
-                                return (
-                                  <li key={n.id} className="px-3 py-2.5 flex items-center gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <span className="text-sm font-semibold text-white truncate">{n.name || `노드 ${n.node_number}`}</span>
-                                        {n.zone && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-gray-300">{n.zone}</span>
-                                        )}
-                                        {n.is_fork && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">포크</span>
-                                        )}
-                                        {!isMastered && isUnlocked && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">해금</span>
-                                        )}
-                                        {promotion && promotion !== 'none' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300">
-                                            승단 {promotion === 'pending' ? '대기' : promotion === 'reviewing' ? '심사' : promotion === 'approved' ? '승인' : promotion}
-                                          </span>
-                                        )}
-                                        {req && req.status === 'rejected' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300">최근 거절</span>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                                          <div className="h-full bg-emerald-400" style={{ width: `${(exp / 5) * 100}%` }} />
-                                        </div>
-                                        <span className="text-[11px] tabular-nums text-gray-400 whitespace-nowrap">{exp}/5</span>
-                                      </div>
-                                    </div>
-                                  </li>
-                                );
-                              })}
-                                </ul>
-                              </div>
-                            ));
-                          })()}
-                        </div>
-
-                        <div className="rounded-xl border border-white/10 overflow-hidden">
-                          <div className="px-3 py-2 bg-white/5 text-xs font-bold text-gray-300 flex items-center justify-between gap-2">
-                            <span>다음 해금 / 스킵</span>
-                            {unlockableData?.candidate_nodes && (
-                              <span className="text-[10px] text-gray-500 font-normal">
-                                {unlockableData.candidate_nodes.length}개 후보
-                              </span>
-                            )}
-                          </div>
-                          {!unlockableData && (
-                            <div className="px-3 py-4 text-center text-gray-500 text-xs">불러오는 중…</div>
-                          )}
-                          {unlockableData && !unlockableData.can_unlock && (
-                            <div className="px-3 py-3 bg-amber-500/10 border-b border-amber-500/20 text-amber-200 text-xs">
-                              ⚠️ {unlockableData.message}
-                            </div>
-                          )}
-                          {unlockableData && unlockableData.candidate_nodes && unlockableData.candidate_nodes.length === 0 && (
-                            <div className="px-3 py-6 text-center text-gray-500 text-sm">미해금 노드가 없습니다.</div>
-                          )}
-                          {unlockableData && unlockableData.candidate_nodes && unlockableData.candidate_nodes.length > 0 && (() => {
-                            const PUNCH_TABS = [
-                              { key: 'straight', label: '스트레이트', accent: 'cyan',   match: ['common', 'common_straight', 'straight'] },
-                              { key: 'hook',     label: '훅',         accent: 'orange', match: ['common_hook', 'hook'] },
-                              { key: 'upper',    label: '어퍼',       accent: 'violet', match: ['common_upper', 'upper'] },
-                              { key: 'advanced', label: '심화',       accent: 'rose',   match: ['common_advanced', 'advanced'] },
-                            ];
-                            const ACCENT_HEAD = {
-                              cyan:   'bg-cyan-500/20 border-cyan-400/40 text-cyan-100',
-                              orange: 'bg-orange-500/20 border-orange-400/40 text-orange-100',
-                              violet: 'bg-violet-500/20 border-violet-400/40 text-violet-100',
-                              rose:   'bg-rose-500/20 border-rose-400/40 text-rose-100',
-                              gray:   'bg-white/[0.08] border-white/20 text-gray-200',
-                            };
-                            const ACCENT_DOT = {
-                              cyan: 'bg-cyan-400', orange: 'bg-orange-400', violet: 'bg-violet-400', rose: 'bg-rose-400', gray: 'bg-gray-400',
-                            };
-                            const tabOf = (n) => {
-                              const pt = (n.punch_type || '').toLowerCase();
-                              const t = PUNCH_TABS.find((tab) => tab.match.includes(pt));
-                              return t ? t.key : 'other';
-                            };
-                            const cands = unlockableData.candidate_nodes;
-                            const groups = PUNCH_TABS.map((t) => ({
-                              key: t.key,
-                              label: t.label,
-                              accent: t.accent,
-                              nodes: cands.filter((n) => tabOf(n) === t.key),
-                            })).filter((g) => g.nodes.length > 0);
-                            const orphans = cands.filter((n) => tabOf(n) === 'other');
-                            if (orphans.length > 0) groups.push({ key: 'other', label: '기타', accent: 'gray', nodes: orphans });
-                            return (
-                              <div className="max-h-72 overflow-y-auto">
-                                {groups.map((group) => (
-                                  <div key={group.key} className="mb-2 last:mb-0">
-                                    <div className={`px-3 py-2 border-y flex items-center gap-2 ${ACCENT_HEAD[group.accent] || ACCENT_HEAD.gray}`}>
-                                      <span className={`w-1 h-4 rounded-full ${ACCENT_DOT[group.accent] || ACCENT_DOT.gray}`} aria-hidden />
-                                      <span className="text-sm font-extrabold tracking-wide">{group.label}</span>
-                                      <span className="text-[11px] font-bold opacity-70 ml-auto tabular-nums">{group.nodes.length}</span>
-                                    </div>
-                                    <ul className="divide-y divide-white/5">
-                                      {group.nodes.map((n) => {
-                                const isBusy = skillActionBusy?.nodeId === n.id;
-                                const disabled = !unlockableData.can_unlock || !!skillActionBusy;
-                                const displayName = n.name || `노드 ${n.node_number}`;
-                                return (
-                                  <li key={n.id} className="px-3 py-2 flex items-center gap-2">
-                                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                                      <span className="text-sm text-white truncate">{displayName}</span>
-                                      {n.zone && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/10 text-gray-300">{n.zone}</span>
-                                      )}
-                                      {n.is_fork && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">포크</span>
-                                      )}
-                                    </div>
-                                    <button
-                                      type="button"
-                                      disabled={disabled}
-                                      onClick={() => requestSkillAction('unlock', n.id, displayName)}
-                                      className="px-2.5 py-1 text-xs rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
-                                    >
-                                      {isBusy && skillActionBusy?.action === 'unlock' ? '…' : '해금'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={disabled}
-                                      onClick={() => requestSkillAction('skip', n.id, displayName)}
-                                      className="px-2.5 py-1 text-xs rounded bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
-                                    >
-                                      {isBusy && skillActionBusy?.action === 'skip' ? '…' : '스킵'}
-                                    </button>
-                                  </li>
-                                );
-                              })}
-                                    </ul>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                        </div>
-
-                        {promotion_requests.length > 0 && (
-                          <div className="rounded-xl border border-white/10 overflow-hidden">
-                            <div className="px-3 py-2 bg-white/5 text-xs font-bold text-gray-300">승단 신청 이력</div>
-                            <ul className="divide-y divide-white/5">
-                              {promotion_requests.slice(0, 20).map((r) => {
-                                const node = nodes.find((n) => n.id === r.fork_node_id);
-                                const statusColor = ({
-                                  pending: 'text-blue-300',
-                                  reviewing: 'text-indigo-300',
-                                  approved: 'text-emerald-300',
-                                  rejected: 'text-red-300',
-                                })[r.status] || 'text-gray-300';
-                                return (
-                                  <li key={r.id} className="px-3 py-2 text-xs flex items-center justify-between gap-2">
-                                    <div className="min-w-0 flex-1">
-                                      <div className="text-white truncate">{node?.name || `#${r.fork_node_id}`}</div>
-                                      <div className="text-gray-500 text-[10px]">
-                                        {new Date(r.requested_at).toLocaleString('ko-KR', {
-                                          year: 'numeric', month: '2-digit', day: '2-digit',
-                                          hour: '2-digit', minute: '2-digit',
-                                        })}
-                                      </div>
-                                    </div>
-                                    <span className={`font-bold ${statusColor}`}>
-                                      {r.status === 'pending' ? '대기' : r.status === 'reviewing' ? '심사' : r.status === 'approved' ? '승인' : '거절'}
-                                    </span>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
+                  {!skillProgressLoading && !skillProgressError && skillProgressData && (
+                    <div className="rounded-xl border border-white/10 overflow-hidden">
+                      <div className="px-3 py-2 bg-white/5 text-xs font-bold text-gray-300">스킬 노드맵</div>
+                      <div className="p-2 bg-slate-950/60">
+                        <MemberSkillBoard
+                          skillProgressData={skillProgressData}
+                          onNodeClick={handleSkillBoardNodeClick}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2191,186 +2270,224 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
             )}
 
             {/* 비밀번호 초기화 확인 모달 */}
-            {showResetPw && (
-              <div className="absolute inset-0 z-40 flex items-center justify-center p-3 sm:p-6 rounded-2xl bg-black/80 backdrop-blur-sm">
-                <div
-                  className="w-full max-w-md rounded-2xl border border-amber-500/40 bg-[#111] p-5 sm:p-6 shadow-2xl"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <h3 className="text-lg font-bold text-amber-300 mb-2">비밀번호를 초기화하시겠습니까?</h3>
+            <Modal
+              open={showResetPw}
+              onClose={() => {
+                if (resettingPw) return;
+                setShowResetPw(false);
+                setActionMessage(null);
+              }}
+              title="비밀번호를 초기화하시겠습니까?"
+              variant="warning"
+              size="md"
+              contained
+              closable={!resettingPw}
+            >
+              {showResetPw && (
+                <>
                   <p className="text-sm text-gray-300 leading-relaxed mb-2">
                     <strong className="text-white">{selectedMember.name}</strong> 회원의 비밀번호가{' '}
                     <strong className="text-amber-200">123456</strong>으로 초기화됩니다.
                   </p>
-                  <p className="text-xs text-gray-500 mb-4">초기화 즉시 적용되어 회원이 123456으로 로그인할 수 있습니다. 회원에게 직접 안내해 주세요.</p>
+                  <p className="text-xs text-gray-500 mb-3">초기화 즉시 적용되어 회원이 123456으로 로그인할 수 있습니다. 회원에게 직접 안내해 주세요.</p>
                   {actionMessage?.type === 'err' && actionMessage.text && (
                     <p className="text-red-300 text-xs mb-3 break-words">{actionMessage.text}</p>
                   )}
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowResetPw(false);
-                        setActionMessage(null);
-                      }}
-                      disabled={resettingPw}
-                      className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold disabled:opacity-50"
-                    >
-                      취소
-                    </button>
-                    <button
-                      type="button"
-                      onClick={runResetPassword}
-                      disabled={resettingPw}
-                      className="flex-1 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold disabled:opacity-50"
-                    >
+                  <ModalFooter>
+                    <ModalButton variant="warning" onClick={runResetPassword} disabled={resettingPw}>
                       {resettingPw ? '초기화 중…' : '123456으로 초기화'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+                    </ModalButton>
+                  </ModalFooter>
+                </>
+              )}
+            </Modal>
+
+            {/* 해금/스킵 결과 모달 — 성공/실패/promotion_required */}
+            <Modal
+              open={!!skillActionResult}
+              onClose={() => { if (!autoResolveBusy) setSkillActionResult(null); }}
+              title={skillActionResult?.title}
+              variant={
+                skillActionResult?.kind === 'success' ? 'success'
+                  : skillActionResult?.kind === 'promotion_required' ? 'info'
+                  : 'danger'
+              }
+              contained
+              zIndexClass="z-[60]"
+              closable={!autoResolveBusy}
+            >
+              {skillActionResult && (
+                <>
+                  <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-line">
+                    {skillActionResult.message}
+                  </p>
+                  {skillActionResult.kind === 'promotion_required' ? (
+                    <ModalFooter>
+                      <ModalButton
+                        variant="info"
+                        onClick={handleAutoResolvePromotion}
+                        disabled={autoResolveBusy || !skillActionResult.prevNodeId}
+                      >
+                        {autoResolveBusy ? '처리 중…' : '승단 신청 후 해금'}
+                      </ModalButton>
+                    </ModalFooter>
+                  ) : (
+                    <ModalFooter>
+                      <ModalButton
+                        variant={skillActionResult.kind === 'success' ? 'success' : 'ghost'}
+                        onClick={() => setSkillActionResult(null)}
+                      >
+                        확인
+                      </ModalButton>
+                    </ModalFooter>
+                  )}
+                </>
+              )}
+            </Modal>
 
             {/* 스킬 해금/스킵 재확인 모달 */}
-            {skillConfirm && (
-              <div className="absolute inset-0 z-40 flex items-center justify-center p-3 sm:p-6 rounded-2xl bg-black/80 backdrop-blur-sm">
-                <div
-                  className={`w-full max-w-sm rounded-2xl border bg-[#111] p-5 sm:p-6 shadow-2xl ${
-                    skillConfirm.action === 'unlock' ? 'border-emerald-500/40' : 'border-amber-500/40'
-                  }`}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <h3 className={`text-lg font-bold mb-2 ${skillConfirm.action === 'unlock' ? 'text-emerald-300' : 'text-amber-300'}`}>
-                    {skillConfirm.action === 'unlock' ? '스킬 해금 확인' : '스킬 스킵 확인'}
-                  </h3>
-                  <p className="text-sm text-gray-300 mb-3 leading-relaxed">
-                    <strong className="text-white">{selectedMember?.name}</strong> 회원에게{' '}
+            <Modal
+              open={!!skillConfirm}
+              onClose={() => { if (!skillActionBusy) setSkillConfirm(null); }}
+              title={skillConfirm?.action === 'unlock' ? '해금' : '스킵'}
+              variant={skillConfirm?.action === 'unlock' ? 'success' : 'warning'}
+              contained
+              closable={!skillActionBusy}
+            >
+              {skillConfirm && (
+                <>
+                  <p className="text-sm text-gray-200 mb-3 leading-relaxed">
                     <strong className={skillConfirm.action === 'unlock' ? 'text-emerald-200' : 'text-amber-200'}>
                       {skillConfirm.nodeName}
-                    </strong>{' '}
-                    노드를 {skillConfirm.action === 'unlock' ? '해금' : '즉시 마스터(스킵)'}하시겠습니까?
+                    </strong>
+                    {' '}{skillConfirm.action === 'unlock' ? '해금할까요?' : '스킵할까요?'}
                   </p>
                   {skillConfirm.action === 'skip' && (
-                    <p className="text-[11px] text-amber-300/80 mb-4">
-                      스킵은 EXP 5/5 로 즉시 마스터 처리합니다. 되돌릴 수 없습니다.
+                    <p className="text-[11px] text-amber-300/80 mb-2">
+                      즉시 5/5 마스터 처리. 되돌릴 수 없습니다.
                     </p>
                   )}
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setSkillConfirm(null)}
-                      disabled={!!skillActionBusy}
-                      className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold disabled:opacity-50"
-                    >
-                      취소
-                    </button>
-                    <button
-                      type="button"
-                      onClick={confirmSkillAction}
-                      disabled={!!skillActionBusy}
-                      className={`flex-1 py-2.5 rounded-lg text-white text-sm font-bold disabled:opacity-50 ${
-                        skillConfirm.action === 'unlock'
-                          ? 'bg-emerald-600 hover:bg-emerald-500'
-                          : 'bg-amber-600 hover:bg-amber-500'
-                      }`}
-                    >
-                      {skillActionBusy ? '처리 중…' : (skillConfirm.action === 'unlock' ? '해금 확정' : '스킵 확정')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+                  {skillConfirm.action === 'skip' ? (
+                    <ModalFooter>
+                      <ModalButton
+                        variant="outline"
+                        onClick={() => confirmSkillAction({ create_promotion: false })}
+                        disabled={!!skillActionBusy}
+                      >
+                        {skillActionBusy ? '처리 중…' : '스킵만'}
+                      </ModalButton>
+                      <ModalButton
+                        variant="warning"
+                        onClick={() => confirmSkillAction({ create_promotion: true })}
+                        disabled={!!skillActionBusy}
+                      >
+                        {skillActionBusy ? '처리 중…' : '스킵 + 승단 등록'}
+                      </ModalButton>
+                    </ModalFooter>
+                  ) : (
+                    <ModalFooter>
+                      <ModalButton
+                        variant="success"
+                        onClick={() => confirmSkillAction()}
+                        disabled={!!skillActionBusy}
+                      >
+                        {skillActionBusy ? '처리 중…' : '해금'}
+                      </ModalButton>
+                    </ModalFooter>
+                  )}
+                </>
+              )}
+            </Modal>
 
             {/* 삭제 확인: 1단계 경고 → 2단계 이메일 입력 */}
-            {deleteStep > 0 && (
-              <div className="absolute inset-0 z-40 flex items-center justify-center p-3 sm:p-6 rounded-2xl bg-black/80 backdrop-blur-sm">
-                <div
-                  className="w-full max-w-md rounded-2xl border border-red-500/40 bg-[#111] p-4 sm:p-6 shadow-2xl"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {deleteStep === 1 && (
-                    <>
-                      <h3 className="text-lg font-bold text-red-300 mb-2">회원을 삭제하시겠습니까?</h3>
-                      <p className="text-sm text-gray-300 leading-relaxed mb-1">
-                        이 작업은 <strong className="text-white">되돌릴 수 없습니다</strong>. 해당 회원의 로그인 계정이 삭제되고, 연동된
-                        서비스 데이터가 함께 제거될 수 있습니다.
-                      </p>
-                      <p className="text-xs text-amber-200/90 mb-4">신중히 결정한 뒤에만 진행해 주세요.</p>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteStep(0);
-                            setDeleteEmailInput('');
-                          }}
-                          className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold"
-                        >
-                          취소
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteStep(2);
-                            setDeleteEmailInput('');
-                            setActionMessage(null);
-                          }}
-                          className="flex-1 py-2.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white text-sm font-bold"
-                        >
-                          정말 삭제하기
-                        </button>
-                      </div>
-                    </>
+            <Modal
+              open={deleteStep > 0}
+              onClose={() => {
+                if (deletingMember) return;
+                setDeleteStep(0);
+                setDeleteEmailInput('');
+              }}
+              title={deleteStep === 2 ? '최종 확인' : '회원을 삭제하시겠습니까?'}
+              variant="danger"
+              size="md"
+              contained
+              closable={!deletingMember}
+            >
+              {deleteStep === 1 && (
+                <>
+                  <p className="text-sm text-gray-300 leading-relaxed mb-1">
+                    이 작업은 <strong className="text-white">되돌릴 수 없습니다</strong>. 해당 회원의 로그인 계정이 삭제되고, 연동된
+                    서비스 데이터가 함께 제거될 수 있습니다.
+                  </p>
+                  <p className="text-xs text-amber-200/90">신중히 결정한 뒤에만 진행해 주세요.</p>
+                  <ModalFooter>
+                    <ModalButton
+                      variant="ghost"
+                      onClick={() => {
+                        setDeleteStep(0);
+                        setDeleteEmailInput('');
+                      }}
+                    >
+                      취소
+                    </ModalButton>
+                    <ModalButton
+                      variant="danger"
+                      onClick={() => {
+                        setDeleteStep(2);
+                        setDeleteEmailInput('');
+                        setActionMessage(null);
+                      }}
+                    >
+                      정말 삭제하기
+                    </ModalButton>
+                  </ModalFooter>
+                </>
+              )}
+              {deleteStep === 2 && (
+                <>
+                  <p className="text-sm text-gray-300 mb-2">
+                    삭제를 확정하려면 아래에 이 회원의 <strong className="text-white">이메일 주소</strong>를{' '}
+                    <span className="text-amber-200">한 글자도 틀리지 않게</span> 입력하세요.
+                  </p>
+                  <p className="text-xs text-gray-500 font-mono break-all mb-3 rounded bg-white/5 px-2 py-1.5 border border-white/10">
+                    {selectedMember.email}
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteEmailInput}
+                    onChange={(e) => setDeleteEmailInput(e.target.value)}
+                    placeholder="이메일 전체를 입력"
+                    className="w-full rounded-lg border border-red-500/40 bg-black/40 px-3 py-2.5 text-sm text-white placeholder-gray-500"
+                    autoComplete="off"
+                  />
+                  <ModalFooter>
+                    <ModalButton
+                      variant="ghost"
+                      onClick={() => {
+                        setDeleteStep(1);
+                        setDeleteEmailInput('');
+                        setActionMessage(null);
+                      }}
+                    >
+                      이전
+                    </ModalButton>
+                    <ModalButton
+                      variant="danger"
+                      onClick={runDeleteMember}
+                      disabled={
+                        deletingMember ||
+                        deleteEmailInput.trim().toLowerCase() !== (selectedMember.email || '').toLowerCase()
+                      }
+                    >
+                      {deletingMember ? '삭제 중…' : '영구 삭제 실행'}
+                    </ModalButton>
+                  </ModalFooter>
+                  {actionMessage?.type === 'err' && actionMessage.text && (
+                    <p className="text-red-300 text-xs mt-3 text-center break-words">{actionMessage.text}</p>
                   )}
-                  {deleteStep === 2 && (
-                    <>
-                      <h3 className="text-lg font-bold text-red-300 mb-2">최종 확인</h3>
-                      <p className="text-sm text-gray-300 mb-2">
-                        삭제를 확정하려면 아래에 이 회원의 <strong className="text-white">이메일 주소</strong>를{' '}
-                        <span className="text-amber-200">한 글자도 틀리지 않게</span> 입력하세요.
-                      </p>
-                      <p className="text-xs text-gray-500 font-mono break-all mb-3 rounded bg-white/5 px-2 py-1.5 border border-white/10">
-                        {selectedMember.email}
-                      </p>
-                      <input
-                        type="text"
-                        value={deleteEmailInput}
-                        onChange={(e) => setDeleteEmailInput(e.target.value)}
-                        placeholder="이메일 전체를 입력"
-                        className="w-full rounded-lg border border-red-500/40 bg-black/40 px-3 py-2.5 text-sm text-white placeholder-gray-500 mb-3"
-                        autoComplete="off"
-                      />
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteStep(1);
-                            setDeleteEmailInput('');
-                            setActionMessage(null);
-                          }}
-                          className="flex-1 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-bold"
-                        >
-                          이전
-                        </button>
-                        <button
-                          type="button"
-                          onClick={runDeleteMember}
-                          disabled={
-                            deletingMember ||
-                            deleteEmailInput.trim().toLowerCase() !== (selectedMember.email || '').toLowerCase()
-                          }
-                          className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold"
-                        >
-                          {deletingMember ? '삭제 중…' : '영구 삭제 실행'}
-                        </button>
-                      </div>
-                      {actionMessage?.type === 'err' && actionMessage.text && (
-                        <p className="text-red-300 text-xs mt-3 text-center break-words">{actionMessage.text}</p>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
+                </>
+              )}
+            </Modal>
           </div>
         </div>,
         document.body
@@ -3194,9 +3311,12 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
                     </div>
                     <button
                       onClick={() => setSelectingCorner(null)}
-                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all flex-shrink-0"
+                      aria-label="닫기"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all flex-shrink-0"
                     >
-                      <span className="text-xl sm:text-2xl">✕</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 6l12 12M18 6l-12 12" />
+                      </svg>
                     </button>
                   </div>
                 </div>

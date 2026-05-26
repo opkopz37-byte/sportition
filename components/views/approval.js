@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
+import Modal, { ModalFooter, ModalButton } from '@/components/Modal';
 import { useAuth } from '@/lib/AuthContext';
 
 /** 체육관: gym_user_id 일치 또는 gym_name 일치 (둘 다 있으면 하나만 맞아도 표시) */
@@ -27,6 +28,10 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [chosenBranchId, setChosenBranchId] = useState(null);
   const [promoNotes, setPromoNotes] = useState('');
   const [processingPromo, setProcessingPromo] = useState(false);
+  // 승인/거절 처리 결과 모달 — { approved, memberName, skillName }
+  const [resolveResult, setResolveResult] = useState(null);
+  // 다건 회원 펼치기 상태 (memberId Set)
+  const [expandedMembers, setExpandedMembers] = useState(() => new Set());
 
   // 승단: RLS가 체육관 행만 넘김 — 여기서 한 번 더 걸면 gym_user_id 불일치 시 빈 목록이 됨
   const scopedPromotionQueue = useMemo(() => {
@@ -36,6 +41,56 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
       isSameGymContext(profile, r.gym_user_id, r.gym_name)
     );
   }, [promotionQueue, profile]);
+
+  // 회원 단위 그룹핑 — 같은 회원의 신청을 하나로 묶고, 대기/심사중 건수를 배지로 노출
+  const groupedQueue = useMemo(() => {
+    const statusOrder = { pending: 0, reviewing: 1, approved: 2, rejected: 3 };
+    const map = new Map();
+
+    for (const req of scopedPromotionQueue) {
+      const name = req.member?.nickname || req.member?.display_name || req.member?.name || '회원';
+      const key = req.member?.id || req.user_id || `name:${name}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          memberId: key,
+          member: req.member,
+          memberName: name,
+          gymName: req.gym_name,
+          requests: [],
+        });
+      }
+      map.get(key).requests.push(req);
+    }
+
+    for (const group of map.values()) {
+      group.requests.sort((a, b) => {
+        const so = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+        if (so !== 0) return so;
+        return new Date(b.requested_at || 0) - new Date(a.requested_at || 0);
+      });
+      group.actionableCount = group.requests.filter(
+        (r) => r.status === 'pending' || r.status === 'reviewing'
+      ).length;
+      group.latestAt = group.requests.reduce((acc, r) => {
+        const t = new Date(r.requested_at || 0).getTime();
+        return t > acc ? t : acc;
+      }, 0);
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.actionableCount !== b.actionableCount) return b.actionableCount - a.actionableCount;
+      return b.latestAt - a.latestAt;
+    });
+  }, [scopedPromotionQueue]);
+
+  const toggleMember = (memberId) => {
+    setExpandedMembers((prev) => {
+      const next = new Set(prev);
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
+      return next;
+    });
+  };
 
   const loadPromotionQueue = useCallback(async () => {
     if (!user?.id) return;
@@ -120,7 +175,13 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
         }
       }
 
-      alert(approved ? '승단이 승인되었습니다.' : '승단이 거절되었습니다.');
+      const memberName =
+        selectedPromo.member?.nickname ||
+        selectedPromo.member?.display_name ||
+        selectedPromo.member?.name ||
+        '회원';
+      const skillName = selectedPromo.fork?.name || '해당 스킬';
+      setResolveResult({ approved, memberName, skillName });
       setSelectedPromo(null);
       setPromoNotes('');
       setChosenBranchId(null);
@@ -273,153 +334,161 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
         ))}
       </div>
 
-      {/* 신청 목록 */}
-      {scopedPromotionQueue.length > 0 ? (
-        <div className="space-y-2.5">
-          {scopedPromotionQueue.map((req) => {
-            const statusBadge = getStatusBadge(req.status);
-            const memberName = req.member?.nickname || req.member?.display_name || req.member?.name || '회원';
-            // 갈림길 / 일반 마스터 모두 동일하게 "스킬 이름" 으로 표시
-            const skillName = req.fork?.name || '스킬';
-            const statusDot = req.status === 'pending'
-              ? 'bg-yellow-400'
-              : req.status === 'reviewing'
-              ? 'bg-sky-400'
-              : req.status === 'approved'
-              ? 'bg-emerald-400'
-              : 'bg-red-400';
-
-            // 거절 — 로그 형태로 별도 디자인 (날짜/시간 + 사유)
-            if (req.status === 'rejected') {
-              return (
-                <div
-                  key={req.id}
-                  className="w-full p-3 sm:p-4 bg-rose-500/[0.04] border border-rose-500/15 rounded-xl"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 mt-0.5">
-                      <ProfileAvatarImg
-                        avatarUrl={req.member?.avatar_url}
-                        name={memberName}
-                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-full text-base"
-                        gradientClassName="bg-gradient-to-br from-rose-500/70 to-red-600/70"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusBadge.color}`}>
-                          {statusBadge.text}
-                        </span>
-                        <span className="text-[11px] sm:text-xs font-mono tabular-nums text-rose-300/90 tracking-tight">
-                          {formatLogDate(req.resolved_at || req.requested_at)}
-                        </span>
-                      </div>
-                      <div className="text-sm sm:text-base text-white">
-                        <span className="font-bold">{memberName}</span>
-                        <span className="text-gray-400"> 님의 </span>
-                        <span className="font-semibold text-rose-100">{skillName}</span>
-                        <span className="text-gray-400"> 승단 신청 거절</span>
-                      </div>
-                      {req.notes ? (
-                        <div className="mt-1.5 text-xs sm:text-sm text-gray-300 bg-white/[0.03] border border-white/8 rounded-lg px-2.5 py-1.5">
-                          <span className="text-rose-300/80 font-semibold mr-1">사유</span>
-                          {req.notes}
-                        </div>
-                      ) : null}
-                      <div className="text-[10px] sm:text-[11px] text-gray-500 mt-1">
-                        신청 {formatLogDate(req.requested_at)}
-                        {req.gym_name ? <> · 소속 {req.gym_name}</> : null}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
+      {/* 신청 목록 — 회원 단위 그룹 */}
+      {groupedQueue.length > 0 ? (
+        <div className="space-y-3">
+          {groupedQueue.map((group) => {
+            const isSingle = group.requests.length === 1;
+            const expanded = isSingle || expandedMembers.has(group.memberId);
 
             return (
               <div
-                key={req.id}
-                className="w-full p-4 sm:p-5 bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 hover:border-white/15 rounded-2xl transition-all"
+                key={group.memberId}
+                className="bg-white/[0.02] border border-white/8 rounded-2xl overflow-hidden"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="relative flex-shrink-0">
-                      <ProfileAvatarImg
-                        avatarUrl={req.member?.avatar_url}
-                        name={memberName}
-                        className="w-12 h-12 sm:w-14 sm:h-14 rounded-full text-lg"
-                        gradientClassName="bg-gradient-to-br from-violet-500/80 to-purple-600/80"
-                      />
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-[#0A0A0A] ${statusDot}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className="text-sm sm:text-base font-semibold text-white/85 truncate">{memberName}</h3>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusBadge.color}`}>
-                          {statusBadge.text}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-gradient-to-br from-amber-400/30 to-amber-600/20 border border-amber-400/40 text-amber-300 text-[10px] font-black flex-shrink-0">★</span>
-                        <span className="text-base sm:text-lg font-extrabold text-white truncate tracking-tight">
-                          {skillName}
-                        </span>
-                      </div>
-                      <div className="text-[11px] sm:text-xs text-gray-400 truncate">
-                        승단 심사 신청 ·{' '}
-                        {req.status === 'approved' && req.resolved_at
-                          ? <>승인 {formatLogDate(req.resolved_at)}</>
-                          : formatDate(req.requested_at)}
-                        {req.gym_name ? <> · 소속: {req.gym_name}</> : null}
-                        {req.gym_user_id && profile?.id === req.gym_user_id ? (
-                          <span className="text-emerald-400/90"> · 체육관 계정 연동</span>
-                        ) : null}
-                      </div>
-                    </div>
+                {/* 회원 헤더 — 아바타 + 이름 + 대기 건수 배지 */}
+                <button
+                  type="button"
+                  onClick={() => !isSingle && toggleMember(group.memberId)}
+                  disabled={isSingle}
+                  className={`w-full flex items-center gap-3 p-3.5 sm:p-4 text-left transition-colors ${
+                    isSingle ? 'cursor-default' : 'hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <ProfileAvatarImg
+                    avatarUrl={group.member?.avatar_url}
+                    name={group.memberName}
+                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-full text-base flex-shrink-0"
+                    gradientClassName="bg-gradient-to-br from-violet-500/80 to-purple-600/80"
+                  />
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-white truncate">
+                      {group.memberName}
+                    </h3>
+                    {group.actionableCount > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-xs font-bold tabular-nums flex-shrink-0">
+                        {group.actionableCount}
+                      </span>
+                    )}
                   </div>
-
-                  {(req.status === 'pending' || req.status === 'reviewing') && (
-                    <div className="flex gap-2 flex-shrink-0">
-                      {req.status === 'pending' ? (
-                        // 대기중 — 심사 시작 + 거절 만 노출 (승인은 심사 시작 후에)
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleStartPromoReview(req.id)}
-                            className="px-3 sm:px-4 py-2.5 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 rounded-xl text-sky-200 font-semibold text-sm whitespace-nowrap transition-colors"
-                          >
-                            심사 시작
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openPromoModal(req, true)}
-                            className="px-3 sm:px-4 py-2.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/30 rounded-xl text-rose-100 font-semibold text-sm whitespace-nowrap transition-colors"
-                          >
-                            거절
-                          </button>
-                        </>
-                      ) : (
-                        // 심사 중 — 승인 + 거절
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openPromoModal(req)}
-                            className="px-3 sm:px-4 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 rounded-xl text-emerald-100 font-semibold text-sm whitespace-nowrap transition-colors"
-                          >
-                            승인
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openPromoModal(req, true)}
-                            className="px-3 sm:px-4 py-2.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/30 rounded-xl text-rose-100 font-semibold text-sm whitespace-nowrap transition-colors"
-                          >
-                            거절
-                          </button>
-                        </>
-                      )}
-                    </div>
+                  {!isSingle && (
+                    <Icon
+                      type="chevronDown"
+                      size={18}
+                      className={`text-gray-400 flex-shrink-0 transition-transform ${
+                        expanded ? 'rotate-180' : ''
+                      }`}
+                    />
                   )}
-                </div>
+                </button>
+
+                {/* 신청 리스트 — 펼쳤을 때만 노출 */}
+                {expanded && (
+                  <div className="border-t border-white/8 divide-y divide-white/5">
+                    {group.requests.map((req) => {
+                      const statusBadge = getStatusBadge(req.status);
+                      const skillName = req.fork?.name || '스킬';
+
+                      // 거절 — 로그 형태 (날짜/시간 + 사유)
+                      if (req.status === 'rejected') {
+                        return (
+                          <div
+                            key={req.id}
+                            className="px-4 py-3 sm:px-5 sm:py-3.5 bg-rose-500/[0.03]"
+                          >
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusBadge.color}`}>
+                                {statusBadge.text}
+                              </span>
+                              <span className="text-[11px] sm:text-xs font-mono tabular-nums text-rose-300/90 tracking-tight">
+                                {formatLogDate(req.resolved_at || req.requested_at)}
+                              </span>
+                            </div>
+                            <div className="text-sm sm:text-base">
+                              <span className="font-semibold text-rose-100">{skillName}</span>
+                              <span className="text-gray-400"> 승단 신청 거절</span>
+                            </div>
+                            {req.notes ? (
+                              <div className="mt-1.5 text-xs sm:text-sm text-gray-300 bg-white/[0.03] border border-white/8 rounded-lg px-2.5 py-1.5">
+                                <span className="text-rose-300/80 font-semibold mr-1">사유</span>
+                                {req.notes}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={req.id}
+                          className="px-4 py-3.5 sm:px-5 sm:py-4 hover:bg-white/[0.02] transition-colors"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusBadge.color}`}>
+                                  {statusBadge.text}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-gradient-to-br from-amber-400/30 to-amber-600/20 border border-amber-400/40 text-amber-300 text-[10px] font-black flex-shrink-0">★</span>
+                                <span className="text-base sm:text-lg font-extrabold text-white truncate tracking-tight">
+                                  {skillName}
+                                </span>
+                              </div>
+                              <div className="text-[11px] sm:text-xs text-gray-400 truncate">
+                                승단 심사 신청 ·{' '}
+                                {req.status === 'approved' && req.resolved_at
+                                  ? <>승인 {formatLogDate(req.resolved_at)}</>
+                                  : formatDate(req.requested_at)}
+                              </div>
+                            </div>
+
+                            {(req.status === 'pending' || req.status === 'reviewing') && (
+                              <div className="flex gap-2 flex-shrink-0">
+                                {req.status === 'pending' ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartPromoReview(req.id)}
+                                      className="px-3 sm:px-4 py-2.5 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 rounded-xl text-sky-200 font-semibold text-sm whitespace-nowrap transition-colors"
+                                    >
+                                      심사 시작
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openPromoModal(req, true)}
+                                      className="px-3 sm:px-4 py-2.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/30 rounded-xl text-rose-100 font-semibold text-sm whitespace-nowrap transition-colors"
+                                    >
+                                      거절
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => openPromoModal(req)}
+                                      className="px-3 sm:px-4 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 rounded-xl text-emerald-100 font-semibold text-sm whitespace-nowrap transition-colors"
+                                    >
+                                      승인
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openPromoModal(req, true)}
+                                      className="px-3 sm:px-4 py-2.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/30 rounded-xl text-rose-100 font-semibold text-sm whitespace-nowrap transition-colors"
+                                    >
+                                      거절
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -444,67 +513,47 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
           setInitialReject(false);
         };
         return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  disabled={processingPromo}
-                  aria-label="뒤로가기"
-                  className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 transition-colors disabled:opacity-50"
-                >
-                  ←
-                </button>
-                <h2 className="text-xl font-bold text-white">
-                  {initialReject ? '승단 거절' : '승단 승인'}
-                </h2>
+        <Modal
+          open={!!selectedPromo}
+          onClose={() => { if (!processingPromo) closeModal(); }}
+          title={initialReject ? '승단 거절' : '승단 승인'}
+          variant={initialReject ? 'danger' : 'success'}
+          size="md"
+          closable={!processingPromo}
+        >
+          <div className="space-y-4">
+            {/* 회원 — 아바타 + 이름 */}
+            <div className="flex items-center gap-3 p-4 bg-white/5 rounded-lg border border-white/10">
+              <ProfileAvatarImg
+                avatarUrl={selectedPromo.member?.avatar_url}
+                name={selectedPromo.member?.nickname || selectedPromo.member?.display_name || selectedPromo.member?.name}
+                className="w-12 h-12 rounded-full text-base flex-shrink-0"
+                gradientClassName="bg-gradient-to-br from-violet-500 to-purple-600"
+              />
+              <div className="min-w-0">
+                <div className="text-[10px] font-black tracking-[0.25em] uppercase text-gray-400 mb-0.5">신청자</div>
+                <div className="text-base sm:text-lg font-bold text-white truncate">
+                  {selectedPromo.member?.nickname || selectedPromo.member?.display_name || selectedPromo.member?.name || '—'}
+                </div>
+                {selectedPromo.gym_name ? (
+                  <div className="text-xs text-gray-500 truncate">소속: {selectedPromo.gym_name}</div>
+                ) : null}
               </div>
-              <button
-                type="button"
-                onClick={closeModal}
-                disabled={processingPromo}
-                aria-label="닫기"
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors disabled:opacity-50"
-              >
-                <Icon type="x" size={20} className="text-gray-400" />
-              </button>
             </div>
 
-            <div className="space-y-4 mb-6">
-              {/* 회원 — 아바타 + 이름 */}
-              <div className="flex items-center gap-3 p-4 bg-white/5 rounded-lg border border-white/10">
-                <ProfileAvatarImg
-                  avatarUrl={selectedPromo.member?.avatar_url}
-                  name={selectedPromo.member?.nickname || selectedPromo.member?.display_name || selectedPromo.member?.name}
-                  className="w-12 h-12 rounded-full text-base flex-shrink-0"
-                  gradientClassName="bg-gradient-to-br from-violet-500 to-purple-600"
-                />
-                <div className="min-w-0">
-                  <div className="text-[10px] font-black tracking-[0.25em] uppercase text-gray-400 mb-0.5">신청자</div>
-                  <div className="text-base sm:text-lg font-bold text-white truncate">
-                    {selectedPromo.member?.nickname || selectedPromo.member?.display_name || selectedPromo.member?.name || '—'}
-                  </div>
-                  {selectedPromo.gym_name ? (
-                    <div className="text-xs text-gray-500 truncate">소속: {selectedPromo.gym_name}</div>
-                  ) : null}
-                </div>
+            {/* 승단 신청 스킬 */}
+            <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+              <div className="text-[10px] font-black tracking-[0.25em] uppercase text-gray-400 mb-1">승단 신청 스킬</div>
+              <div className="text-base sm:text-lg font-bold text-white">
+                {selectedPromo.fork?.name || '—'}
               </div>
-
-              {/* 승단 신청 스킬 (갈림길 용어 제거) */}
-              <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                <div className="text-[10px] font-black tracking-[0.25em] uppercase text-gray-400 mb-1">승단 신청 스킬</div>
-                <div className="text-base sm:text-lg font-bold text-white">
-                  {selectedPromo.fork?.name || '—'}
-                </div>
-                <div className="text-[11px] text-emerald-300/80 mt-1">
-                  5/5 마스터 완료 · {formatDate(selectedPromo.requested_at)} 신청
-                </div>
+              <div className="text-[11px] text-emerald-300/80 mt-1">
+                5/5 마스터 완료 · {formatDate(selectedPromo.requested_at)} 신청
               </div>
+            </div>
 
-              {/* fork(갈림길) 노드만 분기 선택 노출 */}
-              {selectedPromo.fork?.is_fork ? (
+            {/* fork(갈림길) 노드만 분기 선택 노출 */}
+            {selectedPromo.fork?.is_fork ? (
               <div>
                 <div className="text-xs text-gray-400 mb-2">승인 시 열릴 분기</div>
                 {branchOptions.length === 0 ? (
@@ -533,56 +582,72 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
                   </div>
                 )}
               </div>
-              ) : null}
+            ) : null}
 
-              <div>
-                <label className="block text-xs text-gray-400 mb-2">메모 (선택, 거절 시 사유로 저장)</label>
-                <textarea
-                  value={promoNotes}
-                  onChange={(e) => setPromoNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
-                  rows={3}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                disabled={processingPromo}
-                onClick={closeModal}
-                className="px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-300 font-bold transition-all disabled:opacity-50"
-              >
-                뒤로가기
-              </button>
-              {initialReject ? (
-                <button
-                  type="button"
-                  disabled={processingPromo}
-                  onClick={() => handleGymResolvePromo(false)}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 rounded-xl text-white font-bold transition-all disabled:opacity-50"
-                >
-                  {processingPromo ? '처리 중...' : '거절 확정'}
-                </button>
-              ) : (
-                /* fork 노드는 분기 옵션이 없으면 승인 비활성, 일반 마스터 노드는 항상 활성 */
-                <button
-                  type="button"
-                  disabled={
-                    processingPromo
-                    || (selectedPromo.fork?.is_fork === true && branchOptions.length === 0)
-                  }
-                  onClick={() => handleGymResolvePromo(true)}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 rounded-xl text-white font-bold transition-all disabled:opacity-50"
-                >
-                  {processingPromo ? '처리 중...' : '승인 확정'}
-                </button>
-              )}
+            <div>
+              <label className="block text-xs text-gray-400 mb-2">메모 (선택, 거절 시 사유로 저장)</label>
+              <textarea
+                value={promoNotes}
+                onChange={(e) => setPromoNotes(e.target.value)}
+                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
+                rows={3}
+              />
             </div>
           </div>
-        </div>
+
+          <ModalFooter>
+            {initialReject ? (
+              <ModalButton
+                variant="danger"
+                onClick={() => handleGymResolvePromo(false)}
+                disabled={processingPromo}
+              >
+                {processingPromo ? '처리 중…' : '거절 확정'}
+              </ModalButton>
+            ) : (
+              <ModalButton
+                variant="success"
+                onClick={() => handleGymResolvePromo(true)}
+                disabled={
+                  processingPromo
+                  || (selectedPromo.fork?.is_fork === true && branchOptions.length === 0)
+                }
+              >
+                {processingPromo ? '처리 중…' : '승인 확정'}
+              </ModalButton>
+            )}
+          </ModalFooter>
+        </Modal>
         );
       })()}
+
+      {/* 승인/거절 결과 모달 */}
+      <Modal
+        open={!!resolveResult}
+        onClose={() => setResolveResult(null)}
+        title={resolveResult?.approved ? '승단 승인 완료' : '승단 거절 완료'}
+        variant={resolveResult?.approved ? 'success' : 'danger'}
+      >
+        {resolveResult && (
+          <>
+            <p className="text-sm text-gray-200 leading-relaxed">
+              <strong className="text-white">{resolveResult.memberName}</strong> 님의{' '}
+              <strong className={resolveResult.approved ? 'text-emerald-200' : 'text-rose-200'}>
+                {resolveResult.skillName}
+              </strong>{' '}
+              승단 신청을 {resolveResult.approved ? '승인했습니다.' : '거절했습니다.'}
+            </p>
+            <ModalFooter>
+              <ModalButton
+                variant={resolveResult.approved ? 'success' : 'danger'}
+                onClick={() => setResolveResult(null)}
+              >
+                확인
+              </ModalButton>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
     </div>
   );
 };
