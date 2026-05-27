@@ -115,11 +115,7 @@ const AttendanceView = ({ t = (key) => key, setActiveTab, language = 'ko' }) => 
         if (result.error.code === 'no_active_skill') {
           setCheckInBlocked({
             title: '오늘 출석할 수 없어요',
-            message: result.error.message || '진행 중인 활성 스킬이 없습니다.',
-            hint:
-              '활성 스킬은 관장님이 해금해주신 진행 중 스킬 1개를 의미합니다.\n\n' +
-              '• 마스터한 스킬(5/5)이 있다면 먼저 승단 심사 신청을 해주세요.\n' +
-              '• 그렇지 않다면 관장님께 다음 스킬 해금을 요청해 주세요.',
+            message: '진행할 스킬을 먼저 선택해 주세요.',
             goSkills: true,
           });
           return;

@@ -26,7 +26,6 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [selectedPromo, setSelectedPromo] = useState(null);
   const [branchOptions, setBranchOptions] = useState([]);
   const [chosenBranchId, setChosenBranchId] = useState(null);
-  const [promoNotes, setPromoNotes] = useState('');
   const [processingPromo, setProcessingPromo] = useState(false);
   // 승인/거절 처리 결과 모달 — { approved, memberName, skillName }
   const [resolveResult, setResolveResult] = useState(null);
@@ -42,12 +41,18 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
     );
   }, [promotionQueue, profile]);
 
+  // 필터 칩에 따른 클라이언트 사이드 필터링 — 네트워크 왕복 없이 즉시 반응
+  const filteredQueue = useMemo(() => {
+    if (promFilter === 'all') return scopedPromotionQueue;
+    return scopedPromotionQueue.filter((r) => r.status === promFilter);
+  }, [scopedPromotionQueue, promFilter]);
+
   // 회원 단위 그룹핑 — 같은 회원의 신청을 하나로 묶고, 대기/심사중 건수를 배지로 노출
   const groupedQueue = useMemo(() => {
     const statusOrder = { pending: 0, reviewing: 1, approved: 2, rejected: 3 };
     const map = new Map();
 
-    for (const req of scopedPromotionQueue) {
+    for (const req of filteredQueue) {
       const name = req.member?.nickname || req.member?.display_name || req.member?.name || '회원';
       const key = req.member?.id || req.user_id || `name:${name}`;
       if (!map.has(key)) {
@@ -81,7 +86,7 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
       if (a.actionableCount !== b.actionableCount) return b.actionableCount - a.actionableCount;
       return b.latestAt - a.latestAt;
     });
-  }, [scopedPromotionQueue]);
+  }, [filteredQueue]);
 
   const toggleMember = (memberId) => {
     setExpandedMembers((prev) => {
@@ -99,7 +104,7 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
     setPromoError('');
     try {
       const { getGymPromotionRequestsDetailed } = await import('@/lib/supabase');
-      const { data, error } = await getGymPromotionRequestsDetailed(promFilter === 'all' ? null : promFilter);
+      const { data, error } = await getGymPromotionRequestsDetailed(null);
 
       if (error) throw error;
       setPromotionQueue(data || []);
@@ -110,7 +115,7 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
     } finally {
       setPromLoading(false);
     }
-  }, [user?.id, promFilter]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -122,7 +127,6 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
 
   const openPromoModal = async (req, asReject = false) => {
     setSelectedPromo(req);
-    setPromoNotes('');
     setChosenBranchId(null);
     setInitialReject(asReject === true);
     const nums = req.fork?.fork_branch_node_numbers;
@@ -155,7 +159,7 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
           selectedPromo.id,
           approved,
           approved ? chosenBranchId : null,
-          promoNotes || null
+          null
         );
         if (error) {
           alert(error.message || '처리에 실패했습니다.');
@@ -167,7 +171,7 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
         const { error } = await gymResolveMasterExamRpc(
           selectedPromo.id,
           approved,
-          promoNotes || null
+          null
         );
         if (error) {
           alert(error.message || '처리에 실패했습니다.');
@@ -183,7 +187,6 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
       const skillName = selectedPromo.fork?.name || '해당 스킬';
       setResolveResult({ approved, memberName, skillName });
       setSelectedPromo(null);
-      setPromoNotes('');
       setChosenBranchId(null);
       setBranchOptions([]);
       await loadPromotionQueue();
@@ -338,8 +341,7 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
       {groupedQueue.length > 0 ? (
         <div className="space-y-3">
           {groupedQueue.map((group) => {
-            const isSingle = group.requests.length === 1;
-            const expanded = isSingle || expandedMembers.has(group.memberId);
+            const expanded = expandedMembers.has(group.memberId);
 
             return (
               <div
@@ -349,11 +351,8 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
                 {/* 회원 헤더 — 아바타 + 이름 + 대기 건수 배지 */}
                 <button
                   type="button"
-                  onClick={() => !isSingle && toggleMember(group.memberId)}
-                  disabled={isSingle}
-                  className={`w-full flex items-center gap-3 p-3.5 sm:p-4 text-left transition-colors ${
-                    isSingle ? 'cursor-default' : 'hover:bg-white/[0.04]'
-                  }`}
+                  onClick={() => toggleMember(group.memberId)}
+                  className="w-full flex items-center gap-3 p-3.5 sm:p-4 text-left transition-colors hover:bg-white/[0.04]"
                 >
                   <ProfileAvatarImg
                     avatarUrl={group.member?.avatar_url}
@@ -371,15 +370,13 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
                       </span>
                     )}
                   </div>
-                  {!isSingle && (
-                    <Icon
-                      type="chevronDown"
-                      size={18}
-                      className={`text-gray-400 flex-shrink-0 transition-transform ${
-                        expanded ? 'rotate-180' : ''
-                      }`}
-                    />
-                  )}
+                  <Icon
+                    type="chevronDown"
+                    size={18}
+                    className={`text-gray-400 flex-shrink-0 transition-transform ${
+                      expanded ? 'rotate-180' : ''
+                    }`}
+                  />
                 </button>
 
                 {/* 신청 리스트 — 펼쳤을 때만 노출 */}
@@ -507,7 +504,6 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
       {selectedPromo && (() => {
         const closeModal = () => {
           setSelectedPromo(null);
-          setPromoNotes('');
           setChosenBranchId(null);
           setBranchOptions([]);
           setInitialReject(false);
@@ -584,15 +580,6 @@ const ApprovalView = ({ t = (key) => key, setActiveTab, onBack }) => {
               </div>
             ) : null}
 
-            <div>
-              <label className="block text-xs text-gray-400 mb-2">메모 (선택, 거절 시 사유로 저장)</label>
-              <textarea
-                value={promoNotes}
-                onChange={(e) => setPromoNotes(e.target.value)}
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
-                rows={3}
-              />
-            </div>
           </div>
 
           <ModalFooter>

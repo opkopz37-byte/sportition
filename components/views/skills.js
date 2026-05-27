@@ -465,7 +465,7 @@ const CARD_ZONE_LABEL = {
 };
 
 /** 노드 카드 — 트렌디 디자인 (그라디언트 보더 + 메시 배경 + 도트 텍스처) */
-const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked, pickableLocked }) {
+const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selected, dimmed, burst, burstKey, onSelect, themeAccent, softLocked, pickableLocked, disableGlow = false }) {
   const mastered = exp >= MAX_EXP;
   const inProgress = exp > 0 && exp < MAX_EXP;
   const isCommon = typeof node?.punch_type === 'string' && node.punch_type.startsWith('common');
@@ -531,7 +531,8 @@ const SkillNodeCard = memo(function SkillNodeCard({ node, exp, unlocked, selecte
   // 찍을 수 있는 상태 — 잠금 해제 + 마스터 아님 + 다른 스킬 진행중도 아님
   // (선택된/burst 중에는 효과 충돌 방지를 위해 잠시 끔)
   const isPickable = clickable && !mastered && !selected && !burst;
-  const pickableGlowClass = isPickable ? 'skill-pickable-glow' : '';
+  // 코치 모드(많은 카드 동시 pickable)에서는 glow 끔 — 화면 전체 깜박임 방지
+  const pickableGlowClass = isPickable && !disableGlow ? 'skill-pickable-glow' : '';
 
   return (
     <button
@@ -1325,7 +1326,11 @@ function SkillTree({
   hideInlinePanel = false,
   /* 노드 카드의 잠금 노드 선택 가능 여부 (코치 모드용) */
   allLockedPickable = false,
+  /* 멀티 선택 모드 — Set<nodeId> 가 들어오면 selectedId 대신 이걸로 카드 선택 표시.
+     체인 하이라이트는 비활성. */
+  selectedIdSet = null,
 }) {
+  const isMulti = selectedIdSet instanceof Set;
   const unlockedSet = unlockedNodeIds instanceof Set ? unlockedNodeIds : new Set();
   // 카드/간격 (모바일·데스크톱 분리)
   const [isWide, setIsWide] = useState(false);
@@ -1353,9 +1358,10 @@ function SkillTree({
     [nodes, expByNodeId, childrenByNum]
   );
 
-  // 선택 체인 (조상 모두)
+  // 선택 체인 (조상 모두) — 멀티 선택 모드에서는 체인 하이라이트 끔
   const selectedChainSet = useMemo(() => {
     const set = new Set();
+    if (isMulti) return set;
     if (selectedId == null) return set;
     const start = nodes.find((n) => n.id === selectedId);
     if (!start) return set;
@@ -1369,7 +1375,7 @@ function SkillTree({
     };
     visit(start);
     return set;
-  }, [selectedId, nodes, nodeByNumber]);
+  }, [isMulti, selectedId, nodes, nodeByNumber]);
 
   // 연결선 목록
   const connectors = useMemo(() => {
@@ -1482,7 +1488,7 @@ function SkillTree({
           const exp = expByNodeId.get(node.id) || 0;
           const sibLocked = siblingLockSet.has(node.id);
           const unlocked = !sibLocked && unlockedSet.has(node.id);
-          const isSelected = node.id === selectedId;
+          const isSelected = isMulti ? selectedIdSet.has(node.id) : node.id === selectedId;
           const cardSoftLocked = !allLockedPickable && (
             (Boolean(inProgressNodeId) && inProgressNodeId !== node.id)
             || (Boolean(pendingPromotionNodeId) && pendingPromotionNodeId !== node.id)
@@ -1529,6 +1535,8 @@ function SkillTree({
                 /* 다른 스킬 진행 중 OR 다른 스킬 심사 중 → 이 카드는 잠김 */
                 softLocked={cardSoftLocked}
                 pickableLocked={pickableLocked}
+                /* 코치 모드(allLockedPickable)에서는 카드 다수 동시 glow 로 깜박임 → glow 끔 */
+                disableGlow={allLockedPickable}
               />
             </div>
           );
@@ -1926,16 +1934,17 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
 
   // (자동 다음 노드 포커스는 폐기 — 사용자가 직접 다음 노드를 클릭)
 
-  /** 진행 중(0<exp<MAX_EXP)인 노드 — 마스터 전까지 다른 스킬 추가 차단.
-   *  ⚠️ 재마스터(거절 후 exp>=5, max>5) 는 별도 흐름이라 in-progress 로 보지 않음.
-   *      → 0<exp<5 인 노드만 forward in-progress 로 봄. */
+  /** 진행 중인 노드 — 해금됐고 아직 5/5 마스터 안 된 노드.
+   *  exp=0 (해금만 하고 출석 0회) 도 진행 중으로 침 → 다른 스킬 선택 차단.
+   *  마스터(5/5) 후 승단 미승인은 pendingPromotion 으로 별도 처리. */
   const inProgressNode = useMemo(() => {
     for (const n of treeNodes) {
+      if (!unlockedNodeIds.has(n.id)) continue;
       const e = expByNodeId.get(n.id) || 0;
-      if (e > 0 && e < MAX_EXP) return n;
+      if (e < MAX_EXP) return n;
     }
     return null;
-  }, [treeNodes, expByNodeId]);
+  }, [treeNodes, expByNodeId, unlockedNodeIds]);
   const inProgressNodeId = inProgressNode?.id ?? null;
   const inProgressNodeName = inProgressNode ? nodeDisplayTitle(inProgressNode) : '';
 
@@ -1998,6 +2007,7 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
         alert(error.message || '스킬을 진행할 수 없습니다.');
         return;
       }
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(80);
       await loadData();
     } catch (e) {
       console.error('[confirmUnlock]', e);
@@ -2384,7 +2394,7 @@ const ActiveSkillsView = ({ setActiveTab, onBack }) => {
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1">활성 스킬</p>
                 <p className="text-xs sm:text-sm text-white/70 leading-snug">
                   진행 중인 스킬이 없습니다.<br />
-                  <span className="text-[10px] text-white/50">관장님께 다음 스킬 해금을 요청하세요.</span>
+                  <span className="text-[10px] text-white/50">다음 스킬을 선택해 진행하세요.</span>
                 </p>
               </>
             )}

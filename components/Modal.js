@@ -64,7 +64,7 @@ export default function Modal({
   const overlayPad = fullScreen ? '' : 'p-3 sm:p-6';
   const containerShape = fullScreen
     ? 'w-full h-full sm:h-auto sm:max-h-[90vh] sm:rounded-2xl rounded-none flex flex-col'
-    : `w-full ${maxW} rounded-2xl`;
+    : `w-full ${maxW} rounded-2xl max-h-[90dvh] overflow-y-auto`;
 
   const handleBackdrop = () => {
     if (closable) onClose?.();

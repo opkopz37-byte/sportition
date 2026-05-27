@@ -13,13 +13,13 @@ function localYmd(d = new Date()) {
 
 export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
   const { user, refreshProfile } = useAuth();
-  const [view, setView] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error' | 'already'
+  const [view, setView] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
   const [todayRecord, setTodayRecord] = useState(null);
   const [pendingPromotion, setPendingPromotion] = useState(null);
   const [error, setError] = useState(null);
 
   const loadToday = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) return null;
     try {
       const { supabase } = await import('@/lib/supabase');
       const today = localYmd();
@@ -31,14 +31,16 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
         .maybeSingle();
       if (data) {
         setTodayRecord(data);
-        setView('already');
+        setView('done');
       } else {
         setTodayRecord(null);
         setView('idle');
       }
+      return data;
     } catch (e) {
       console.error('[AttendanceCheckModal] loadToday 에러:', e);
       setView('idle');
+      return null;
     }
   }, [user]);
 
@@ -62,11 +64,7 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
         if (result.error.code === 'no_active_skill') {
           setError({
             title: '오늘 출석할 수 없어요',
-            message: result.error.message || '진행 중인 활성 스킬이 없습니다.',
-            hint:
-              '활성 스킬은 관장님이 해금해주신 진행 중 스킬 1개를 의미합니다.\n\n' +
-              '• 마스터한 스킬(5/5)이 있다면 먼저 승단 심사 신청을 해주세요.\n' +
-              '• 그렇지 않다면 관장님께 다음 스킬 해금을 요청해 주세요.',
+            message: '진행할 스킬을 먼저 선택해 주세요.',
             goSkills: true,
           });
         } else {
@@ -100,8 +98,8 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
         });
       }
 
-      setView('success');
-      Promise.all([refreshProfile?.(), loadToday()]).catch(() => {});
+      await loadToday();
+      refreshProfile?.().catch(() => {});
     } catch (e) {
       console.error('[AttendanceCheckModal] handleCheckIn 에러:', e);
       setError({
@@ -119,8 +117,7 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
   const title = (() => {
     switch (view) {
       case 'loading':  return '처리 중…';
-      case 'already':  return '오늘 출석 완료';
-      case 'success':  return '출석 완료';
+      case 'done':     return '오늘 출석 완료';
       case 'error':    return error?.title || '오류';
       case 'idle':
       default:         return '오늘 출석 체크';
@@ -159,30 +156,17 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
         </div>
       )}
 
-      {view === 'already' && (
+      {view === 'done' && (
         <>
+          <p className="text-base text-white font-bold mb-1">오늘 출석 완료!</p>
           {todayRecord?.check_in_time && (
             <p className="text-sm text-emerald-200/90">
               {new Date(todayRecord.check_in_time).toLocaleTimeString('ko-KR', {
                 hour: '2-digit',
                 minute: '2-digit',
-              })} 출석
+              })} 출석 · 활성 스킬 EXP +1 적립
             </p>
           )}
-          <ModalFooter>
-            <ModalButton variant="success" onClick={onClose}>
-              확인
-            </ModalButton>
-          </ModalFooter>
-        </>
-      )}
-
-      {view === 'success' && (
-        <>
-          <p className="text-base text-white font-bold mb-1">오늘 출석 완료!</p>
-          <p className="text-sm text-emerald-200/90 leading-relaxed">
-            활성 스킬의 EXP 가 자동으로 +1 적립되었습니다.
-          </p>
           {pendingPromotion ? (
             <div className="mt-3 px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-400/30">
               <p className="text-[10px] tracking-[0.2em] uppercase text-cyan-300/80 mb-0.5">

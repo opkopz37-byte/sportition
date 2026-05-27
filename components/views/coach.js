@@ -28,11 +28,11 @@ const NOOP = () => {};
 /** 관장 화면 — 회원의 스킬트리를 회원 본인 페이지와 동일한 디자인으로 표시.
  *  - 탭 네비게이션 (스트레이트/훅/어퍼/심화)
  *  - 트리 레이아웃 + 부모/자식 연결선
- *  - 노드 클릭 시 onNodeClick(nodeId) — 호출 측에서 해금/스킵 분기
+ *  - 노드 클릭 시 onNodeToggle(nodeId) — 호출 측에서 선택 토글
+ *  - selectedNodeIds: Set<number> — 외부에서 컨트롤하는 멀티 선택 상태
  *  - 회원 측 [진행하기] / [승단 신청] 패널(InlineExpPanel) 은 hideInlinePanel 로 숨김 */
-const MemberSkillBoard = memo(function MemberSkillBoard({ skillProgressData, onNodeClick }) {
+const MemberSkillBoard = memo(function MemberSkillBoard({ skillProgressData, selectedNodeIds, onNodeToggle }) {
   const [selectedTabKey, setSelectedTabKey] = useState('straight');
-  const [selectedNodeId, setSelectedNodeId] = useState(null);
 
   const nodes = skillProgressData?.nodes || EMPTY_ARR;
   const unlocks = skillProgressData?.unlocks || EMPTY_ARR;
@@ -100,13 +100,11 @@ const MemberSkillBoard = memo(function MemberSkillBoard({ skillProgressData, onN
   const theme = SKILL_ACCENT_THEME[currentTab.accent];
 
   const handleSelect = useCallback((nid) => {
-    setSelectedNodeId(nid);
-    onNodeClick?.(nid);
-  }, [onNodeClick]);
+    onNodeToggle?.(nid);
+  }, [onNodeToggle]);
 
   const handleTabClick = useCallback((key) => {
     setSelectedTabKey(key);
-    setSelectedNodeId(null);
   }, []);
 
   const inProgressNodeName = inProgressNode ? (inProgressNode.name || `노드 ${inProgressNode.node_number}`) : '';
@@ -162,7 +160,8 @@ const MemberSkillBoard = memo(function MemberSkillBoard({ skillProgressData, onN
             nodes={tabNodes}
             expByNodeId={expByNodeId}
             nodeByNumber={nodeByNumber}
-            selectedId={selectedNodeId}
+            selectedId={null}
+            selectedIdSet={selectedNodeIds}
             burstNodeId={null}
             burstKey={0}
             theme={theme}
@@ -1035,8 +1034,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [skillProgressData, setSkillProgressData] = useState(null);
   const [skillProgressLoading, setSkillProgressLoading] = useState(false);
   const [skillProgressError, setSkillProgressError] = useState(null);
-  const [skillActionBusy, setSkillActionBusy] = useState(null);
-  const [skillConfirm, setSkillConfirm] = useState(null); // { action, nodeId, nodeName } | null
   const [memberEditSaving, setMemberEditSaving] = useState(false);
   const [memberEditForm, setMemberEditForm] = useState(null);
   const [deleteStep, setDeleteStep] = useState(0);
@@ -1045,10 +1042,14 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [deleteEmailInput, setDeleteEmailInput] = useState('');
   const [deletingMember, setDeletingMember] = useState(false);
   const [actionMessage, setActionMessage] = useState(null);
-  // 해금/스킵 결과 모달 — 'success' | 'error' | 'promotion_required'
-  // 'promotion_required' 시 prevNode 정보로 자동 승단신청+재시도 버튼 노출.
-  const [skillActionResult, setSkillActionResult] = useState(null);
-  const [autoResolveBusy, setAutoResolveBusy] = useState(false);
+  // 스킬 멀티 선택 — 관장이 회원 스킬 일괄 처리할 때 선택한 노드들
+  const [skillSelectedNodeIds, setSkillSelectedNodeIds] = useState(() => new Set());
+  // 일괄 처리 모달 단계 — null | 'summary' | 'promo' | 'processing' | 'result'
+  const [batchStep, setBatchStep] = useState(null);
+  // 모달 1 요약 — { items: [{nodeId, name, currentState, action}], blockedPrereqs: [{nodeId, name}], processItems: [...] }
+  const [batchSummary, setBatchSummary] = useState(null);
+  // 처리 결과 — { successCount, failCount, rows: [{nodeId, name, type, ok, message?}] }
+  const [batchResults, setBatchResults] = useState(null);
 
   const gymName = (profile?.gym_name && String(profile.gym_name).trim()) || '';
 
@@ -1182,174 +1183,176 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     }
   };
 
-  // 회원 모달의 [해금]/[스킵] 클릭 → 재확인 모달 띄움
-  const requestSkillAction = useCallback((action, nodeId, nodeName) => {
-    if (skillActionBusy) return;
-    setActionMessage(null);
-    setSkillConfirm({ action, nodeId, nodeName });
-  }, [skillActionBusy]);
+  // 노드 카드 클릭 → 선택 토글 (멀티 선택)
+  const handleSkillNodeToggle = useCallback((nid) => {
+    setSkillSelectedNodeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(nid)) next.delete(nid);
+      else next.add(nid);
+      return next;
+    });
+  }, []);
 
-  // MemberSkillBoard 노드 클릭 — 잠긴/미마스터/마스터 분기. 메모이제이션 위해 stable.
-  const handleSkillBoardNodeClick = useCallback((nid) => {
-    if (!skillProgressData) return;
-    const node = skillProgressData.nodes.find((n) => n.id === nid);
-    if (!node) return;
-    const unlocked = skillProgressData.unlocks.some((u) => u.node_id === nid);
-    const pRow = skillProgressData.progress.find((p) => p.node_id === nid);
-    const exp = Math.max(0, Math.min(5, Number(pRow?.exp_level || 0)));
-    const name = node.name || `노드 ${node.node_number}`;
-    if (!unlocked) {
-      requestSkillAction('unlock', nid, name);
-    } else if (exp < 5) {
-      requestSkillAction('skip', nid, name);
-    }
-  }, [skillProgressData, requestSkillAction]);
+  const clearSkillSelection = useCallback(() => {
+    setSkillSelectedNodeIds(new Set());
+  }, []);
 
-  // 재확인 모달에서 [확인] 누르면 호출
-  //   extras 예: { create_promotion: false } — 스킵 시 승단 신청 미생성 옵션
-  const confirmSkillAction = async (extras = null) => {
-    if (!skillConfirm) return;
-    const { action, nodeId, nodeName } = skillConfirm;
-    setSkillConfirm(null);
-    await handleSkillAction(action, nodeId, nodeName, extras);
-  };
-
-  // 가장 최근 마스터됐는데 승단 미승인 노드 — promotion_required 자동 해결용
-  const findLatestUnapprovedMasteredNode = () => {
-    if (!skillProgressData) return null;
+  // 모달 1 — 선택한 노드들을 처리 요약으로 변환.
+  // 이미 5/5 마스터된 노드는 알림만 표시(처리에는 포함 안 함).
+  // "막힌 이전 노드" — 선택한 잠긴 노드를 처리하려면 직전 마스터 노드의 승단 신청이 있어야 함.
+  const openBatchSummary = useCallback(() => {
+    if (!skillProgressData || skillSelectedNodeIds.size === 0) return;
     const { nodes = [], unlocks = [], progress = [], promotion_requests = [] } = skillProgressData;
-    const expMap = new Map(progress.map((p) => [p.node_id, Number(p.exp_level || 0)]));
-    const latestStatusByNode = new Map();
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const unlockedSet = new Set(unlocks.map((u) => u.node_id));
+    const expMap = new Map(progress.map((p) => [p.node_id, Math.max(0, Math.min(5, Number(p.exp_level || 0)))]));
+    const promoByNodeId = new Map();
     for (const r of promotion_requests) {
-      const cur = latestStatusByNode.get(r.fork_node_id);
+      const cur = promoByNodeId.get(r.fork_node_id);
       if (!cur || new Date(r.requested_at) > new Date(cur.at)) {
-        latestStatusByNode.set(r.fork_node_id, { status: r.status, at: r.requested_at });
+        promoByNodeId.set(r.fork_node_id, { status: r.status, at: r.requested_at });
       }
     }
-    const candidates = unlocks
-      .filter((u) => (expMap.get(u.node_id) || 0) >= 5)
-      .filter((u) => {
-        const s = latestStatusByNode.get(u.node_id)?.status;
-        return s !== 'approved';
-      })
-      .sort((a, b) => new Date(b.unlocked_at || 0) - new Date(a.unlocked_at || 0));
-    const top = candidates[0];
-    if (!top) return null;
-    const node = nodes.find((n) => n.id === top.node_id);
-    return node ? { id: node.id, name: node.name || `노드 ${node.node_number}` } : null;
+
+    const summaryRows = [];   // 화면에 보여줄 행
+    const processRows = [];   // 실제 처리할 노드 (이미 마스터 제외)
+    for (const nid of skillSelectedNodeIds) {
+      const node = nodeById.get(nid);
+      if (!node) continue;
+      const name = node.name || `노드 ${node.node_number}`;
+      const exp = expMap.get(nid) || 0;
+      const unlocked = unlockedSet.has(nid);
+      if (exp >= 5) {
+        summaryRows.push({ nodeId: nid, name, state: 'mastered', action: 'noop' });
+      } else if (unlocked) {
+        summaryRows.push({ nodeId: nid, name, state: 'in_progress', action: 'master', exp });
+        processRows.push({ nodeId: nid, name, state: 'in_progress' });
+      } else {
+        summaryRows.push({ nodeId: nid, name, state: 'locked', action: 'master' });
+        processRows.push({ nodeId: nid, name, state: 'locked' });
+      }
+    }
+
+    // 막힌 이전 노드 — 처리 대상 잠긴 노드가 있고, "최근 마스터 노드" 가 승단 미신청 상태일 때.
+    let blockedPrereq = null;
+    const hasLockedToProcess = processRows.some((r) => r.state === 'locked');
+    if (hasLockedToProcess) {
+      const latestUnlock = unlocks
+        .slice()
+        .sort((a, b) => new Date(b.unlocked_at || 0) - new Date(a.unlocked_at || 0))[0];
+      if (latestUnlock) {
+        const latestExp = expMap.get(latestUnlock.node_id) || 0;
+        const latestPromo = promoByNodeId.get(latestUnlock.node_id);
+        const isLatestSelected = skillSelectedNodeIds.has(latestUnlock.node_id);
+        if (latestExp >= 5 && !isLatestSelected && (!latestPromo || (latestPromo.status !== 'pending' && latestPromo.status !== 'reviewing' && latestPromo.status !== 'approved'))) {
+          const node = nodeById.get(latestUnlock.node_id);
+          if (node) blockedPrereq = { nodeId: node.id, name: node.name || `노드 ${node.node_number}` };
+        }
+      }
+    }
+
+    setBatchSummary({ summaryRows, processRows, blockedPrereq });
+    setBatchStep('summary');
+  }, [skillProgressData, skillSelectedNodeIds]);
+
+  // 모달 1 → 모달 2 또는 바로 처리
+  const handleSummaryConfirm = useCallback(() => {
+    if (!batchSummary) return;
+    // 처리할 항목 없음 (모두 이미 마스터) → 닫기
+    if (batchSummary.processRows.length === 0) {
+      setBatchStep(null);
+      setBatchSummary(null);
+      return;
+    }
+    // 승단 신청 모달 — 스킵 발생 OR 막힌 이전 노드 존재
+    const needsPromoQuestion = batchSummary.processRows.length > 0 || !!batchSummary.blockedPrereq;
+    if (needsPromoQuestion) {
+      setBatchStep('promo');
+    } else {
+      executeBatch(false);
+    }
+  }, [batchSummary]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 모달 2 → 처리 실행 (executeBatch 가 매 렌더 재생성되므로 useCallback 미사용 — stale closure 방지)
+  const handlePromoAnswer = (createPromotion) => {
+    executeBatch(!!createPromotion);
   };
 
-  /** action: 'unlock' | 'skip', extras?: { create_promotion?: boolean } */
-  const handleSkillAction = async (action, nodeId, nodeName, extras = null) => {
-    if (!selectedMember?.id || skillActionBusy) return;
-    setActionMessage(null);
-    setSkillActionBusy({ nodeId, action });
+  // 실제 batch 처리 — 항목 순서: (선택 시) 막힌 이전 노드 승단신청 → 진행 중 노드 스킵 → 잠긴 노드 스킵
+  const executeBatch = async (createPromotion) => {
+    if (!batchSummary || !selectedMember?.id) return;
+    setBatchStep('processing');
+    const items = [];
+    if (createPromotion && batchSummary.blockedPrereq) {
+      items.push({ type: 'promotion_request', node_id: batchSummary.blockedPrereq.nodeId, name: batchSummary.blockedPrereq.name });
+    }
+    const inProgressRows = batchSummary.processRows.filter((r) => r.state === 'in_progress');
+    const lockedRows = batchSummary.processRows.filter((r) => r.state === 'locked');
+    for (const r of inProgressRows) {
+      items.push({ type: 'skip', node_id: r.nodeId, name: r.name, create_promotion: createPromotion });
+    }
+    for (const r of lockedRows) {
+      items.push({ type: 'skip', node_id: r.nodeId, name: r.name, create_promotion: createPromotion });
+    }
+
     try {
       const { getSupabase, isSupabaseConfigured } = await import('@/lib/supabase');
       if (typeof isSupabaseConfigured === 'function' && !isSupabaseConfigured()) {
-        setSkillActionResult({ kind: 'error', title: '설정 오류', message: 'Supabase가 설정되지 않았습니다.' });
+        setBatchResults({ successCount: 0, failCount: items.length, rows: items.map((it) => ({ ...it, ok: false, message: 'Supabase 미설정' })) });
+        setBatchStep('result');
         return;
       }
       const supa = getSupabase();
       const { data: sessionData } = await supa.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) {
-        setSkillActionResult({ kind: 'error', title: '인증 필요', message: '로그인이 필요합니다.' });
+        setBatchResults({ successCount: 0, failCount: items.length, rows: items.map((it) => ({ ...it, ok: false, message: '로그인이 필요합니다.' })) });
+        setBatchStep('result');
         return;
       }
-      const endpoint = action === 'unlock' ? 'skill-unlock' : 'skill-skip';
-      const body = { node_id: nodeId };
-      if (action === 'skip' && extras && typeof extras.create_promotion === 'boolean') {
-        body.create_promotion = extras.create_promotion;
-      }
-      const res = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}/${endpoint}`, {
+      const payload = {
+        items: items.map((it) => ({
+          type: it.type,
+          node_id: it.node_id,
+          ...(it.type === 'skip' ? { create_promotion: it.create_promotion } : {}),
+        })),
+      };
+      const res = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}/skill-batch`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || json.ok === false) {
-        const code = json.error;
-        if (action === 'unlock' && code === 'promotion_required') {
-          const prevNode = findLatestUnapprovedMasteredNode();
-          setSkillActionResult({
-            kind: 'promotion_required',
-            title: '승단 신청 필요',
-            message: prevNode
-              ? `'${prevNode.name}' 의 승단 신청이 먼저 필요합니다.`
-              : '이전 스킬의 승단 신청이 먼저 필요합니다.',
-            prevNodeId: prevNode?.id ?? null,
-            prevNodeName: prevNode?.name ?? '이전 스킬',
-            retryAction: action,
-            retryNodeId: nodeId,
-            retryNodeName: nodeName,
-          });
-          return;
-        }
-        setSkillActionResult({
-          kind: 'error',
-          title: action === 'unlock' ? '해금 실패' : '스킵 실패',
-          message: json.message || json.error || '처리에 실패했습니다.',
-        });
-        return;
-      }
-      if (action === 'unlock' && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-        try { navigator.vibrate([60, 30, 80]); } catch { /* ignore */ }
-      }
-      setSkillActionResult({
-        kind: 'success',
-        title: action === 'unlock' ? '해금 완료' : '스킵 완료',
-        message: nodeName ? `'${nodeName}'` : '',
+      const results = Array.isArray(json?.results) ? json.results : [];
+      const rows = items.map((it, i) => {
+        const r = results[i] || { ok: false, error: 'no_response' };
+        return {
+          type: it.type,
+          node_id: it.node_id,
+          name: it.name,
+          ok: !!r.ok,
+          message: r.ok ? null : (r.message || r.error || '처리 실패'),
+        };
       });
-      await refreshUserSkillData(selectedMember.id);
+      const successCount = rows.filter((r) => r.ok).length;
+      const failCount = rows.length - successCount;
+      setBatchResults({ successCount, failCount, rows });
+      setBatchStep('result');
+      if (successCount > 0) {
+        clearSkillSelection();
+        await refreshUserSkillData(selectedMember.id);
+      }
     } catch (e) {
-      setSkillActionResult({ kind: 'error', title: '처리 실패', message: e.message || '처리에 실패했습니다.' });
-    } finally {
-      setSkillActionBusy(null);
+      setBatchResults({ successCount: 0, failCount: items.length, rows: items.map((it) => ({ ...it, ok: false, message: e.message || '처리 실패' })) });
+      setBatchStep('result');
     }
   };
 
-  // promotion_required 모달에서 [네, 자동 진행] 시 → 승단 신청 INSERT + 원래 해금 재시도
-  const handleAutoResolvePromotion = async () => {
-    if (autoResolveBusy || !skillActionResult || skillActionResult.kind !== 'promotion_required') return;
-    const { prevNodeId, retryAction, retryNodeId, retryNodeName } = skillActionResult;
-    if (!prevNodeId || !selectedMember?.id) {
-      setSkillActionResult({ kind: 'error', title: '자동 진행 불가', message: '이전 노드 정보를 찾지 못했습니다. 수동 처리해 주세요.' });
-      return;
-    }
-    setAutoResolveBusy(true);
-    try {
-      const { getSupabase } = await import('@/lib/supabase');
-      const supa = getSupabase();
-      const { data: sessionData } = await supa.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      if (!token) {
-        setSkillActionResult({ kind: 'error', title: '인증 필요', message: '로그인이 필요합니다.' });
-        return;
-      }
-      const promoRes = await fetch(`/api/gym-members/${encodeURIComponent(selectedMember.id)}/promotion-request`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ node_id: prevNodeId }),
-      });
-      const promoJson = await promoRes.json().catch(() => ({}));
-      if (!promoRes.ok || promoJson.ok === false) {
-        setSkillActionResult({
-          kind: 'error',
-          title: '승단 신청 실패',
-          message: promoJson.message || promoJson.error || '승단 신청에 실패했습니다.',
-        });
-        return;
-      }
-      // 신청 성공 → 원래 해금 재시도
-      setSkillActionResult(null);
-      await handleSkillAction(retryAction, retryNodeId, retryNodeName);
-    } catch (e) {
-      setSkillActionResult({ kind: 'error', title: '자동 진행 실패', message: e.message || '오류가 발생했습니다.' });
-    } finally {
-      setAutoResolveBusy(false);
-    }
-  };
+  const closeBatchModals = useCallback(() => {
+    setBatchStep(null);
+    setBatchSummary(null);
+    setBatchResults(null);
+  }, []);
 
   const saveMemberEdit = async () => {
     if (!selectedMember?.id || !memberEditForm) return;
@@ -1496,8 +1499,10 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
     setAttendanceRows([]);
     setSkillProgressData(null);
     setSkillProgressError(null);
-    setSkillActionBusy(null);
-    setSkillConfirm(null);
+    setSkillSelectedNodeIds(new Set());
+    setBatchStep(null);
+    setBatchSummary(null);
+    setBatchResults(null);
     setShowResetPw(false);
   };
 
@@ -2187,13 +2192,35 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                   {skillProgressError && <div className="py-4 text-center text-red-400 text-sm">{skillProgressError}</div>}
                   {!skillProgressLoading && !skillProgressError && skillProgressData && (
                     <div className="rounded-xl border border-white/10 overflow-hidden">
-                      <div className="px-3 py-2 bg-white/5 text-xs font-bold text-gray-300">스킬 노드맵</div>
+                      <div className="px-3 py-2 bg-white/5 text-xs font-bold text-gray-300 flex items-center justify-between gap-2">
+                        <span>스킬 노드맵</span>
+                        <span className="text-[10px] text-gray-400 font-normal">노드를 탭해서 선택</span>
+                      </div>
                       <div className="p-2 bg-slate-950/60">
                         <MemberSkillBoard
                           skillProgressData={skillProgressData}
-                          onNodeClick={handleSkillBoardNodeClick}
+                          selectedNodeIds={skillSelectedNodeIds}
+                          onNodeToggle={handleSkillNodeToggle}
                         />
                       </div>
+                      {skillSelectedNodeIds.size > 0 && !batchStep && (
+                        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[110] max-w-[calc(100vw-1rem)] flex items-center gap-4 sm:gap-8 md:gap-10 px-4 sm:px-10 md:px-16 py-1 rounded-2xl border-2 border-emerald-400/60 bg-slate-900/95 backdrop-blur-md shadow-[0_12px_40px_rgba(0,0,0,0.7)]">
+                          <button
+                            type="button"
+                            onClick={clearSkillSelection}
+                            className="px-3 sm:px-6 md:px-8 py-1 text-xs leading-none tracking-[0.15em] sm:tracking-[0.25em] whitespace-nowrap text-gray-300 hover:text-white rounded-lg hover:bg-white/10"
+                          >
+                            선택 해제
+                          </button>
+                          <button
+                            type="button"
+                            onClick={openBatchSummary}
+                            className="px-5 sm:px-10 md:px-14 py-1.5 text-xs leading-none tracking-[0.15em] sm:tracking-[0.25em] whitespace-nowrap font-bold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-[0_0_20px_rgba(52,211,153,0.4)]"
+                          >
+                            선택 {skillSelectedNodeIds.size}개 처리
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2247,27 +2274,6 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
               </div>
             )}
 
-            {memberDetailMode === 'skill-management' && (
-              <div className="p-2 xs:p-3 sm:p-4 border-t border-white/10 bg-white/5 flex gap-1.5 xs:gap-2 sm:gap-3 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMemberDetailMode('info');
-                    setSkillProgressError(null);
-                  }}
-                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm"
-                >
-                  상세로 돌아가기
-                </button>
-                <button
-                  type="button"
-                  onClick={closeMemberModal}
-                  className="flex-1 py-2 xs:py-2.5 sm:py-3 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-[10px] xs:text-xs sm:text-sm"
-                >
-                  닫기
-                </button>
-              </div>
-            )}
 
             {/* 비밀번호 초기화 확인 모달 */}
             <Modal
@@ -2302,99 +2308,123 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
               )}
             </Modal>
 
-            {/* 해금/스킵 결과 모달 — 성공/실패/promotion_required */}
+            {/* 모달 1 — 처리 확인 요약 */}
             <Modal
-              open={!!skillActionResult}
-              onClose={() => { if (!autoResolveBusy) setSkillActionResult(null); }}
-              title={skillActionResult?.title}
-              variant={
-                skillActionResult?.kind === 'success' ? 'success'
-                  : skillActionResult?.kind === 'promotion_required' ? 'info'
-                  : 'danger'
-              }
+              open={batchStep === 'summary'}
+              onClose={() => { if (batchStep === 'summary') closeBatchModals(); }}
+              title="처리 확인"
+              variant="info"
               contained
               zIndexClass="z-[60]"
-              closable={!autoResolveBusy}
             >
-              {skillActionResult && (
+              {batchSummary && (
                 <>
-                  <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-line">
-                    {skillActionResult.message}
+                  <p className="text-sm text-gray-200 mb-3">
+                    선택한 {batchSummary.summaryRows.length}개 노드를 마스터합니다.
                   </p>
-                  {skillActionResult.kind === 'promotion_required' ? (
-                    <ModalFooter>
-                      <ModalButton
-                        variant="info"
-                        onClick={handleAutoResolvePromotion}
-                        disabled={autoResolveBusy || !skillActionResult.prevNodeId}
-                      >
-                        {autoResolveBusy ? '처리 중…' : '승단 신청 후 해금'}
-                      </ModalButton>
-                    </ModalFooter>
-                  ) : (
-                    <ModalFooter>
-                      <ModalButton
-                        variant={skillActionResult.kind === 'success' ? 'success' : 'ghost'}
-                        onClick={() => setSkillActionResult(null)}
-                      >
-                        확인
-                      </ModalButton>
-                    </ModalFooter>
+                  <ul className="space-y-1.5 mb-3 max-h-60 overflow-y-auto pr-1">
+                    {batchSummary.summaryRows.map((r) => (
+                      <li key={r.nodeId} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-white truncate">{r.name}</span>
+                        {r.state === 'mastered' ? (
+                          <span className="text-amber-300/80 shrink-0">이미 마스터</span>
+                        ) : r.state === 'in_progress' ? (
+                          <span className="text-cyan-300/90 shrink-0">진행 중({r.exp}/5) → 마스터</span>
+                        ) : (
+                          <span className="text-emerald-300/90 shrink-0">잠김 → 마스터</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {batchSummary.blockedPrereq && (
+                    <p className="text-[11px] text-amber-200/90 mb-3 p-2 rounded bg-amber-500/10 border border-amber-500/30">
+                      ⚠ 진행을 위해 <strong>{batchSummary.blockedPrereq.name}</strong> 의 승단 신청이 먼저 필요합니다.
+                    </p>
                   )}
+                  {batchSummary.processRows.length === 0 && (
+                    <p className="text-[11px] text-gray-400 mb-3">처리할 노드가 없습니다.</p>
+                  )}
+                  <ModalFooter>
+                    <ModalButton variant="ghost" onClick={closeBatchModals}>취소</ModalButton>
+                    <ModalButton
+                      variant="success"
+                      onClick={handleSummaryConfirm}
+                      disabled={batchSummary.processRows.length === 0}
+                    >
+                      확인
+                    </ModalButton>
+                  </ModalFooter>
                 </>
               )}
             </Modal>
 
-            {/* 스킬 해금/스킵 재확인 모달 */}
+            {/* 모달 2 — 승단 신청 등록 여부 */}
             <Modal
-              open={!!skillConfirm}
-              onClose={() => { if (!skillActionBusy) setSkillConfirm(null); }}
-              title={skillConfirm?.action === 'unlock' ? '해금' : '스킵'}
-              variant={skillConfirm?.action === 'unlock' ? 'success' : 'warning'}
+              open={batchStep === 'promo'}
+              onClose={() => { if (batchStep === 'promo') closeBatchModals(); }}
+              title="승단 신청"
+              variant="warning"
               contained
-              closable={!skillActionBusy}
+              zIndexClass="z-[60]"
             >
-              {skillConfirm && (
+              <p className="text-sm text-gray-200 mb-3 leading-relaxed">
+                승단 신청도 같이 등록할까요?
+              </p>
+              <p className="text-[11px] text-gray-400 mb-3">
+                {batchSummary?.blockedPrereq
+                  ? '마스터되는 노드와 막힌 이전 노드 모두 대상입니다.'
+                  : '마스터되는 노드 모두 대상입니다.'}
+              </p>
+              <ModalFooter>
+                <ModalButton variant="outline" onClick={() => handlePromoAnswer(false)}>아니오</ModalButton>
+                <ModalButton variant="warning" onClick={() => handlePromoAnswer(true)}>네</ModalButton>
+              </ModalFooter>
+            </Modal>
+
+            {/* 처리 중 — 단순 안내 모달 */}
+            <Modal
+              open={batchStep === 'processing'}
+              onClose={() => { /* 처리 중에는 닫기 안 됨 */ }}
+              title="처리 중"
+              variant="info"
+              contained
+              zIndexClass="z-[60]"
+              closable={false}
+            >
+              <p className="text-sm text-gray-200">잠시만 기다려 주세요…</p>
+            </Modal>
+
+            {/* 결과 모달 — 성공/실패 요약 */}
+            <Modal
+              open={batchStep === 'result'}
+              onClose={closeBatchModals}
+              title="처리 결과"
+              variant={batchResults && batchResults.failCount === 0 ? 'success' : (batchResults && batchResults.successCount === 0 ? 'danger' : 'warning')}
+              contained
+              zIndexClass="z-[60]"
+            >
+              {batchResults && (
                 <>
-                  <p className="text-sm text-gray-200 mb-3 leading-relaxed">
-                    <strong className={skillConfirm.action === 'unlock' ? 'text-emerald-200' : 'text-amber-200'}>
-                      {skillConfirm.nodeName}
-                    </strong>
-                    {' '}{skillConfirm.action === 'unlock' ? '해금할까요?' : '스킵할까요?'}
+                  <p className="text-sm text-gray-200 mb-3">
+                    {batchResults.rows.length}개 중{' '}
+                    <strong className="text-emerald-300">{batchResults.successCount}개 성공</strong>
+                    {batchResults.failCount > 0 && (
+                      <>, <strong className="text-rose-300">{batchResults.failCount}개 실패</strong></>
+                    )}
                   </p>
-                  {skillConfirm.action === 'skip' && (
-                    <p className="text-[11px] text-amber-300/80 mb-2">
-                      즉시 5/5 마스터 처리. 되돌릴 수 없습니다.
-                    </p>
+                  {batchResults.failCount > 0 && (
+                    <ul className="space-y-1.5 mb-3 max-h-60 overflow-y-auto pr-1">
+                      {batchResults.rows.filter((r) => !r.ok).map((r, i) => (
+                        <li key={`${r.node_id}-${i}`} className="text-xs">
+                          <span className="text-white">{r.name}</span>
+                          <span className="text-rose-300/90 ml-1.5">— {r.message}</span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                  {skillConfirm.action === 'skip' ? (
-                    <ModalFooter>
-                      <ModalButton
-                        variant="outline"
-                        onClick={() => confirmSkillAction({ create_promotion: false })}
-                        disabled={!!skillActionBusy}
-                      >
-                        {skillActionBusy ? '처리 중…' : '스킵만'}
-                      </ModalButton>
-                      <ModalButton
-                        variant="warning"
-                        onClick={() => confirmSkillAction({ create_promotion: true })}
-                        disabled={!!skillActionBusy}
-                      >
-                        {skillActionBusy ? '처리 중…' : '스킵 + 승단 등록'}
-                      </ModalButton>
-                    </ModalFooter>
-                  ) : (
-                    <ModalFooter>
-                      <ModalButton
-                        variant="success"
-                        onClick={() => confirmSkillAction()}
-                        disabled={!!skillActionBusy}
-                      >
-                        {skillActionBusy ? '처리 중…' : '해금'}
-                      </ModalButton>
-                    </ModalFooter>
-                  )}
+                  <ModalFooter>
+                    <ModalButton variant="ghost" onClick={closeBatchModals}>확인</ModalButton>
+                  </ModalFooter>
                 </>
               )}
             </Modal>
