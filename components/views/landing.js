@@ -579,25 +579,31 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       }
     }
 
-    // 회원이 체육관 코드를 입력했다면 형식·존재 확인
+    // 회원/선수는 체육관 코드 필수 — 형식·존재 모두 통과해야 가입 가능
     if (formData.role === 'player_common' || formData.role === 'player_athlete') {
-      if (formData.gymCode) {
-        if (!GYM_CODE_REGEX.test(formData.gymCode)) {
-          setError('체육관 코드 형식이 올바르지 않습니다.');
-          return false;
-        }
-        if (gymCodePreview.status === 'checking') {
-          setError('체육관 코드 확인 중입니다. 잠시만 기다려주세요.');
-          return false;
-        }
-        if (gymCodePreview.status === 'notfound') {
-          setError('존재하지 않는 체육관 코드입니다.');
-          return false;
-        }
-        if (gymCodePreview.status === 'error') {
-          setError('체육관 코드 확인 중 오류가 발생했습니다. 다시 시도해주세요.');
-          return false;
-        }
+      if (!formData.gymCode || !formData.gymCode.trim()) {
+        setError('체육관 코드를 입력해주세요.');
+        return false;
+      }
+      if (!GYM_CODE_REGEX.test(formData.gymCode)) {
+        setError('체육관 코드 형식이 올바르지 않습니다. (예: gg0001)');
+        return false;
+      }
+      if (gymCodePreview.status === 'checking') {
+        setError('체육관 코드 확인 중입니다. 잠시만 기다려주세요.');
+        return false;
+      }
+      if (gymCodePreview.status === 'notfound') {
+        setError('존재하지 않는 체육관 코드입니다.');
+        return false;
+      }
+      if (gymCodePreview.status === 'error') {
+        setError('체육관 코드 확인 중 오류가 발생했습니다. 다시 시도해주세요.');
+        return false;
+      }
+      if (gymCodePreview.status !== 'found') {
+        setError('체육관 코드 확인이 완료되어야 가입할 수 있습니다.');
+        return false;
       }
     }
 
@@ -646,13 +652,14 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       };
 
       // 역할별 추가 데이터 (멤버십은 가입 시 UI 없음 → 기본 베이직)
+      const normalizedGymCode = formData.gymCode ? formData.gymCode.trim().toLowerCase() : null;
       if (formData.role === 'player_common') {
         // gym_name 은 트리거가 코드 → 이름으로 자동 채움. 입력값 없음.
-        userData.gym_code = formData.gymCode || null;
+        userData.gym_code = normalizedGymCode;
         userData.membership_type = 'basic';
       } else if (formData.role === 'player_athlete') {
         userData.boxing_style = formData.boxingStyle || null;
-        userData.gym_code = formData.gymCode || null;
+        userData.gym_code = normalizedGymCode;
         userData.membership_type = 'basic';
       } else if (formData.role === 'gym') {
         // 체육관
@@ -674,6 +681,15 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
         console.error('Signup error:', signUpError);
         if (isAuthPasswordPolicyError(signUpError)) {
           setError(formatAuthPasswordErrorMessage(signUpError, t));
+          return;
+        }
+        const errMsg = String(signUpError.message || '');
+        if (errMsg.includes('gym_code_required')) {
+          setError('체육관 코드를 입력해야 가입할 수 있습니다.');
+          return;
+        }
+        if (errMsg.includes('gym_code_not_found')) {
+          setError('존재하지 않는 체육관 코드입니다. 코드를 다시 확인해주세요.');
           return;
         }
         if (
@@ -1224,7 +1240,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
 
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">
-                  소속 체육관 코드 <span className="text-gray-500 text-xs">(선택 — 체육관 관장에게 받으세요)</span>
+                  소속 체육관 코드 * <span className="text-gray-500 text-xs">(체육관 관장에게 받으세요)</span>
                 </label>
                 <input
                   type="text"
