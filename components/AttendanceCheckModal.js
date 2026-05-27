@@ -14,7 +14,6 @@ function localYmd(d = new Date()) {
 export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
   const { user, refreshProfile } = useAuth();
   const [view, setView] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
-  const [todayRecord, setTodayRecord] = useState(null);
   const [pendingPromotion, setPendingPromotion] = useState(null);
   const [activeSkill, setActiveSkill] = useState(null); // { name, exp_level } | null
   const [error, setError] = useState(null);
@@ -66,11 +65,9 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
         .eq('attendance_date', today)
         .maybeSingle();
       if (data) {
-        setTodayRecord(data);
         setView('done');
         await loadActiveSkill();
       } else {
-        setTodayRecord(null);
         setView('idle');
       }
       return data;
@@ -196,27 +193,22 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
 
       {view === 'done' && (
         <>
-          <p className="text-base text-white font-bold mb-1">오늘 출석 완료!</p>
-          {todayRecord?.check_in_time && (
-            <p className="text-sm text-emerald-200/90">
-              {new Date(todayRecord.check_in_time).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })} 출석
-              {activeSkill
-                ? ` · ${activeSkill.name} ${activeSkill.exp_level}/5`
-                : ' · 활성 스킬 EXP +1 적립'}
+          {activeSkill ? (
+            <div className="text-center py-3">
+              <p className="text-base font-bold text-white">{activeSkill.name}</p>
+              <p className="text-3xl font-extrabold text-emerald-300 mt-1 tabular-nums tracking-tight">
+                {activeSkill.exp_level} <span className="text-emerald-300/50">/</span> 5
+              </p>
+            </div>
+          ) : (
+            <p className="text-center text-sm text-emerald-200/90 py-3">
+              오늘 출석이 적립되었습니다.
             </p>
           )}
           {pendingPromotion ? (
-            <div className="mt-3 px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-400/30">
-              <p className="text-[10px] tracking-[0.2em] uppercase text-cyan-300/80 mb-0.5">
-                {pendingPromotion.status === 'reviewing' ? '심사 진행 중' : '심사 대기 중'}
-              </p>
-              <p className="text-sm font-bold text-white truncate">
-                {pendingPromotion.skill_name}
-              </p>
-            </div>
+            <p className="text-center text-xs text-cyan-200/90 mt-1">
+              심사 {pendingPromotion.status === 'reviewing' ? '진행' : '대기'} 중 · {pendingPromotion.skill_name}
+            </p>
           ) : null}
           <ModalFooter>
             <ModalButton variant="success" onClick={onClose}>
