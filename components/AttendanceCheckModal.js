@@ -16,7 +16,43 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
   const [view, setView] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
   const [todayRecord, setTodayRecord] = useState(null);
   const [pendingPromotion, setPendingPromotion] = useState(null);
+  const [activeSkill, setActiveSkill] = useState(null); // { name, exp_level } | null
   const [error, setError] = useState(null);
+
+  const loadActiveSkill = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      const { data: unlocks } = await supabase
+        .from('user_skill_unlocks')
+        .select('node_id, unlocked_at, skill_tree_nodes(name)')
+        .eq('user_id', user.id);
+      if (!unlocks?.length) {
+        setActiveSkill(null);
+        return;
+      }
+      const { data: progs } = await supabase
+        .from('user_skill_node_progress')
+        .select('node_id, exp_level')
+        .eq('user_id', user.id)
+        .in('node_id', unlocks.map((u) => u.node_id));
+      const progMap = new Map((progs || []).map((p) => [p.node_id, p.exp_level]));
+      const active = unlocks
+        .filter((u) => (progMap.get(u.node_id) ?? 0) < 5)
+        .sort((a, b) => new Date(b.unlocked_at || 0) - new Date(a.unlocked_at || 0))[0];
+      if (active) {
+        setActiveSkill({
+          name: active.skill_tree_nodes?.name || '활성 스킬',
+          exp_level: progMap.get(active.node_id) ?? 0,
+        });
+      } else {
+        setActiveSkill(null);
+      }
+    } catch (e) {
+      console.error('[AttendanceCheckModal] loadActiveSkill 에러:', e);
+      setActiveSkill(null);
+    }
+  }, [user]);
 
   const loadToday = useCallback(async () => {
     if (!user?.id) return null;
@@ -32,6 +68,7 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
       if (data) {
         setTodayRecord(data);
         setView('done');
+        await loadActiveSkill();
       } else {
         setTodayRecord(null);
         setView('idle');
@@ -42,12 +79,13 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
       setView('idle');
       return null;
     }
-  }, [user]);
+  }, [user, loadActiveSkill]);
 
   useEffect(() => {
     if (open) {
       setError(null);
       setPendingPromotion(null);
+      setActiveSkill(null);
       loadToday();
     }
   }, [open, loadToday]);
@@ -164,7 +202,10 @@ export default function AttendanceCheckModal({ open, onClose, onGoToSkills }) {
               {new Date(todayRecord.check_in_time).toLocaleTimeString('ko-KR', {
                 hour: '2-digit',
                 minute: '2-digit',
-              })} 출석 · 활성 스킬 EXP +1 적립
+              })} 출석
+              {activeSkill
+                ? ` · ${activeSkill.name} ${activeSkill.exp_level}/5`
+                : ' · 활성 스킬 EXP +1 적립'}
             </p>
           )}
           {pendingPromotion ? (
