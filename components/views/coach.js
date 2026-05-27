@@ -2204,7 +2204,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                         />
                       </div>
                       {skillSelectedNodeIds.size > 0 && !batchStep && (
-                        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[110] max-w-[calc(100vw-1rem)] flex items-center gap-4 sm:gap-8 md:gap-10 px-4 sm:px-10 md:px-16 py-1 rounded-2xl border-2 border-emerald-400/60 bg-slate-900/95 backdrop-blur-md shadow-[0_12px_40px_rgba(0,0,0,0.7)]">
+                        <div className="action-bar-attention fixed bottom-8 left-1/2 -translate-x-1/2 z-[110] max-w-[calc(100vw-1rem)] flex items-center gap-4 sm:gap-8 md:gap-10 px-4 sm:px-10 md:px-16 py-1 rounded-2xl border-2 border-emerald-400/60 bg-slate-900/95 backdrop-blur-md">
                           <button
                             type="button"
                             onClick={clearSkillSelection}
@@ -2215,7 +2215,7 @@ const PlayersManagementView = ({ t = (key) => key, setActiveTab, onBack }) => {
                           <button
                             type="button"
                             onClick={openBatchSummary}
-                            className="px-5 sm:px-10 md:px-14 py-1.5 text-xs leading-none tracking-[0.15em] sm:tracking-[0.25em] whitespace-nowrap font-bold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-[0_0_20px_rgba(52,211,153,0.4)]"
+                            className="action-bar-shine px-5 sm:px-10 md:px-14 py-1.5 text-xs leading-none tracking-[0.15em] sm:tracking-[0.25em] whitespace-nowrap font-bold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-[0_0_20px_rgba(52,211,153,0.4)]"
                           >
                             선택 {skillSelectedNodeIds.size}개 처리
                           </button>

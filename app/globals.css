@@ -183,6 +183,59 @@ body {
   will-change: box-shadow;
 }
 
+/* 일괄 처리 액션바 — 에메랄드 글로우 펄스 (시선 유도: 여기 확인하세요) */
+@keyframes action-bar-attention {
+  0%, 100% {
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.7),
+      0 0 0 0 rgba(52, 211, 153, 0.0),
+      0 0 18px rgba(52, 211, 153, 0.35);
+    border-color: rgba(52, 211, 153, 0.6);
+  }
+  50% {
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.7),
+      0 0 0 6px rgba(52, 211, 153, 0.18),
+      0 0 36px rgba(52, 211, 153, 0.75);
+    border-color: rgba(110, 231, 183, 1);
+  }
+}
+.action-bar-attention {
+  animation: action-bar-attention 1.8s ease-in-out infinite;
+  will-change: box-shadow, border-color;
+}
+
+/* 처리 버튼 — 좌→우 빛 스윕 (여기 누르세요 강조) */
+.action-bar-shine {
+  position: relative;
+  overflow: hidden;
+}
+.action-bar-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  transform: translateX(-120%) skewX(-18deg);
+  animation: action-bar-shine-sweep 2.2s ease-in-out infinite;
+  animation-delay: 0.3s;
+  pointer-events: none;
+  will-change: transform;
+}
+@keyframes action-bar-shine-sweep {
+  0% { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
+  20% { opacity: 0.9; }
+  60% { opacity: 0.9; }
+  100% { transform: translateX(260%) skewX(-18deg); opacity: 0; }
+}
+
 /* 사용자가 모션 줄임 설정 시 — 모든 무한 애니메이션 정지 (모바일 배터리/성능) */
 @media (prefers-reduced-motion: reduce) {
   .skill-pickable-glow,
@@ -190,7 +243,9 @@ body {
   .skill-pickable-twinkle,
   .skill-add-pulse,
   .tier-challenger-glow,
-  .animate-pulse-slow {
+  .animate-pulse-slow,
+  .action-bar-attention,
+  .action-bar-shine::after {
     animation: none !important;
   }
 }
