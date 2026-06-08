@@ -45,7 +45,7 @@ const devLog = (...args) => {
 };
 
 export default function SportitionApp() {
-  const { user, profile, isAuthenticated, loading, profileLoading, isOnline, profileLoadError, refreshProfile } = useAuth();
+  const { user, profile, isAuthenticated, loading, profileLoading, isOnline, profileLoadError } = useAuth();
   const [currentPage, setCurrentPage] = useState('landing');
   const [role, setRole] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
@@ -56,17 +56,8 @@ export default function SportitionApp() {
   const [signupInitialRole, setSignupInitialRole] = useState('player_common');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [language, setLanguage] = useState('ko');
-  const [isRetrying, setIsRetrying] = useState(false);
 
-  const handleRetry = async () => {
-    setIsRetrying(true);
-    try {
-      await refreshProfile();
-    } finally {
-      setIsRetrying(false);
-    }
-  };
-  
+
   const [skillRequests, setSkillRequests] = useState([
     { id: 1, playerName: '김철수', skillName: '기본 펀치', skillType: 'active', status: 'pending', requestDate: '2024-02-07 14:30', tier: 'Master I' },
     { id: 2, playerName: '이영희', skillName: '스태미나 강화', skillType: 'passive', status: 'pending', requestDate: '2024-02-07 13:15', tier: 'Master II' },
@@ -310,48 +301,54 @@ export default function SportitionApp() {
     );
   }
 
-  // 세션은 있는데 프로필 로드 실패 — 진짜 에러 (5초 초과 or Supabase/RLS 오류)
+  // 세션은 있는데 프로필 로드 실패
   if (currentPage === 'app' && isAuthenticated && user && !profile && !loading && !profileLoading) {
     const isNetworkError =
       profileLoadError?.includes('fetch') ||
       profileLoadError?.includes('network') ||
       profileLoadError?.includes('시간이 초과');
 
+    if (isNetworkError) {
+      return (
+        <div className="relative min-h-screen bg-black text-white flex flex-col items-center justify-center px-4">
+          <BackgroundGrid theme={{ accent: 'blue' }} />
+          <div className="relative z-10 text-center max-w-sm">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/20 text-red-400 mb-5">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </div>
+            <p className="text-white font-semibold text-lg mb-2">서버 연결에 실패했습니다</p>
+            <p className="text-gray-400 text-sm leading-relaxed">네트워크 상태를 확인하고 다시 시도해 주세요.</p>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="mt-6 px-6 py-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-200 font-semibold text-sm transition-all mx-auto"
+            >
+              메인화면으로 가기
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="relative min-h-screen bg-black text-white flex flex-col items-center justify-center px-4">
         <BackgroundGrid theme={{ accent: 'blue' }} />
-        <div className="relative z-10 text-center max-w-md w-full">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/20 text-red-400 mb-5">
+        <div className="relative z-10 text-center max-w-sm">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-500/20 text-gray-400 mb-5">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
             </svg>
           </div>
-          <p className="text-white font-semibold text-lg mb-2">계정 정보를 불러오지 못했습니다</p>
-          <p className="text-gray-400 text-sm mb-4 leading-relaxed">
-            {isNetworkError
-              ? '서버 응답이 너무 오래 걸립니다.\n네트워크 상태를 확인하고 다시 시도해 주세요.'
-              : '계정 데이터를 불러오는 중 오류가 발생했습니다.\n잠시 후 다시 시도해 주세요.'}
-          </p>
-          {profileLoadError && (
-            <p className="text-amber-200/80 text-xs text-left mb-5 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 break-words font-mono leading-relaxed">
-              {profileLoadError}
-            </p>
-          )}
+          <p className="text-white font-semibold text-lg mb-2">계정이 없습니다</p>
+          <p className="text-gray-400 text-sm leading-relaxed">가입 정보를 찾을 수 없습니다.<br />메인화면으로 돌아가 다시 가입해 주세요.</p>
           <button
             type="button"
-            onClick={handleRetry}
-            disabled={isRetrying}
-            className="px-6 py-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-200 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+            onClick={handleLogout}
+            className="mt-6 px-6 py-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-200 font-semibold text-sm transition-all mx-auto"
           >
-            {isRetrying ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                다시 시도 중...
-              </>
-            ) : '다시 시도'}
+            메인화면으로 가기
           </button>
         </div>
       </div>
