@@ -1,31 +1,68 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { computeMatchRecords } from '@/lib/matchRecords';
+
+const EVENT_LABELS = {
+  down: '다운', standing: '스탠딩', knockdown: '넉다운',
+  foul_butting: '파울: 버팅', foul_low_head: '파울: 로우헤드', foul_elbow: '파울: 엘보',
+  foul_open: '파울: 오픈블로', foul_low_blow: '파울: 로우블로', foul_kidney: '파울: 키드니블로',
+  foul_pushing: '파울: 푸싱', foul_turning: '파울: 턴잉', foul_passivity: '파울: 패시비티',
+  foul_clinch: '파울: 클린치', rsc: 'RSC', abd: 'ABD', dsq: 'DSQ', nc: 'NC', td: 'TD', ko: 'KO', tko: 'TKO',
+};
+
+function fmtSec(s) {
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
 
 /**
  * 전적 섹션 공통 렌더러 — 상대별 그룹 + 아코디언 펼침.
  *
- * 동작:
- *   · 매치를 opponentId 기준으로 그룹화 (한 상대당 1행)
- *   · 행 클릭 → 그 상대와의 모든 매치가 아래로 펼쳐짐
- *   · 빈 상태: "아직 경기를 진행하지 않았습니다"
- *
  * @param matches 정규화된 매치 배열 (`normalizeRawMatch` 가공)
- * @param onOpenOpponent 상대 프로필로 이동하는 콜백 — 닉네임 영역 옆 → 버튼 클릭 시 호출 (옵션)
+ * @param onOpenOpponent 상대 프로필로 이동하는 콜백 (옵션)
  * @param limit 그룹 최대 표시 수 (default: 10)
  * @param showTiles 누적 기록 타일 표시 여부 (default: true)
+ * @param myName 타임라인 이름 표시용 본인 이름 (옵션)
  */
 export default function MatchHistorySection({
   matches,
   onOpenOpponent,
   limit = 10,
   showTiles = true,
+  myName,
 }) {
   const list = useMemo(() => matches || [], [matches]);
   const records = computeMatchRecords(list);
   const [expandedId, setExpandedId] = useState(null);
+  // 타임라인: { [matchId]: 'loading' | Event[] }
+  const [timelines, setTimelines] = useState({});
+  // 경기별 이벤트 건수 — 기록 있는 경기에만 타임라인 버튼 표시 (쿼리 1회)
+  const [eventCounts, setEventCounts] = useState({});
+  const idsKey = useMemo(() => list.map((m) => m.id).filter(Boolean).join(','), [list]);
+
+  useEffect(() => {
+    if (!idsKey) { setEventCounts({}); return; }
+    let alive = true;
+    import('@/lib/supabase').then(({ fetchMatchEventCounts }) =>
+      fetchMatchEventCounts(idsKey.split(',')).then((counts) => {
+        if (alive) setEventCounts(counts);
+      })
+    ).catch(() => {});
+    return () => { alive = false; };
+  }, [idsKey]);
+
+  const loadTimeline = useCallback(async (matchId) => {
+    if (timelines[matchId] !== undefined) return;
+    setTimelines(prev => ({ ...prev, [matchId]: 'loading' }));
+    try {
+      const { fetchMatchEvents } = await import('@/lib/supabase');
+      const events = await fetchMatchEvents(matchId);
+      setTimelines(prev => ({ ...prev, [matchId]: events }));
+    } catch {
+      setTimelines(prev => ({ ...prev, [matchId]: [] }));
+    }
+  }, [timelines]);
 
   // 상대별 그룹화 — opponentId 기준. 매치 시각 desc.
   const groups = useMemo(() => {
@@ -51,7 +88,6 @@ export default function MatchHistorySection({
       else if (m.result === 'loss') g.losses += 1;
       else g.draws += 1;
     });
-    // 그룹 정렬: 그룹 내 가장 최근 매치 시각 desc
     const arr = Array.from(map.values());
     arr.forEach((g) => {
       g.matches.sort((a, b) => new Date(b.played_at || 0) - new Date(a.played_at || 0));
@@ -100,7 +136,6 @@ export default function MatchHistorySection({
         {displayed.map((g) => {
           const isOpen = expandedId === g.key;
           const total = g.matches.length;
-          // 상대 전체 우열에 따라 카드 톤 결정
           const groupResult = g.wins > g.losses ? 'win' : g.losses > g.wins ? 'loss' : 'draw';
           const accent = groupResult === 'win' ? 'text-blue-300' : groupResult === 'loss' ? 'text-red-300' : 'text-gray-300';
           const bgClass = groupResult === 'win'
@@ -110,7 +145,7 @@ export default function MatchHistorySection({
               : 'bg-white/[0.04] hover:bg-white/[0.07] border-white/10 hover:border-white/20';
           return (
             <div key={g.key} className={`border rounded-2xl overflow-hidden transition-all ${bgClass}`}>
-              {/* 요약 행 — 클릭 시 펼침 */}
+              {/* 요약 행 */}
               <button
                 type="button"
                 onClick={() => setExpandedId(isOpen ? null : g.key)}
@@ -147,25 +182,18 @@ export default function MatchHistorySection({
                   </div>
                   <svg
                     className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
+                    width="20" height="20" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" strokeWidth="2.5"
+                    strokeLinecap="round" strokeLinejoin="round" aria-hidden
                   >
                     <polyline points="6 9 12 15 18 9" />
                   </svg>
                 </div>
               </button>
 
-              {/* 펼친 영역 — 그 상대와의 매치 디테일 */}
+              {/* 펼친 영역 */}
               {isOpen ? (
                 <div className="border-t border-white/8 bg-black/20 px-3 sm:px-4 py-3 space-y-2">
-                  {/* 상대 프로필로 가는 보조 버튼 */}
                   {onOpenOpponent && g.opponentId ? (
                     <button
                       type="button"
@@ -183,35 +211,97 @@ export default function MatchHistorySection({
                       const resultLabel = m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무';
                       const a = m.result === 'win' ? 'text-blue-300' : m.result === 'loss' ? 'text-red-300' : 'text-gray-300';
                       const dot = m.result === 'win' ? 'bg-blue-400' : m.result === 'loss' ? 'bg-red-400' : 'bg-gray-500';
+                      const tl = timelines[m.id];
+                      const isBlueViewer = Array.isArray(tl) && tl.length > 0 && tl[0]?.match_id_blue === m.id;
                       return (
-                        <div
-                          key={m.id || `${m.played_at}-${m.score}`}
-                          className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-white/[0.03] border border-white/8"
-                        >
-                          <span className={`w-3 h-3 rounded-full flex-shrink-0 ${dot}`} aria-hidden />
-                          <div className="flex-1 min-w-0">
-                            {/* 1줄: vs 닉네임 (이름) — 매 행마다 명시 */}
-                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                              <span className="text-xs font-semibold uppercase tracking-[0.15em] text-gray-500">vs</span>
-                              <span className="text-base sm:text-lg text-white font-bold truncate">{g.opponent}</span>
-                              {g.opponentRealName ? (
-                                <span className="text-xs sm:text-sm text-gray-400 font-medium">({g.opponentRealName})</span>
-                              ) : null}
+                        <div key={m.id || `${m.played_at}-${m.score}`} className="rounded-xl bg-white/[0.03] border border-white/8 overflow-hidden">
+                          <div className="flex items-center gap-3 px-3.5 py-3">
+                            <span className={`w-3 h-3 rounded-full flex-shrink-0 ${dot}`} aria-hidden />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                <span className="text-xs font-semibold uppercase tracking-[0.15em] text-gray-500">vs</span>
+                                <span className="text-base sm:text-lg text-white font-bold truncate">{g.opponent}</span>
+                                {g.opponentRealName ? (
+                                  <span className="text-xs sm:text-sm text-gray-400 font-medium">({g.opponentRealName})</span>
+                                ) : null}
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-wrap text-sm text-gray-400">
+                                <span className="whitespace-nowrap">{m.date}</span>
+                                <span className="text-gray-600">·</span>
+                                <span className="uppercase whitespace-nowrap">{m.method}</span>
+                                <span className="text-gray-600">·</span>
+                                <span className="tabular-nums whitespace-nowrap">{m.score}</span>
+                                <span className="text-gray-600">·</span>
+                                <span className="tabular-nums whitespace-nowrap">{m.rounds}R</span>
+                              </div>
                             </div>
-                            {/* 2줄: 날짜 · 방식 · 점수 · 라운드 */}
-                            <div className="flex items-center gap-1.5 flex-wrap text-sm text-gray-400">
-                              <span className="whitespace-nowrap">{m.date}</span>
-                              <span className="text-gray-600">·</span>
-                              <span className="uppercase whitespace-nowrap">{m.method}</span>
-                              <span className="text-gray-600">·</span>
-                              <span className="tabular-nums whitespace-nowrap">{m.score}</span>
-                              <span className="text-gray-600">·</span>
-                              <span className="tabular-nums whitespace-nowrap">{m.rounds}R</span>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className={`text-xl sm:text-2xl font-black tabular-nums ${a}`}>{resultLabel}</span>
+                              {/* 타임라인 토글 버튼 — 기록이 있는 경기에만 표시 */}
+                              {m.id && eventCounts[m.id] > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (tl === undefined) loadTimeline(m.id);
+                                    else setTimelines(prev => {
+                                      const next = { ...prev };
+                                      delete next[m.id];
+                                      return next;
+                                    });
+                                  }}
+                                  className="text-[10px] text-violet-400 hover:text-violet-300 border border-violet-400/30 hover:border-violet-400/60 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap"
+                                >
+                                  {tl === undefined ? `타임라인 ${eventCounts[m.id]}` : tl === 'loading' ? '…' : '닫기'}
+                                </button>
+                              )}
                             </div>
                           </div>
-                          <span className={`text-xl sm:text-2xl font-black tabular-nums flex-shrink-0 ${a}`}>
-                            {resultLabel}
-                          </span>
+
+                          {/* 타임라인 뷰 */}
+                          {Array.isArray(tl) && tl.length > 0 && (() => {
+                            const myN = myName || '선수';
+                            const oppN = g.opponent;
+                            // 라운드별 그룹화
+                            const byRound = tl.reduce((acc, ev) => {
+                              const r = ev.round_number;
+                              if (!acc[r]) acc[r] = [];
+                              acc[r].push(ev);
+                              return acc;
+                            }, {});
+                            return (
+                              <div className="border-t border-white/8 bg-black/30 px-3 py-3 space-y-3">
+                                {Object.entries(byRound).map(([round, events]) => (
+                                  <div key={round}>
+                                    <div className="text-[10px] font-black tracking-[0.25em] text-white/30 uppercase mb-1.5">R{round}</div>
+                                    <div className="space-y-1">
+                                      {events.map((ev, i) => {
+                                        const viewerIsBlue = ev.match_id_blue === m.id;
+                                        const actorIsViewer = (viewerIsBlue && ev.actor_corner === 'blue') || (!viewerIsBlue && ev.actor_corner === 'red');
+                                        const actorName = actorIsViewer ? myN : oppN;
+                                        const recvName  = actorIsViewer ? oppN : myN;
+                                        const isBlueEvent = ev.actor_corner === 'blue';
+                                        return (
+                                          <div
+                                            key={i}
+                                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs ${isBlueEvent ? 'border-l-2 border-blue-400 bg-blue-500/8' : 'border-l-2 border-red-400 bg-red-500/8'}`}
+                                          >
+                                            {ev.elapsed_sec != null && (
+                                              <span className="text-white/35 tabular-nums font-mono shrink-0">{fmtSec(ev.elapsed_sec)}</span>
+                                            )}
+                                            <span className={`font-bold truncate ${isBlueEvent ? 'text-blue-300' : 'text-red-300'}`}>{actorName}</span>
+                                            <span className="text-white/25 shrink-0">→</span>
+                                            <span className="text-white/60 truncate">{recvName}</span>
+                                            <span className="text-white/40 shrink-0 ml-auto">({EVENT_LABELS[ev.event_type] || ev.event_type})</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })

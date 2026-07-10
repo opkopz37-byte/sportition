@@ -1179,6 +1179,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                 matches={matchHistory}
                 onOpenOpponent={(id) => setActiveTab(`opponent-profile-${id}`)}
                 limit={10}
+                myName={profile?.nickname || profile?.name}
               />
             ) : (
               <div className="text-center py-8 xs:py-10 sm:py-12">

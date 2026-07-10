@@ -1875,6 +1875,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId, onBac
                     matches={opponentMatches.map(normalizeRawMatch)}
                     onOpenOpponent={(id) => setActiveTab(`opponent-profile-${id}`)}
                     limit={10}
+                    myName={opponent?.nickname || opponent?.display_name || opponent?.name}
                   />
                 ) : (
                   <div className="text-center py-8 xs:py-10 sm:py-12">
@@ -1895,7 +1896,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId, onBac
 
 // 전체 전적 목록 페이지
 const MatchHistoryView = ({ setActiveTab, t = (key) => key, onBack }) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1929,6 +1930,7 @@ const MatchHistoryView = ({ setActiveTab, t = (key) => key, onBack }) => {
           matches={matches.map(normalizeRawMatch)}
           onOpenOpponent={(id) => setActiveTab(`opponent-profile-${id}`)}
           limit={matches.length}
+          myName={profile?.nickname || profile?.name}
         />
       )}
     </div>
@@ -1962,6 +1964,8 @@ const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key, 
     return () => { cancelled = true; };
   }, [opponentId]);
 
+  const nickName = opponent?.nickname || opponent?.display_name || opponent?.name || '선수';
+  const realName = opponent?.nickname && opponent?.name ? opponent.name : null;
   const titleText = `${nickName}${realName ? ` (${realName})` : ''} ${t('matchHistory') || '전적'}`;
 
   return (
@@ -1978,6 +1982,7 @@ const OpponentMatchHistoryView = ({ setActiveTab, opponentId, t = (key) => key, 
           matches={matches.map(normalizeRawMatch)}
           onOpenOpponent={(id) => setActiveTab(`opponent-profile-${id}`)}
           limit={matches.length}
+          myName={nickName}
         />
       )}
     </div>

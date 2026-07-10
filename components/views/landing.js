@@ -507,7 +507,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       setError('이메일을 입력해주세요.');
       return false;
     }
-    if (emailCheckStatus !== 'available') {
+    if (emailCheckStatus !== 'available' && emailCheckStatus !== 'unavailable') {
       setError('이메일 중복 확인을 완료해주세요.');
       return false;
     }
@@ -849,11 +849,7 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                   const r = await checkEmailAvailable(formData.email);
                   if (!r.ok) {
                     setEmailCheckStatus(r.error === 'service_unavailable' ? 'unavailable' : 'error');
-                    setError(
-                      r.error === 'service_unavailable'
-                        ? '이메일 확인 서비스를 사용할 수 없습니다. 환경 설정을 확인하거나 잠시 후 다시 시도해 주세요.'
-                        : '이메일 확인 중 오류가 발생했습니다.'
-                    );
+                    setError(r.error === 'service_unavailable' ? '' : '이메일 확인 중 오류가 발생했습니다.');
                     return;
                   }
                   if (r.available) {
@@ -874,6 +870,14 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
             )}
             {emailCheckStatus === 'taken' && (
               <p className="text-xs text-red-400 mt-1.5">이미 등록된 이메일입니다.</p>
+            )}
+            {emailCheckStatus === 'unavailable' && (
+              <p className="text-xs text-amber-300 mt-1.5">
+                이메일 사전 확인을 사용할 수 없어 가입 단계에서 다시 확인합니다.
+              </p>
+            )}
+            {emailCheckStatus === 'error' && (
+              <p className="text-xs text-red-400 mt-1.5">이메일 확인 중 오류가 발생했습니다.</p>
             )}
           </div>
 
