@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { computeMatchRecords } from '@/lib/matchRecords';
+import { MATCH_POINTS_WIN, MATCH_POINTS_LOSS, MATCH_POINTS_DRAW } from '@/lib/tierLadder';
 
 const EVENT_LABELS = {
   down: '다운', standing: '스탠딩', knockdown: '넉다운',
@@ -211,6 +212,7 @@ export default function MatchHistorySection({
                       const resultLabel = m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무';
                       const a = m.result === 'win' ? 'text-blue-300' : m.result === 'loss' ? 'text-red-300' : 'text-gray-300';
                       const dot = m.result === 'win' ? 'bg-blue-400' : m.result === 'loss' ? 'bg-red-400' : 'bg-gray-500';
+                      const pointsDelta = m.result === 'win' ? MATCH_POINTS_WIN : m.result === 'loss' ? MATCH_POINTS_LOSS : MATCH_POINTS_DRAW;
                       const tl = timelines[m.id];
                       const isBlueViewer = Array.isArray(tl) && tl.length > 0 && tl[0]?.match_id_blue === m.id;
                       return (
@@ -236,7 +238,12 @@ export default function MatchHistorySection({
                               </div>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
-                              <span className={`text-xl sm:text-2xl font-black tabular-nums ${a}`}>{resultLabel}</span>
+                              <div className="text-right leading-none">
+                                <span className={`block text-xl sm:text-2xl font-black tabular-nums ${a}`}>{resultLabel}</span>
+                                <span className={`block text-[10px] font-semibold tabular-nums mt-0.5 ${a}`}>
+                                  {pointsDelta > 0 ? '+' : ''}{pointsDelta}P
+                                </span>
+                              </div>
                               {/* 타임라인 토글 버튼 — 기록이 있는 경기에만 표시 */}
                               {m.id && eventCounts[m.id] > 0 && (
                                 <button

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { BackgroundGrid, PageHeader, THEME_ATHLETE, THEME_COACH, THEME_GYM } from '@/components/ui';
 import { Navbar } from '@/components/navigation';
@@ -56,6 +56,8 @@ export default function SportitionApp() {
   const [signupInitialRole, setSignupInitialRole] = useState('player_common');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [language, setLanguage] = useState('ko');
+  /** 로그인 직후 착지할 탭 — 비밀번호 초기화 후 "변경하러 가기"용. 로그인 완료 effect들이 소비 */
+  const pendingTabAfterLoginRef = useRef(null);
 
 
   const [skillRequests, setSkillRequests] = useState([
@@ -130,7 +132,7 @@ export default function SportitionApp() {
           r === 'gym' ||
           r === 'admin'
         ) {
-          setActiveTab('home');
+          setActiveTab(pendingTabAfterLoginRef.current || 'home');
           setTabHistory([]);
         }
       }
@@ -142,6 +144,7 @@ export default function SportitionApp() {
         setCurrentPage('landing');
         setActiveTab('mypage');
       }
+      pendingTabAfterLoginRef.current = null;
     }
   }, [isAuthenticated, user, profile, loading, currentPage]);
 
@@ -161,8 +164,9 @@ export default function SportitionApp() {
       role === 'gym' ||
       role === 'admin'
     ) {
-      setActiveTab('home');
+      setActiveTab(pendingTabAfterLoginRef.current || 'home');
       setTabHistory([]);
+      pendingTabAfterLoginRef.current = null;
     }
   }, [role]);
 
@@ -172,6 +176,7 @@ export default function SportitionApp() {
   }, [currentPage, role, activeTab]);
 
   const handleLogout = async () => {
+    pendingTabAfterLoginRef.current = null;
     try {
       devLog('[Logout] 로그아웃 시작');
       const { signOut } = await import('@/lib/supabase');
@@ -204,14 +209,23 @@ export default function SportitionApp() {
     setCurrentPage('signup');
   };
 
-  const handleLoginSuccess = () => {
-    devLog('로그인 성공 콜백 호출');
+  const handleLoginSuccess = (loggedInUser, opts) => {
+    devLog('로그인 성공 콜백 호출', opts);
+    if (opts?.nextTab) pendingTabAfterLoginRef.current = opts.nextTab;
     // AuthContext가 자동으로 프로필 로드
     // useEffect가 화면 전환 처리
   };
 
-  const handleSignupSuccess = () => {
-    devLog('회원가입 성공 콜백 호출');
+  const handleSignupSuccess = (signedUpUser, opts) => {
+    devLog('회원가입 성공 콜백 호출', opts);
+    if (opts?.autoLoggedIn) {
+      // 가입 직후 자동 로그인됨 — 로그인 모달 없이 바로 앱 진입 (role/탭은 auth effect가 처리)
+      setIsLoginModalOpen(false);
+      setActiveTab('home');
+      setTabHistory([]);
+      setCurrentPage('app');
+      return;
+    }
     setCurrentPage('landing');
     setIsLoginModalOpen(true);
   };

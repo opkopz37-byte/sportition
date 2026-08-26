@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Icon, PageHeader, SpotlightCard, BackgroundGrid, THEME_ATHLETE, THEME_COACH, getMenuStructure } from '@/components/ui';
 import { translations } from '@/lib/translations';
-import { signIn, sendPasswordResetEmail } from '@/lib/supabase';
+import { signIn } from '@/lib/supabase';
+import Modal, { ModalFooter, ModalButton } from '@/components/Modal';
 import TermsOfServiceModal from '@/components/legal/TermsOfServiceModal';
 import {
   OPTIONAL_MARKETING_CONSENT_FULL_TEXT,
@@ -43,6 +44,12 @@ function formatKoreanPhone(raw) {
   if (d.length <= 3) return d;
   if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
   return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
+}
+
+/** 국내 전화번호 자릿수 검증 (지역번호 9자리 ~ 휴대폰 11자리) */
+function isPhoneNumberValid(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  return digits.length >= 9 && digits.length <= 11;
 }
 
 /**
@@ -169,27 +176,99 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [findIdOpen, setFindIdOpen] = useState(false);
-  const [forgotPwOpen, setForgotPwOpen] = useState(false);
+  const [resetSuccessOpen, setResetSuccessOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
-  const [resetMessage, setResetMessage] = useState('');
-  const [resetError, setResetError] = useState('');
+  const [resetAutoLoginBusy, setResetAutoLoginBusy] = useState(false);
+  // 통합 계정 찾기("로그인이 안 되나요?") — 이름+전화번호로 아이디 확인·비밀번호 초기화까지 한 흐름
+  // mode 'find': 계정 찾기(이메일 표시 후 로그인/초기화 선택) · 'reset': 비밀번호 찾기(입력 즉시 초기화)
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState('find');
+  const [recoveryName, setRecoveryName] = useState('');
+  const [recoveryPhone, setRecoveryPhone] = useState('');
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
 
   if (!isOpen) return null;
 
-  const handleSendReset = async (e) => {
+  const handleRecoverySearch = async (e) => {
     e.preventDefault();
-    setResetLoading(true);
-    setResetError('');
-    setResetMessage('');
-    const { error: resetErr } = await sendPasswordResetEmail(resetEmail);
-    setResetLoading(false);
-    if (resetErr) {
-      setResetError(t('forgotPasswordError'));
-      return;
+    setRecoveryLoading(true);
+    setRecoveryError('');
+    setRecoveryEmail('');
+    try {
+      const res = await fetch('/api/auth/find-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: recoveryName, phone: recoveryPhone }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRecoveryError(body?.error === 'rate_limited' ? t('forgotPasswordRateLimited') : t('findIdError'));
+        return;
+      }
+      setRecoveryEmail(body.email);
+    } catch (err) {
+      setRecoveryError(t('findIdError'));
+    } finally {
+      setRecoveryLoading(false);
     }
-    setResetMessage(t('forgotPasswordSent'));
+  };
+
+  const handleRecoveryReset = async () => {
+    if (resetLoading) return;
+    setResetLoading(true);
+    setRecoveryError('');
+    try {
+      const res = await fetch('/api/auth/self-reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: recoveryName, phone: recoveryPhone }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRecoveryError(
+          body?.error === 'rate_limited' ? t('forgotPasswordRateLimited') : t('forgotPasswordError')
+        );
+        return;
+      }
+      setResetEmail(body.email || recoveryEmail);
+      setRecoveryOpen(false);
+      setResetSuccessOpen(true);
+    } catch (err) {
+      setRecoveryError(t('forgotPasswordError'));
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  /** 초기화 완료 모달의 두 버튼 — 둘 다 새 비밀번호(123456)로 자동 로그인.
+   *  goChangePassword 면 로그인 후 회원정보 수정 페이지로 착지 */
+  const finishResetLogin = async (goChangePassword) => {
+    if (resetAutoLoginBusy) return;
+    setResetAutoLoginBusy(true);
+    try {
+      const { data, error: loginErr } = await signIn(resetEmail.trim(), '123456');
+      if (loginErr || !data?.user) {
+        // 자동 로그인 실패 — 로그인 폼으로 복귀, 이메일 채워주고 안내
+        setResetSuccessOpen(false);
+        setEmail(resetEmail);
+        setError(t('forgotPasswordAutoLoginFailed'));
+        return;
+      }
+      setResetSuccessOpen(false);
+      if (onLoginSuccess) {
+        onLoginSuccess(data.user, goChangePassword ? { nextTab: 'mypage-edit-profile' } : undefined);
+      }
+      onClose();
+    } catch (err) {
+      setResetSuccessOpen(false);
+      setEmail(resetEmail);
+      setError(t('forgotPasswordAutoLoginFailed'));
+    } finally {
+      setResetAutoLoginBusy(false);
+    }
   };
 
   const handleLogin = async (e) => {
@@ -292,10 +371,17 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs sm:text-sm">
           <button
             type="button"
-            onClick={() => setFindIdOpen(true)}
+            onClick={() => {
+              setRecoveryName('');
+              setRecoveryPhone('');
+              setRecoveryError('');
+              setRecoveryEmail('');
+              setRecoveryMode('find');
+              setRecoveryOpen(true);
+            }}
             className="text-gray-400 hover:text-white transition-colors"
           >
-            {t('findIdLink')}
+            {t('loginHelpLink')}
           </button>
           <span className="text-gray-600 select-none" aria-hidden>
             |
@@ -303,10 +389,12 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
           <button
             type="button"
             onClick={() => {
-              setResetEmail(email);
-              setResetMessage('');
-              setResetError('');
-              setForgotPwOpen(true);
+              setRecoveryName('');
+              setRecoveryPhone('');
+              setRecoveryError('');
+              setRecoveryEmail('');
+              setRecoveryMode('reset');
+              setRecoveryOpen(true);
             }}
             className="text-gray-400 hover:text-white transition-colors"
           >
@@ -316,99 +404,147 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
       </div>
     </SpotlightCard>
 
-    {findIdOpen ? (
+    {recoveryOpen ? (
       <div
         className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4"
         role="presentation"
-        onClick={() => setFindIdOpen(false)}
+        onClick={() => setRecoveryOpen(false)}
       >
         <div
           role="dialog"
           aria-modal="true"
-          aria-labelledby="find-id-title"
+          aria-labelledby="account-recovery-title"
           className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0c0c12] p-5 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <h3 id="find-id-title" className="text-lg font-bold text-white mb-3">
-            {t('findIdModalTitle')}
+          <h3 id="account-recovery-title" className="text-lg font-bold text-white mb-1">
+            {recoveryMode === 'reset' ? t('forgotPasswordModalTitle') : t('accountRecoveryTitle')}
           </h3>
-          <p className="text-sm text-gray-400 whitespace-pre-line leading-relaxed mb-5">{t('findIdModalBody')}</p>
-          <button
-            type="button"
-            className="w-full py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors"
-            onClick={() => setFindIdOpen(false)}
-          >
-            {t('close')}
-          </button>
+
+          {recoveryEmail ? (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500 mb-1 leading-relaxed">{t('accountRecoveryFoundDesc')}</p>
+              <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-green-400 text-sm text-center break-all">
+                {recoveryEmail}
+              </div>
+              {recoveryError ? (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{recoveryError}</div>
+              ) : null}
+              <button
+                type="button"
+                className="w-full py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                disabled={resetLoading}
+                onClick={() => {
+                  setEmail(recoveryEmail);
+                  setRecoveryOpen(false);
+                }}
+              >
+                {t('findIdUseThis')}
+              </button>
+              <button
+                type="button"
+                className="w-full py-2.5 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/25 text-sm font-medium transition-colors disabled:opacity-50"
+                disabled={resetLoading}
+                onClick={handleRecoveryReset}
+              >
+                {resetLoading ? '…' : t('forgotPasswordSubmit')}
+              </button>
+              <button
+                type="button"
+                className="w-full py-2 text-sm text-gray-500 hover:text-gray-300"
+                onClick={() => setRecoveryOpen(false)}
+              >
+                {t('close')}
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                {recoveryMode === 'reset' ? t('forgotPasswordModalDesc') : t('accountRecoveryDesc')}
+              </p>
+              <form
+                onSubmit={
+                  recoveryMode === 'reset'
+                    ? (e) => {
+                        e.preventDefault();
+                        handleRecoveryReset();
+                      }
+                    : handleRecoverySearch
+                }
+                className="space-y-3"
+              >
+                {recoveryError ? (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{recoveryError}</div>
+                ) : null}
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">{t('name')}</label>
+                  <input
+                    type="text"
+                    value={recoveryName}
+                    onChange={(e) => setRecoveryName(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                    placeholder={t('name')}
+                    required
+                    disabled={recoveryLoading || resetLoading}
+                    autoComplete="name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">{t('phone')}</label>
+                  <input
+                    type="tel"
+                    value={recoveryPhone}
+                    onChange={(e) => setRecoveryPhone(formatKoreanPhone(e.target.value))}
+                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
+                    placeholder="010-1234-5678"
+                    required
+                    disabled={recoveryLoading || resetLoading}
+                    autoComplete="tel"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={recoveryLoading || resetLoading}
+                  className="w-full py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {recoveryLoading || resetLoading
+                    ? '…'
+                    : recoveryMode === 'reset'
+                      ? t('forgotPasswordSubmit')
+                      : t('accountRecoverySubmit')}
+                </button>
+                <button
+                  type="button"
+                  className="w-full py-2 text-sm text-gray-500 hover:text-gray-300"
+                  onClick={() => setRecoveryOpen(false)}
+                >
+                  {t('cancel')}
+                </button>
+              </form>
+            </>
+          )}
         </div>
       </div>
     ) : null}
 
-    {forgotPwOpen ? (
-      <div
-        className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4"
-        role="presentation"
-        onClick={() => {
-          setForgotPwOpen(false);
-          setResetMessage('');
-          setResetError('');
-        }}
-      >
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="forgot-pw-title"
-          className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0c0c12] p-5 shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h3 id="forgot-pw-title" className="text-lg font-bold text-white mb-1">
-            {t('forgotPasswordModalTitle')}
-          </h3>
-          <p className="text-xs text-gray-500 mb-4 leading-relaxed">{t('forgotPasswordModalDesc')}</p>
-          <form onSubmit={handleSendReset} className="space-y-3">
-            {resetError ? (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{resetError}</div>
-            ) : null}
-            {resetMessage ? (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-200 text-sm">
-                {resetMessage}
-              </div>
-            ) : null}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">{t('email')}</label>
-              <input
-                type="email"
-                value={resetEmail}
-                onChange={(e) => setResetEmail(e.target.value)}
-                className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
-                placeholder={t('email')}
-                required
-                disabled={resetLoading || Boolean(resetMessage)}
-                autoComplete="email"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={resetLoading || Boolean(resetMessage)}
-              className="w-full py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {resetLoading ? '…' : t('forgotPasswordSubmit')}
-            </button>
-            <button
-              type="button"
-              className="w-full py-2 text-sm text-gray-500 hover:text-gray-300"
-              onClick={() => {
-                setForgotPwOpen(false);
-                setResetMessage('');
-                setResetError('');
-              }}
-            >
-              {t('cancel')}
-            </button>
-          </form>
-        </div>
-      </div>
-    ) : null}
+    <Modal
+      open={resetSuccessOpen}
+      onClose={() => finishResetLogin(false)}
+      title={t('forgotPasswordModalTitle')}
+      variant="success"
+      size="sm"
+      zIndexClass="z-[120]"
+    >
+      <p className="text-sm text-gray-300 leading-relaxed">{t('forgotPasswordSent')}</p>
+      <ModalFooter>
+        <ModalButton onClick={() => finishResetLogin(false)} disabled={resetAutoLoginBusy}>
+          {t('forgotPasswordLater')}
+        </ModalButton>
+        <ModalButton variant="success" onClick={() => finishResetLogin(true)} disabled={resetAutoLoginBusy}>
+          {resetAutoLoginBusy ? '…' : t('forgotPasswordGoChange')}
+        </ModalButton>
+      </ModalFooter>
+    </Modal>
   </div>
 </div>
   );
@@ -455,6 +591,15 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   const [termsModalView, setTermsModalView] = useState(null);
   /** 체육관 코드 미리보기: { status: 'idle'|'checking'|'found'|'notfound'|'invalid'|'error', gymName: string|null } */
   const [gymCodePreview, setGymCodePreview] = useState({ status: 'idle', gymName: null });
+  /** 계정 만들기 클릭 시 비어있는 필수 항목을 한 번에 안내하는 모달 */
+  const [missingFieldsModal, setMissingFieldsModal] = useState({ open: false, items: [] });
+  /** 이메일/닉네임 중복 확인 버튼 클릭 결과를 안내하는 모달 */
+  const [dupCheckModal, setDupCheckModal] = useState({ open: false, variant: 'info', message: '' });
+  /** 회원가입 완료 축하 모달 */
+  const [signupSuccessOpen, setSignupSuccessOpen] = useState(false);
+  const [signedUpUser, setSignedUpUser] = useState(null);
+  /** 축하 모달 [확인] → 방금 가입한 계정으로 자동 로그인 중 */
+  const [postSignupLoginBusy, setPostSignupLoginBusy] = useState(false);
 
   // 체육관 코드 형식: 2글자 prefix + 4자리 숫자 (예: gg0001)
   const GYM_CODE_REGEX = /^(se|gg|gw|cc|jl|gs|jj)\d{4}$/;
@@ -531,6 +676,10 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       setError('이름을 입력해주세요.');
       return false;
     }
+    if (formData.name.trim().length < 2) {
+      setError('이름은 2자 이상 입력해주세요.');
+      return false;
+    }
     if (!formData.nickname) {
       setError('닉네임을 입력해주세요.');
       return false;
@@ -544,6 +693,10 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       setError('핸드폰 번호를 입력해주세요.');
       return false;
     }
+    if (!isPhoneNumberValid(formData.phone)) {
+      setError('올바른 핸드폰 번호를 입력해주세요.');
+      return false;
+    }
 
     if (!formData.birthYear || !formData.birthMonth || !formData.birthDay) {
       setError('생년월일을 모두 선택해주세요.');
@@ -551,11 +704,6 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     }
     if (!isValidCalendarDate(formData.birthYear, formData.birthMonth, formData.birthDay)) {
       setError('올바른 생년월일을 선택해주세요.');
-      return false;
-    }
-
-    if (!formData.gender) {
-      setError('성별을 선택해주세요.');
       return false;
     }
 
@@ -610,6 +758,47 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     return true;
   };
 
+  // Step 2에서 비어있거나 조건을 만족하지 못한 필수 항목을 전부 모아 반환 (계정 만들기 클릭 시 한 번에 안내)
+  const getStep2MissingFields = () => {
+    const missing = [];
+    if (!formData.name || !formData.name.trim()) {
+      missing.push('이름');
+    } else if (formData.name.trim().length < 2) {
+      missing.push('이름 (2자 이상 입력)');
+    }
+
+    if (!formData.nickname) {
+      missing.push('닉네임');
+    } else if (nicknameCheckStatus !== 'available') {
+      missing.push('닉네임 (중복 확인 필요)');
+    }
+
+    if (!formData.phone) {
+      missing.push('핸드폰 번호');
+    } else if (!isPhoneNumberValid(formData.phone)) {
+      missing.push('핸드폰 번호 (형식 확인)');
+    }
+
+    if (!formData.birthYear || !formData.birthMonth || !formData.birthDay) {
+      missing.push('생년월일');
+    } else if (!isValidCalendarDate(formData.birthYear, formData.birthMonth, formData.birthDay)) {
+      missing.push('생년월일 (올바른 날짜 확인)');
+    }
+
+    if (formData.role === 'gym') {
+      if (!formData.gymName) missing.push('체육관 이름');
+      if (!formData.region) missing.push('체육관 지역');
+      if (!formData.gymLocation) missing.push('체육관 위치');
+      if (!formData.representativePhone) missing.push('대표 연락처');
+    }
+
+    if (formData.role === 'player_common' || formData.role === 'player_athlete') {
+      if (!formData.gymCode || !formData.gymCode.trim()) missing.push('체육관 코드');
+    }
+
+    return missing;
+  };
+
   // Step 1 다음으로
   const handleStep1Next = () => {
     setError('');
@@ -621,8 +810,15 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   // Step 2 제출
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+
+    const missingFields = getStep2MissingFields();
+    if (missingFields.length > 0) {
+      setMissingFieldsModal({ open: true, items: missingFields });
+      return;
+    }
+
+    setLoading(true);
 
     if (!validateStep2()) {
       setLoading(false);
@@ -710,12 +906,8 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       }
 
       if (data?.user) {
-        alert('회원가입이 완료되었습니다! 로그인해주세요.');
-        if (onSignupSuccess) {
-          onSignupSuccess(data.user);
-        } else {
-          onBack();
-        }
+        setSignedUpUser(data.user);
+        setSignupSuccessOpen(true);
       }
     } catch (err) {
       setError('회원가입 중 오류가 발생했습니다: ' + (err.message || err));
@@ -848,16 +1040,27 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                   setEmailCheckStatus('checking');
                   const r = await checkEmailAvailable(formData.email);
                   if (!r.ok) {
-                    setEmailCheckStatus(r.error === 'service_unavailable' ? 'unavailable' : 'error');
-                    setError(r.error === 'service_unavailable' ? '' : '이메일 확인 중 오류가 발생했습니다.');
+                    const unavailable = r.error === 'service_unavailable';
+                    setEmailCheckStatus(unavailable ? 'unavailable' : 'error');
+                    setDupCheckModal({
+                      open: true,
+                      variant: unavailable ? 'warning' : 'danger',
+                      message: unavailable
+                        ? '이메일 사전 확인을 사용할 수 없어 가입 단계에서 다시 확인합니다.'
+                        : '이메일 확인 중 오류가 발생했습니다.',
+                    });
                     return;
                   }
                   if (r.available) {
                     setEmailCheckStatus('available');
-                    setError('');
+                    setDupCheckModal({ open: true, variant: 'success', message: '사용 가능한 이메일입니다.' });
                   } else {
                     setEmailCheckStatus('taken');
-                    setError('이미 사용 중인 이메일입니다. 다른 이메일을 입력해 주세요.');
+                    setDupCheckModal({
+                      open: true,
+                      variant: 'danger',
+                      message: '이미 사용 중인 이메일입니다. 다른 이메일을 입력해 주세요.',
+                    });
                   }
                 }}
                 className="shrink-0 px-4 py-3 rounded-lg border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
@@ -865,20 +1068,6 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                 {emailCheckStatus === 'checking' ? '확인 중…' : '중복 확인'}
               </button>
             </div>
-            {emailCheckStatus === 'available' && (
-              <p className="text-xs text-emerald-400 mt-1.5">사용 가능한 이메일입니다.</p>
-            )}
-            {emailCheckStatus === 'taken' && (
-              <p className="text-xs text-red-400 mt-1.5">이미 등록된 이메일입니다.</p>
-            )}
-            {emailCheckStatus === 'unavailable' && (
-              <p className="text-xs text-amber-300 mt-1.5">
-                이메일 사전 확인을 사용할 수 없어 가입 단계에서 다시 확인합니다.
-              </p>
-            )}
-            {emailCheckStatus === 'error' && (
-              <p className="text-xs text-red-400 mt-1.5">이메일 확인 중 오류가 발생했습니다.</p>
-            )}
           </div>
 
           {/* 비밀번호 */}
@@ -1064,7 +1253,13 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
               disabled={loading}
               maxLength={30}
             />
-            <p className="text-xs text-gray-500 mt-1">상대 프로필 등에서 닉네임 옆에 표시됩니다</p>
+            {formData.name.trim().length === 0 ? (
+              <p className="text-xs text-gray-500 mt-1">상대 프로필 등에서 닉네임 옆에 표시됩니다</p>
+            ) : formData.name.trim().length < 2 ? (
+              <p className="text-xs text-red-400 mt-1.5">이름은 2자 이상 입력해주세요.</p>
+            ) : (
+              <p className="text-xs text-emerald-400 mt-1.5">확인되었습니다.</p>
+            )}
           </div>
 
           {/* 공통 필드 — 닉네임 + 중복 확인 */}
@@ -1092,15 +1287,19 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                   const r = await checkNicknameAvailable(formData.nickname);
                   if (!r.ok) {
                     setNicknameCheckStatus('error');
-                    setError('닉네임 확인 중 오류가 발생했습니다.');
+                    setDupCheckModal({ open: true, variant: 'danger', message: '닉네임 확인 중 오류가 발생했습니다.' });
                     return;
                   }
                   if (r.available) {
                     setNicknameCheckStatus('available');
-                    setError('');
+                    setDupCheckModal({ open: true, variant: 'success', message: '사용 가능한 닉네임입니다.' });
                   } else {
                     setNicknameCheckStatus('taken');
-                    setError('이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해 주세요.');
+                    setDupCheckModal({
+                      open: true,
+                      variant: 'danger',
+                      message: '이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해 주세요.',
+                    });
                   }
                 }}
                 className="shrink-0 px-4 py-3 rounded-lg border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
@@ -1108,11 +1307,14 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                 {nicknameCheckStatus === 'checking' ? '확인 중…' : '중복 확인'}
               </button>
             </div>
-            {nicknameCheckStatus === 'available' && (
-              <p className="text-xs text-emerald-400 mt-1.5">사용 가능한 닉네임입니다.</p>
-            )}
-            {nicknameCheckStatus === 'taken' && (
+            {formData.nickname.trim().length === 0 ? null : nicknameCheckStatus === 'available' ? (
+              <p className="text-xs text-emerald-400 mt-1.5">사용 가능한 닉네임입니다. (확인 완료)</p>
+            ) : nicknameCheckStatus === 'taken' ? (
               <p className="text-xs text-red-400 mt-1.5">이미 사용 중인 닉네임입니다.</p>
+            ) : nicknameCheckStatus === 'error' ? (
+              <p className="text-xs text-red-400 mt-1.5">닉네임 확인 중 오류가 발생했습니다.</p>
+            ) : nicknameCheckStatus === 'checking' ? null : (
+              <p className="text-xs text-amber-300 mt-1.5">중복 확인 버튼을 눌러 확인해주세요.</p>
             )}
           </div>
 
@@ -1130,7 +1332,13 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
               placeholder="010-1234-5678"
               disabled={loading}
             />
-            <p className="text-xs text-gray-500 mt-1">출석 체크 시 마지막 4자리를 사용합니다</p>
+            {formData.phone.length === 0 ? (
+              <p className="text-xs text-gray-500 mt-1">출석 체크 시 마지막 4자리를 사용합니다</p>
+            ) : isPhoneNumberValid(formData.phone) ? (
+              <p className="text-xs text-emerald-400 mt-1.5">확인되었습니다.</p>
+            ) : (
+              <p className="text-xs text-red-400 mt-1.5">올바른 핸드폰 번호를 입력해주세요.</p>
+            )}
           </div>
 
           <div>
@@ -1167,10 +1375,17 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
                 />
               </div>
             </div>
+            {formData.birthYear && formData.birthMonth && formData.birthDay && (
+              isValidCalendarDate(formData.birthYear, formData.birthMonth, formData.birthDay) ? (
+                <p className="text-xs text-emerald-400 mt-1.5">확인되었습니다.</p>
+              ) : (
+                <p className="text-xs text-red-400 mt-1.5">존재하지 않는 날짜입니다. 다시 선택해주세요.</p>
+              )
+            )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">성별 *</label>
+            <label className="block text-sm font-medium text-gray-400 mb-2">성별 (선택)</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -1355,6 +1570,83 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       )}
     </SpotlightCard>
   </div>
+
+  <Modal
+    open={dupCheckModal.open}
+    onClose={() => setDupCheckModal({ open: false, variant: 'info', message: '' })}
+    title={dupCheckModal.variant === 'success' ? '확인 완료' : '중복 확인'}
+    variant={dupCheckModal.variant}
+    size="sm"
+  >
+    <p className="text-sm text-gray-300">{dupCheckModal.message}</p>
+    <ModalFooter>
+      <ModalButton
+        variant={dupCheckModal.variant === 'success' ? 'success' : dupCheckModal.variant === 'warning' ? 'warning' : 'danger'}
+        onClick={() => setDupCheckModal({ open: false, variant: 'info', message: '' })}
+      >
+        확인
+      </ModalButton>
+    </ModalFooter>
+  </Modal>
+
+  <Modal
+    open={missingFieldsModal.open}
+    onClose={() => setMissingFieldsModal({ open: false, items: [] })}
+    title="입력하지 않은 항목이 있어요"
+    variant="warning"
+    size="sm"
+  >
+    <p className="text-sm text-gray-300 mb-2">아래 항목을 입력해주세요.</p>
+    <ul className="list-disc list-inside text-sm text-gray-200 space-y-1">
+      {missingFieldsModal.items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+    <ModalFooter>
+      <ModalButton variant="warning" onClick={() => setMissingFieldsModal({ open: false, items: [] })}>
+        확인
+      </ModalButton>
+    </ModalFooter>
+  </Modal>
+
+  <Modal
+    open={signupSuccessOpen}
+    closable={false}
+    title={t('signupSuccessTitle')}
+    variant="success"
+    size="sm"
+  >
+    <p className="text-sm text-gray-300 leading-relaxed">{t('signupSuccessBody')}</p>
+    <ModalFooter>
+      <ModalButton
+        variant="success"
+        disabled={postSignupLoginBusy}
+        onClick={async () => {
+          if (postSignupLoginBusy) return;
+          setPostSignupLoginBusy(true);
+          try {
+            // 방금 가입한 계정으로 자동 로그인 — 성공 시 바로 앱 진입
+            const { data: loginData } = await signIn(formData.email, formData.password);
+            setSignupSuccessOpen(false);
+            if (onSignupSuccess) {
+              onSignupSuccess(signedUpUser, loginData?.user ? { autoLoggedIn: true } : undefined);
+            } else {
+              onBack();
+            }
+          } catch (err) {
+            // 자동 로그인 실패(이메일 확인 필요 등) — 기존처럼 로그인 화면으로
+            setSignupSuccessOpen(false);
+            if (onSignupSuccess) onSignupSuccess(signedUpUser);
+            else onBack();
+          } finally {
+            setPostSignupLoginBusy(false);
+          }
+        }}
+      >
+        {postSignupLoginBusy ? '…' : t('confirm')}
+      </ModalButton>
+    </ModalFooter>
+  </Modal>
 
   <TermsOfServiceModal
     open={termsModalView !== null}
