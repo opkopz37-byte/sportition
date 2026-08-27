@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { computeMatchRecords } from '@/lib/matchRecords';
-import { MATCH_POINTS_WIN, MATCH_POINTS_LOSS, MATCH_POINTS_DRAW } from '@/lib/tierLadder';
+import { computeRunningPoints } from '@/lib/tierLadder';
 
 const EVENT_LABELS = {
   down: '다운', standing: '스탠딩', knockdown: '넉다운',
@@ -35,6 +35,15 @@ export default function MatchHistorySection({
 }) {
   const list = useMemo(() => matches || [], [matches]);
   const records = computeMatchRecords(list);
+  // 경기별 실제 점수 변동폭 — 이 유저의 전체 경기를 시간순으로 재생해 0에서 막히는 잔고 방식으로 계산
+  // (고정 +60/-40이 아니라, 그 경기 시점 잔고가 0이면 패배도 -0으로 멈춤)
+  const pointsDeltaByMatchId = useMemo(() => {
+    const sorted = [...list].sort((a, b) => new Date(a.played_at || 0) - new Date(b.played_at || 0));
+    const { deltas } = computeRunningPoints(sorted);
+    const map = new Map();
+    sorted.forEach((m, i) => { if (m.id) map.set(m.id, deltas[i]); });
+    return map;
+  }, [list]);
   const [expandedId, setExpandedId] = useState(null);
   // 타임라인: { [matchId]: 'loading' | Event[] }
   const [timelines, setTimelines] = useState({});
@@ -212,7 +221,9 @@ export default function MatchHistorySection({
                       const resultLabel = m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무';
                       const a = m.result === 'win' ? 'text-blue-300' : m.result === 'loss' ? 'text-red-300' : 'text-gray-300';
                       const dot = m.result === 'win' ? 'bg-blue-400' : m.result === 'loss' ? 'bg-red-400' : 'bg-gray-500';
-                      const pointsDelta = m.result === 'win' ? MATCH_POINTS_WIN : m.result === 'loss' ? MATCH_POINTS_LOSS : MATCH_POINTS_DRAW;
+                      const pointsDelta = pointsDeltaByMatchId.get(m.id) ?? 0;
+                      // 패배인데 변동폭이 0이면 "0점에서 막힌 패배" — -0으로 표시해 점수가 실제로 깎이지 않았음을 알림
+                      const clampedZeroLoss = m.result === 'loss' && pointsDelta === 0;
                       const tl = timelines[m.id];
                       const isBlueViewer = Array.isArray(tl) && tl.length > 0 && tl[0]?.match_id_blue === m.id;
                       return (
@@ -241,7 +252,7 @@ export default function MatchHistorySection({
                               <div className="text-right leading-none">
                                 <span className={`block text-xl sm:text-2xl font-black tabular-nums ${a}`}>{resultLabel}</span>
                                 <span className={`block text-[10px] font-semibold tabular-nums mt-0.5 ${a}`}>
-                                  {pointsDelta > 0 ? '+' : ''}{pointsDelta}P
+                                  {clampedZeroLoss ? '-0' : `${pointsDelta > 0 ? '+' : ''}${pointsDelta}`}P
                                 </span>
                               </div>
                               {/* 타임라인 토글 버튼 — 기록이 있는 경기에만 표시 */}

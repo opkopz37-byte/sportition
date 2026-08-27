@@ -15,7 +15,7 @@ import {
   TERMS_DOCUMENT_TITLE_KO,
 } from '@/lib/legal/termsOfService';
 import { formatAuthPasswordErrorMessage, isAuthPasswordPolicyError } from '@/lib/authPasswordErrors';
-import { computeMatchPoints, getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
+import { getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
 
 // 체육관 코드 형식: 2글자 prefix + 4자리 숫자
 const MYPAGE_GYM_CODE_REGEX = /^(se|gg|gw|cc|jl|gs|jj)\d{4}$/;
@@ -1790,7 +1790,7 @@ const OpponentProfileView = ({ setActiveTab, t = (key) => key, opponentId, onBac
 
       {/* 하단 그리드 — 마이페이지 동일 구조: Tier Points + Match History */}
       {(() => {
-        const mp = opponent.match_points ?? opponent.tier_points ?? computeMatchPoints(opponent.wins, opponent.draws, opponent.losses);
+        const mp = opponent.match_points ?? opponent.tier_points ?? 0;
         const mpNum = Number(mp) || 0;
         const ring = getTierRingProgress(mpNum);
         const next = getNextTierInfo(mpNum);

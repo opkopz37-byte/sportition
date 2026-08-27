@@ -5,7 +5,7 @@ import { Icon, PageHeader, SpotlightCard } from '@/components/ui';
 import ProfileAvatarImg from '@/components/ProfileAvatarImg';
 import { useAuth } from '@/lib/AuthContext';
 import { getMatchLeaderboard, getUserMatches } from '@/lib/supabase';
-import { tierFamilyFromLabel, computeMatchPoints, getTierColor } from '@/lib/tierLadder';
+import { tierFamilyFromLabel, getTierColor } from '@/lib/tierLadder';
 
 const ITEMS_PER_PAGE = 50;
 const RECENT_MATCHES_COLLAPSED = 1;
@@ -262,7 +262,7 @@ const TierBoardView = ({
           </div>
             <div className="text-right flex-shrink-0">
               <div className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                {profile?.match_points ?? computeMatchPoints(profile?.wins, profile?.draws, profile?.losses)}
+                {profile?.match_points ?? profile?.tier_points ?? 0}
               </div>
               <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500">{t('victoryPoints')}</div>
             </div>

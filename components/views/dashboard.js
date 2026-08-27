@@ -8,7 +8,7 @@ import MatchHistorySection from '@/components/MatchHistorySection';
 import DashboardAttendanceInline from '@/components/views/DashboardAttendanceInline';
 import { translations } from '@/lib/translations';
 import { useAuth } from '@/lib/AuthContext';
-import { computeMatchPoints, getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
+import { getNextTierInfo, getTierRingProgress, getTierColor } from '@/lib/tierLadder';
 import TierIcon from '@/components/TierIcon';
 import { computeMatchRecords } from '@/lib/matchRecords';
 import { uploadUserAvatarBlob } from '@/lib/supabase';
@@ -229,17 +229,13 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
   }, [matchHistory]);
 
   const tierBoardUi = useMemo(() => {
-    const fromRecord = profile?.match_points ?? profile?.tier_points;
-    const mp =
-      fromRecord != null && fromRecord !== ''
-        ? Number(fromRecord)
-        : computeMatchPoints(profile?.wins, profile?.draws, profile?.losses);
+    const mp = Number(profile?.match_points ?? profile?.tier_points ?? 0);
     return {
       mp,
       ring: getTierRingProgress(mp),
       next: getNextTierInfo(mp),
     };
-  }, [profile?.match_points, profile?.tier_points, profile?.wins, profile?.draws, profile?.losses]);
+  }, [profile?.match_points, profile?.tier_points]);
 
   useEffect(() => {
     dashDevLog('[Dashboard] 컴포넌트 마운트/업데이트');
