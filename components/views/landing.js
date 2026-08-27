@@ -273,14 +273,20 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
 
   const handleLogin = async (e) => {
     e.preventDefault();
+
+    if (!email.trim() || !password.trim()) {
+      setError('이메일과 비밀번호를 입력해주세요.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
       const { data, error } = await signIn(email, password);
-      
+
       if (error) {
-        setError(error.message || '로그인에 실패했습니다.');
+        setError(error.message || '이메일 또는 비밀번호가 올바르지 않습니다.');
         return;
       }
 
@@ -315,13 +321,7 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
         <p className="text-gray-500 text-xs xs:text-sm">{t('loginToContinue')}</p>
       </div>
 
-      <form onSubmit={handleLogin} className="space-y-3 xs:space-y-4">
-        {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-            {error}
-          </div>
-        )}
-
+      <form onSubmit={handleLogin} className="space-y-3 xs:space-y-4" noValidate>
         <div>
           <label className="block text-xs xs:text-sm font-medium text-gray-400 mb-1.5 xs:mb-2">{t('email')}</label>
           <input
@@ -330,7 +330,6 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-3 py-2.5 xs:px-4 xs:py-3 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
             placeholder={t('email')}
-            required
             disabled={loading}
           />
         </div>
@@ -368,7 +367,7 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
       </div>
 
       <div className="mt-5 pt-5 border-t border-white/10">
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs sm:text-sm">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm sm:text-base">
           <button
             type="button"
             onClick={() => {
@@ -379,7 +378,7 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
               setRecoveryMode('find');
               setRecoveryOpen(true);
             }}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-white hover:text-blue-200 transition-colors"
           >
             {t('loginHelpLink')}
           </button>
@@ -396,7 +395,7 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
               setRecoveryMode('reset');
               setRecoveryOpen(true);
             }}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-white hover:text-blue-200 transition-colors"
           >
             {t('findPasswordLink')}
           </button>
@@ -414,12 +413,23 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
           role="dialog"
           aria-modal="true"
           aria-labelledby="account-recovery-title"
-          className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0c0c12] p-5 shadow-2xl"
+          className={`w-full max-w-sm rounded-xl border bg-[#0c0c12] p-5 shadow-2xl ${
+            recoveryMode === 'reset' ? 'border-amber-500/30' : 'border-blue-500/30'
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
-          <h3 id="account-recovery-title" className="text-lg font-bold text-white mb-1">
-            {recoveryMode === 'reset' ? t('forgotPasswordModalTitle') : t('accountRecoveryTitle')}
-          </h3>
+          <div className="flex items-center gap-2.5 mb-1">
+            <div
+              className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${
+                recoveryMode === 'reset' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'
+              }`}
+            >
+              <Icon type={recoveryMode === 'reset' ? 'shield' : 'search'} size={16} />
+            </div>
+            <h3 id="account-recovery-title" className="text-lg font-bold text-white">
+              {recoveryMode === 'reset' ? t('forgotPasswordModalTitle') : t('accountRecoveryTitle')}
+            </h3>
+          </div>
 
           {recoveryEmail ? (
             <div className="space-y-3">
@@ -459,9 +469,13 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
             </div>
           ) : (
             <>
-              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                {recoveryMode === 'reset' ? t('forgotPasswordModalDesc') : t('accountRecoveryDesc')}
-              </p>
+              {recoveryMode === 'reset' ? (
+                <div className="mt-2 mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-200 text-xs leading-relaxed">
+                  {t('forgotPasswordModalDesc')}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 mb-4 leading-relaxed">{t('accountRecoveryDesc')}</p>
+              )}
               <form
                 onSubmit={
                   recoveryMode === 'reset'
@@ -505,7 +519,11 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
                 <button
                   type="submit"
                   disabled={recoveryLoading || resetLoading}
-                  className="w-full py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    recoveryMode === 'reset'
+                      ? 'bg-amber-500 hover:bg-amber-400 text-black font-bold'
+                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                  }`}
                 >
                   {recoveryLoading || resetLoading
                     ? '…'
@@ -526,6 +544,22 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
         </div>
       </div>
     ) : null}
+
+    <Modal
+      open={!!error}
+      onClose={() => setError('')}
+      title="로그인 실패"
+      variant="danger"
+      size="sm"
+      zIndexClass="z-[120]"
+    >
+      <p className="text-sm text-gray-300 leading-relaxed">{error}</p>
+      <ModalFooter>
+        <ModalButton variant="danger" onClick={() => setError('')}>
+          {t('close')}
+        </ModalButton>
+      </ModalFooter>
+    </Modal>
 
     <Modal
       open={resetSuccessOpen}

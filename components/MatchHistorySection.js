@@ -288,6 +288,7 @@ export default function MatchHistorySection({
                                         const actorName = actorIsViewer ? myN : oppN;
                                         const recvName  = actorIsViewer ? oppN : myN;
                                         const isBlueEvent = ev.actor_corner === 'blue';
+                                        const recvColor = ev.recv_corner === 'blue' ? 'text-blue-300' : ev.recv_corner === 'red' ? 'text-red-300' : 'text-white/60';
                                         return (
                                           <div
                                             key={i}
@@ -298,7 +299,7 @@ export default function MatchHistorySection({
                                             )}
                                             <span className={`font-bold truncate ${isBlueEvent ? 'text-blue-300' : 'text-red-300'}`}>{actorName}</span>
                                             <span className="text-white/25 shrink-0">→</span>
-                                            <span className="text-white/60 truncate">{recvName}</span>
+                                            <span className={`font-bold truncate ${recvColor}`}>{recvName}</span>
                                             <span className="text-white/40 shrink-0 ml-auto">({EVENT_LABELS[ev.event_type] || ev.event_type})</span>
                                           </div>
                                         );
