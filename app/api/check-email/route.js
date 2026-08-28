@@ -39,11 +39,13 @@ export async function GET(request) {
   }
 
   const admin = createClient(url, key, { auth: { persistSession: false } });
-  const { data, error } = await admin.from('users').select('id').eq('email', email).maybeSingle();
+  // auth.users(로그인 계정) + public.users(프로필) 모두 확인 — 둘이 어긋난
+  // 고아 계정이 있어도 "사용 가능하다더니 가입 실패" 가 생기지 않도록 함.
+  const { data: taken, error } = await admin.rpc('email_taken', { check_email: email });
 
   if (error) {
     return NextResponse.json({ available: null, error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ available: data == null });
+  return NextResponse.json({ available: taken !== true });
 }

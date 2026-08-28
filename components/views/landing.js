@@ -170,6 +170,33 @@ function CustomSelect({ value, onChange, options = [], placeholder = '선택', d
   );
 }
 
+/** Supabase 로그인 에러 → 한국어 안내.
+ *  "Invalid login credentials" 는 이메일/비밀번호 중 무엇이 틀렸는지 알려주지 않으므로
+ *  가입 여부를 조회해 "가입되지 않은 이메일" 과 "비밀번호 틀림" 을 구분해 안내한다. */
+async function loginErrorToKorean(error, email) {
+  const msg = String(error?.message || '').toLowerCase();
+  if (error?.status === 429 || msg.includes('too many requests') || msg.includes('rate limit')) {
+    return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
+  }
+  if (msg.includes('email not confirmed')) {
+    return '이메일 인증이 완료되지 않은 계정입니다. 가입 시 받은 인증 메일을 확인해주세요.';
+  }
+  if (msg.includes('invalid login credentials')) {
+    const check = await checkEmailAvailable(email);
+    if (check?.ok && check.available === true) {
+      return '가입되지 않은 이메일입니다. 이메일 주소를 다시 확인하거나 회원가입을 진행해주세요.';
+    }
+    if (check?.ok && check.available === false) {
+      return '비밀번호가 올바르지 않습니다. 비밀번호를 다시 확인해주세요.';
+    }
+    return '이메일 또는 비밀번호가 올바르지 않습니다.';
+  }
+  if (msg.includes('failed to fetch') || msg.includes('network')) {
+    return '네트워크 오류로 로그인하지 못했습니다. 인터넷 연결을 확인해주세요.';
+  }
+  return '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
+}
+
 // 로그인 모달
 const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => key }) => {
   const [email, setEmail] = useState('');
@@ -286,7 +313,7 @@ const LoginModal = ({ isOpen, onClose, onSignup, onLoginSuccess, t = (key) => ke
       const { data, error } = await signIn(email, password);
 
       if (error) {
-        setError(error.message || '이메일 또는 비밀번호가 올바르지 않습니다.');
+        setError(await loginErrorToKorean(error, email));
         return;
       }
 
@@ -629,11 +656,6 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
   const [missingFieldsModal, setMissingFieldsModal] = useState({ open: false, items: [] });
   /** 이메일/닉네임 중복 확인 버튼 클릭 결과를 안내하는 모달 */
   const [dupCheckModal, setDupCheckModal] = useState({ open: false, variant: 'info', message: '' });
-  /** 회원가입 완료 축하 모달 */
-  const [signupSuccessOpen, setSignupSuccessOpen] = useState(false);
-  const [signedUpUser, setSignedUpUser] = useState(null);
-  /** 축하 모달 [확인] → 방금 가입한 계정으로 자동 로그인 중 */
-  const [postSignupLoginBusy, setPostSignupLoginBusy] = useState(false);
 
   // 체육관 코드 형식: 2글자 prefix + 4자리 숫자 (예: gg0001)
   const GYM_CODE_REGEX = /^(se|gg|gw|cc|jl|gs|jj)\d{4}$/;
@@ -940,8 +962,14 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
       }
 
       if (data?.user) {
-        setSignedUpUser(data.user);
-        setSignupSuccessOpen(true);
+        // 가입 완료 → 방금 만든 계정으로 바로 자동 로그인해 메인 페이지 진입.
+        // 실패(이메일 확인 필요 등) 시에는 로그인 화면으로 안내.
+        const { data: loginData } = await signIn(formData.email, formData.password);
+        if (onSignupSuccess) {
+          onSignupSuccess(data.user, loginData?.user ? { autoLoggedIn: true } : undefined);
+        } else {
+          onBack();
+        }
       }
     } catch (err) {
       setError('회원가입 중 오류가 발생했습니다: ' + (err.message || err));
@@ -1639,45 +1667,6 @@ const SignupPage = ({ onBack, language, t, onSignupSuccess, initialRole = 'playe
     <ModalFooter>
       <ModalButton variant="warning" onClick={() => setMissingFieldsModal({ open: false, items: [] })}>
         확인
-      </ModalButton>
-    </ModalFooter>
-  </Modal>
-
-  <Modal
-    open={signupSuccessOpen}
-    closable={false}
-    title={t('signupSuccessTitle')}
-    variant="success"
-    size="sm"
-  >
-    <p className="text-sm text-gray-300 leading-relaxed">{t('signupSuccessBody')}</p>
-    <ModalFooter>
-      <ModalButton
-        variant="success"
-        disabled={postSignupLoginBusy}
-        onClick={async () => {
-          if (postSignupLoginBusy) return;
-          setPostSignupLoginBusy(true);
-          try {
-            // 방금 가입한 계정으로 자동 로그인 — 성공 시 바로 앱 진입
-            const { data: loginData } = await signIn(formData.email, formData.password);
-            setSignupSuccessOpen(false);
-            if (onSignupSuccess) {
-              onSignupSuccess(signedUpUser, loginData?.user ? { autoLoggedIn: true } : undefined);
-            } else {
-              onBack();
-            }
-          } catch (err) {
-            // 자동 로그인 실패(이메일 확인 필요 등) — 기존처럼 로그인 화면으로
-            setSignupSuccessOpen(false);
-            if (onSignupSuccess) onSignupSuccess(signedUpUser);
-            else onBack();
-          } finally {
-            setPostSignupLoginBusy(false);
-          }
-        }}
-      >
-        {postSignupLoginBusy ? '…' : t('confirm')}
       </ModalButton>
     </ModalFooter>
   </Modal>

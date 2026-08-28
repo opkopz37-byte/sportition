@@ -2573,6 +2573,24 @@ const FOUL_SUBTYPES = [
   { key: 'foul_passivity', label: '패시비티' }, { key: 'foul_clinch', label: '클린치' },
 ];
 
+const DOWN_TYPES = [
+  { key: 'down', label: '다운' },
+  { key: 'standing', label: '스탠딩' },
+  { key: 'knockdown', label: '넉다운' },
+];
+
+// 강제 종료 모달의 종료 방식 — NC 는 승자 없이 무효 처리 (전적 집계 제외)
+const FORCE_FINISH_TYPES = [
+  { key: 'decision', label: '판정', caption: null, active: 'bg-emerald-500 text-white' },
+  { key: 'tko', label: 'TKO', caption: null, active: 'bg-yellow-500 text-black' },
+  { key: 'ko', label: 'KO', caption: null, active: 'bg-red-500 text-white' },
+  { key: 'rsc', label: 'RSC', caption: '심판 중단', active: 'bg-orange-500 text-white' },
+  { key: 'abd', label: 'ABD', caption: '기권', active: 'bg-sky-500 text-white' },
+  { key: 'dsq', label: 'DSQ', caption: '실격', active: 'bg-purple-500 text-white' },
+  { key: 'td', label: 'TD', caption: '부상 판정', active: 'bg-amber-600 text-white' },
+  { key: 'nc', label: 'NC', caption: '무효', active: 'bg-gray-500 text-white' },
+];
+
 function sumCornerPoints(scores, totalRounds, corner) {
   let t = 0;
   for (let r = 1; r <= totalRounds; r++) {
@@ -2679,7 +2697,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
   const [memberLoadError, setMemberLoadError] = useState(null);
   const [showForceStopModal, setShowForceStopModal] = useState(false);
   const [forcedResult, setForcedResult] = useState({ winner: null, blueScore: '', redScore: '', finishType: 'decision' });
-  const [resultMethod, setResultMethod] = useState(null); // decision | tko | ko
+  const [resultMethod, setResultMethod] = useState(null); // decision | tko | ko | rsc | abd | dsq | td | nc
   const [isSavingResult, setIsSavingResult] = useState(false);
   const [resultSaved, setResultSaved] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -2715,6 +2733,25 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
 
   // 결과 화면에서 수정 후 탭 이동해도 반영되도록 unmount 시 재동기화
   useEffect(() => () => { if (eventsDirtyRef.current) syncMatchEvents(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 다운·파울 한 건 기록 — fighting 화면 인라인 버튼과 finish 화면 수정 모달이 공용으로 사용
+  const logEvent = (eventType, corner, isFoul) => {
+    // 다운 계열: 누른 코너 = 다운된 선수(recv) / 파울: 누른 코너 = 파울한 선수(actor)
+    const actorCorner = isFoul ? corner : (corner === 'blue' ? 'red' : 'blue');
+    const recvCorner = actorCorner === 'blue' ? 'red' : 'blue';
+    const round = addEventRound ?? currentRound;
+    if (editEventIdx != null) {
+      // 수정: 해당 기록 교체 — 라운드가 바뀌면 시간은 미상 처리
+      setMatchEvents(prev => prev.map((e, i) => i === editEventIdx
+        ? { round, elapsedSec: round === e.round ? e.elapsedSec : null, eventType, actorCorner, recvCorner }
+        : e));
+    } else {
+      const elapsedSec = addEventRound == null ? ROUND_DURATION_SEC - roundTime : null;
+      setMatchEvents(prev => [...prev, { round, elapsedSec, eventType, actorCorner, recvCorner }]);
+    }
+    setShowEventModal(false);
+    setEditEventIdx(null);
+  };
 
   const formatMemberRecord = (wins, losses, draws, totalMatches) => {
     const w = Number(wins) || 0;
@@ -2797,13 +2834,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
         };
       });
 
-      const sorted = mappedMembers.sort((a, b) => {
-        if (a.weight === null && b.weight === null) return a.name.localeCompare(b.name, 'ko');
-        if (a.weight === null) return 1;
-        if (b.weight === null) return -1;
-        if (a.weight !== b.weight) return a.weight - b.weight;
-        return a.name.localeCompare(b.name, 'ko');
-      });
+      const sorted = mappedMembers.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 
       setAttendedMembers(sorted);
     } catch (error) {
@@ -3738,15 +3769,50 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
             </button>
           </div>
 
-          {/* 다운·파울 기록 버튼 + 피드 */}
+          {/* 다운·파울 기록 — 팝업 없이 화면에 바로 노출, 탭 즉시 기록 */}
           <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => { setAddEventRound(null); setShowEventModal(true); }}
-              className="w-full py-4 rounded-xl border border-violet-400/40 bg-gradient-to-r from-violet-600/20 to-purple-600/20 hover:from-violet-600/30 hover:to-purple-600/30 text-white font-bold transition-all hover:scale-[1.01] active:scale-[0.99]"
-            >
-              다운 · 파울 기록
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              {['blue', 'red'].map((corner) => {
+                const isBlue = corner === 'blue';
+                const person = isBlue ? blueCorner : redCorner;
+                return (
+                  <div key={corner} className={`rounded-xl border p-2.5 space-y-1.5 ${isBlue ? 'border-blue-400/40 bg-blue-500/10' : 'border-red-400/40 bg-red-500/10'}`}>
+                    <div className="text-center">
+                      <p className={`text-[10px] font-black tracking-[0.2em] uppercase ${isBlue ? 'text-blue-300' : 'text-red-300'}`}>
+                        {isBlue ? '청코너' : '홍코너'}
+                      </p>
+                      <p className="text-sm font-extrabold text-white truncate">{person.name}</p>
+                    </div>
+                    <p className="text-[10px] font-bold text-white/40 text-center pt-0.5">─ 다운당함 ─</p>
+                    <div className="space-y-1">
+                      {DOWN_TYPES.map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => logEvent(key, corner, false)}
+                          className={`w-full py-2 rounded-lg text-sm font-bold text-white transition-all active:scale-95 ${isBlue ? 'bg-blue-500/25 hover:bg-blue-500/40' : 'bg-red-500/25 hover:bg-red-500/40'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] font-bold text-white/40 text-center pt-0.5">─ 파울함 ─</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      {FOUL_SUBTYPES.map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => logEvent(key, corner, true)}
+                          className="py-1.5 rounded-lg bg-white/8 hover:bg-white/15 text-white text-xs font-semibold transition-all active:scale-95"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
             {matchEvents.length > 0 && (
               <div className="rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden">
                 <div className="px-3 py-1.5 text-[10px] font-black tracking-[0.2em] uppercase text-white/40 border-b border-white/5">
@@ -4122,25 +4188,27 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
             className="w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[90vh] bg-[#0A0A0A] sm:border sm:border-white/20 sm:rounded-2xl p-5 sm:p-6 overflow-y-auto scroll-thin"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-xl font-bold text-white mb-2">경기 강제 종료</h3>
-            <p className="text-sm text-gray-400 mb-5">승자와 최종 점수를 입력하면 즉시 경기를 종료하고 전적에 반영합니다.</p>
+            <h3 className="text-xl font-bold text-white mb-5">경기 강제 종료</h3>
 
             <div className="grid grid-cols-3 gap-2 mb-4">
               <button
                 onClick={() => setForcedResult(prev => ({ ...prev, winner: 'blue' }))}
-                className={`py-3 rounded-lg font-bold transition-all ${forcedResult.winner === 'blue' ? 'bg-blue-500 text-white' : 'bg-blue-500/20 text-blue-400'}`}
+                disabled={forcedResult.finishType === 'nc'}
+                className={`py-3 rounded-lg font-bold transition-all disabled:opacity-30 ${forcedResult.winner === 'blue' ? 'bg-blue-500 text-white' : 'bg-blue-500/20 text-blue-400'}`}
               >
                 청코너 승
               </button>
               <button
                 onClick={() => setForcedResult(prev => ({ ...prev, winner: 'red' }))}
-                className={`py-3 rounded-lg font-bold transition-all ${forcedResult.winner === 'red' ? 'bg-red-500 text-white' : 'bg-red-500/20 text-red-400'}`}
+                disabled={forcedResult.finishType === 'nc'}
+                className={`py-3 rounded-lg font-bold transition-all disabled:opacity-30 ${forcedResult.winner === 'red' ? 'bg-red-500 text-white' : 'bg-red-500/20 text-red-400'}`}
               >
                 홍코너 승
               </button>
               <button
                 onClick={() => setForcedResult(prev => ({ ...prev, winner: 'draw' }))}
-                className={`py-3 rounded-lg font-bold transition-all ${forcedResult.winner === 'draw' ? 'bg-gray-500 text-white' : 'bg-gray-700 text-gray-300'}`}
+                disabled={forcedResult.finishType === 'nc'}
+                className={`py-3 rounded-lg font-bold transition-all disabled:opacity-30 ${forcedResult.winner === 'draw' ? 'bg-gray-500 text-white' : 'bg-gray-700 text-gray-300'}`}
               >
                 무승부
               </button>
@@ -4148,26 +4216,26 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
 
             <div className="mb-4">
               <div className="text-xs text-gray-400 mb-2">종료 방식</div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => setForcedResult(prev => ({ ...prev, finishType: 'decision' }))}
-                  className={`py-2 rounded-lg text-sm font-bold ${forcedResult.finishType === 'decision' ? 'bg-emerald-500 text-white' : 'bg-white/10 text-gray-300'}`}
-                >
-                  판정
-                </button>
-                <button
-                  onClick={() => setForcedResult(prev => ({ ...prev, finishType: 'tko' }))}
-                  className={`py-2 rounded-lg text-sm font-bold ${forcedResult.finishType === 'tko' ? 'bg-yellow-500 text-black' : 'bg-white/10 text-gray-300'}`}
-                >
-                  TKO
-                </button>
-                <button
-                  onClick={() => setForcedResult(prev => ({ ...prev, finishType: 'ko' }))}
-                  className={`py-2 rounded-lg text-sm font-bold ${forcedResult.finishType === 'ko' ? 'bg-red-500 text-white' : 'bg-white/10 text-gray-300'}`}
-                >
-                  KO
-                </button>
+              <div className="grid grid-cols-4 gap-2">
+                {FORCE_FINISH_TYPES.map(({ key, label, caption, active }) => (
+                  <button
+                    key={key}
+                    onClick={() => setForcedResult(prev => ({
+                      ...prev,
+                      finishType: key,
+                      // NC 선택 → 승자 무효 고정 / NC 에서 다른 방식으로 → 승자 다시 선택
+                      winner: key === 'nc' ? 'nc' : (prev.winner === 'nc' ? null : prev.winner),
+                    }))}
+                    className={`py-2 rounded-lg text-sm font-bold leading-tight ${forcedResult.finishType === key ? active : 'bg-white/10 text-gray-300'}`}
+                  >
+                    <span className="block">{label}</span>
+                    {caption && <span className="block text-[9px] font-semibold opacity-70 mt-0.5">{caption}</span>}
+                  </button>
+                ))}
               </div>
+              {forcedResult.finishType === 'nc' && (
+                <p className="mt-2 text-xs text-gray-500">무효 경기 — 승패·승률·티어 점수에 반영되지 않습니다.</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-5">
@@ -4202,22 +4270,21 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
               </button>
               <button
                 onClick={() => {
-                  if (!forcedResult.winner || forcedResult.blueScore === '' || forcedResult.redScore === '') {
+                  const ft = forcedResult.finishType || 'decision';
+                  if (ft !== 'nc' && (!forcedResult.winner || forcedResult.blueScore === '' || forcedResult.redScore === '')) {
                     alert('승자와 점수를 모두 입력해주세요.');
                     return;
                   }
                   setIsPlaying(false);
-                  setResultMethod(forcedResult.finishType || 'decision');
+                  setResultMethod(ft);
                   setFinishMethod('forced');
-                  // 종료 이벤트도 타임라인에 자동 기록 — KO/TKO/TD(점수 판정 종료), 무승부는 생략
-                  if (forcedResult.winner === 'blue' || forcedResult.winner === 'red') {
-                    const endType = forcedResult.finishType === 'ko' ? 'ko'
-                      : forcedResult.finishType === 'tko' ? 'tko'
-                        : 'td';
+                  // 종료 이벤트도 타임라인에 자동 기록 — 승자가 있는 KO/TKO/RSC/ABD/DSQ/TD.
+                  // 판정·무승부·NC 는 이벤트 없이 종료 방식만 저장.
+                  if (ft !== 'decision' && ft !== 'nc' && (forcedResult.winner === 'blue' || forcedResult.winner === 'red')) {
                     setMatchEvents(prev => [...prev, {
                       round: currentRound,
                       elapsedSec: phase === 'fighting' ? ROUND_DURATION_SEC - roundTime : null,
-                      eventType: endType,
+                      eventType: ft,
                       actorCorner: forcedResult.winner,
                       recvCorner: forcedResult.winner === 'blue' ? 'red' : 'blue',
                     }]);
@@ -4245,16 +4312,21 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
           : finishMethod === 'forced'
             ? forcedResult.winner
             : decisionCorner;
-        const isDraw = winnerCorner === 'draw' || winnerCorner == null;
+        const isNC = resultMethod === 'nc';
+        const isDraw = isNC || winnerCorner === 'draw' || winnerCorner == null || winnerCorner === 'nc';
         const winnerPlayer = winnerCorner === 'blue' ? blueCorner : winnerCorner === 'red' ? redCorner : null;
         const loserPlayer = winnerCorner === 'blue' ? redCorner : winnerCorner === 'red' ? blueCorner : null;
         const winnerColorKey = winnerCorner === 'blue' ? '청' : winnerCorner === 'red' ? '홍' : null;
 
         // 종료 방식 라벨
         const methodLabel =
-          resultMethod === 'ko' ? 'KO 승'
+          isNC ? '무효 (NC)'
+          : resultMethod === 'ko' ? 'KO 승'
           : resultMethod === 'tko' ? 'TKO 승'
-          : finishMethod === 'rsc' ? 'RSC (TKO) 승'
+          : resultMethod === 'rsc' || finishMethod === 'rsc' ? 'RSC 승'
+          : resultMethod === 'abd' ? 'ABD 승 (기권)'
+          : resultMethod === 'dsq' ? 'DSQ 승 (실격)'
+          : resultMethod === 'td' ? 'TD 승 (부상 판정)'
           : finishMethod === 'forced' ? '강제 종료'
           : isDraw ? '판정 무승부'
           : '판정 승';
@@ -4300,7 +4372,7 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
               {/* WINNER / DRAW 배지 */}
               {isDraw ? (
                 <div className="inline-block px-4 py-1 rounded-full bg-white/10 border border-white/20 mb-4">
-                  <span className="text-[10px] sm:text-xs font-black tracking-[0.4em] uppercase text-white/80">Draw</span>
+                  <span className="text-[10px] sm:text-xs font-black tracking-[0.4em] uppercase text-white/80">{isNC ? 'No Contest' : 'Draw'}</span>
                 </div>
               ) : (
                 <div
@@ -4657,31 +4729,9 @@ const MatchRoomView = ({ t = (key) => key, setActiveTab, onBack }) => {
         );
       })()}
 
-      {/* 다운·파울 기록 모달 — 모든 선택지가 한 화면에, 탭 즉시 기록 (fighting/finish 공용) */}
+      {/* 다운·파울 기록 수정 모달 — finish 화면(경기 종료 후)의 기록 추가/수정 전용. 실시간 기록은 fighting 화면에 인라인으로 표시됨 */}
       {showEventModal && blueCorner && redCorner && (() => {
-        const logEvent = (eventType, corner, isFoul) => {
-          // 다운 계열: 누른 코너 = 다운된 선수(recv) / 파울: 누른 코너 = 파울한 선수(actor)
-          const actorCorner = isFoul ? corner : (corner === 'blue' ? 'red' : 'blue');
-          const recvCorner = actorCorner === 'blue' ? 'red' : 'blue';
-          const round = addEventRound ?? currentRound;
-          if (editEventIdx != null) {
-            // 수정: 해당 기록 교체 — 라운드가 바뀌면 시간은 미상 처리
-            setMatchEvents(prev => prev.map((e, i) => i === editEventIdx
-              ? { round, elapsedSec: round === e.round ? e.elapsedSec : null, eventType, actorCorner, recvCorner }
-              : e));
-          } else {
-            const elapsedSec = addEventRound == null ? ROUND_DURATION_SEC - roundTime : null;
-            setMatchEvents(prev => [...prev, { round, elapsedSec, eventType, actorCorner, recvCorner }]);
-          }
-          setShowEventModal(false);
-          setEditEventIdx(null);
-        };
         const closeModal = () => { setShowEventModal(false); setEditEventIdx(null); };
-        const DOWN_TYPES = [
-          { key: 'down', label: '다운' },
-          { key: 'standing', label: '스탠딩' },
-          { key: 'knockdown', label: '넉다운' },
-        ];
         const cornerColumn = (corner) => {
           const isBlue = corner === 'blue';
           const person = isBlue ? blueCorner : redCorner;

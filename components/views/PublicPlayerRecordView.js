@@ -191,7 +191,7 @@ export default function PublicPlayerRecordView({ playerId, onBack, language = 'k
                                 : 'text-gray-300'
                           }
                         >
-                          {match.result === 'win' ? '승' : match.result === 'loss' ? '패' : '무'}
+                          {match.result === 'win' ? '승' : match.result === 'loss' ? '패' : match.result === 'nc' ? '무효' : '무'}
                         </span>
                       </div>
                     </div>

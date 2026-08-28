@@ -96,7 +96,8 @@ export default function MatchHistorySection({
       g.matches.push(m);
       if (m.result === 'win') g.wins += 1;
       else if (m.result === 'loss') g.losses += 1;
-      else g.draws += 1;
+      else if (m.result === 'draw') g.draws += 1;
+      // nc(무효) 는 목록에는 남되 승/패/무 어디에도 집계 안 함
     });
     const arr = Array.from(map.values());
     arr.forEach((g) => {
@@ -145,7 +146,7 @@ export default function MatchHistorySection({
       <div className="space-y-2.5">
         {displayed.map((g) => {
           const isOpen = expandedId === g.key;
-          const total = g.matches.length;
+          const total = g.wins + g.losses + g.draws; // nc 제외 경기 수
           const groupResult = g.wins > g.losses ? 'win' : g.losses > g.wins ? 'loss' : 'draw';
           const accent = groupResult === 'win' ? 'text-blue-300' : groupResult === 'loss' ? 'text-red-300' : 'text-gray-300';
           const bgClass = groupResult === 'win'
@@ -218,8 +219,8 @@ export default function MatchHistorySection({
                     <div className="py-6 text-center text-gray-400 text-sm">아직 경기를 진행하지 않았습니다.</div>
                   ) : (
                     g.matches.map((m) => {
-                      const resultLabel = m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무';
-                      const a = m.result === 'win' ? 'text-blue-300' : m.result === 'loss' ? 'text-red-300' : 'text-gray-300';
+                      const resultLabel = m.result === 'win' ? '승' : m.result === 'loss' ? '패' : m.result === 'nc' ? '무효' : '무';
+                      const a = m.result === 'win' ? 'text-blue-300' : m.result === 'loss' ? 'text-red-300' : m.result === 'nc' ? 'text-gray-500' : 'text-gray-300';
                       const dot = m.result === 'win' ? 'bg-blue-400' : m.result === 'loss' ? 'bg-red-400' : 'bg-gray-500';
                       const pointsDelta = pointsDeltaByMatchId.get(m.id) ?? 0;
                       // 패배인데 변동폭이 0이면 "0점에서 막힌 패배" — -0으로 표시해 점수가 실제로 깎이지 않았음을 알림
@@ -252,7 +253,7 @@ export default function MatchHistorySection({
                               <div className="text-right leading-none">
                                 <span className={`block text-xl sm:text-2xl font-black tabular-nums ${a}`}>{resultLabel}</span>
                                 <span className={`block text-[10px] font-semibold tabular-nums mt-0.5 ${a}`}>
-                                  {clampedZeroLoss ? '-0' : `${pointsDelta > 0 ? '+' : ''}${pointsDelta}`}P
+                                  {m.result === 'nc' ? '집계 제외' : clampedZeroLoss ? '-0P' : `${pointsDelta > 0 ? '+' : ''}${pointsDelta}P`}
                                 </span>
                               </div>
                               {/* 타임라인 토글 버튼 — 기록이 있는 경기에만 표시 */}

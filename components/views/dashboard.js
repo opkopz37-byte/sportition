@@ -301,7 +301,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
             const dateLabel = playedAt && !Number.isNaN(playedAt.getTime())
               ? playedAt.toISOString().split('T')[0]
               : '-';
-            const result = match.result === 'win' || match.result === 'loss' || match.result === 'draw' ? match.result : 'draw';
+            const result = match.result === 'win' || match.result === 'loss' || match.result === 'draw' || match.result === 'nc' ? match.result : 'draw';
             const oppNickname = match.opponent?.nickname || null;
             const oppRealName = match.opponent?.name || null;
             const displayOpponent = match.opponent_name || oppNickname || oppRealName || '상대 미상';
@@ -596,7 +596,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                 <ul className="space-y-3">
                   {modalMatches.map((m) => {
                     const res =
-                      m.result === 'win' || m.result === 'loss' || m.result === 'draw' ? m.result : 'draw';
+                      m.result === 'win' || m.result === 'loss' || m.result === 'draw' || m.result === 'nc' ? m.result : 'draw';
                     const opp = m.opponent_name || m.opponent?.nickname || m.opponent?.name || '—';
                     return (
                       <li key={m.id} className="text-sm border border-white/5 rounded-lg p-3 bg-black/20">
@@ -607,7 +607,7 @@ const DashboardView = ({ setActiveTab, t = (key) => key, role = 'player_common',
                               res === 'win' ? 'text-blue-400' : res === 'loss' ? 'text-red-400' : 'text-white'
                             }
                           >
-                            {res === 'win' ? t('win') : res === 'loss' ? t('loss') : t('draw')}
+                            {res === 'win' ? t('win') : res === 'loss' ? t('loss') : res === 'nc' ? '무효' : t('draw')}
                           </span>
                           <span className="text-gray-600">·</span>
                           <span>{m.method || '—'}</span>

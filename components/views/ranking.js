@@ -323,7 +323,7 @@ const TierBoardView = ({
                   </span>
                   <span className="text-gray-300">{m.method}</span>
                   <span className={m.result === 'win' ? 'text-blue-400' : m.result === 'loss' ? 'text-red-400' : 'text-gray-300'}>
-                    {m.result === 'win' ? '승' : m.result === 'loss' ? '패' : '무'}
+                    {m.result === 'win' ? '승' : m.result === 'loss' ? '패' : m.result === 'nc' ? '무효' : '무'}
                   </span>
                 </div>
               </div>
